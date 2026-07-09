@@ -27,6 +27,8 @@ export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const [metric, setMetric] = useState<WeeklyMetric>('volume');
+  const [showAllRecords, setShowAllRecords] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   const mySessions = useMemo(() => sessions.filter((s) => s.person === 'You').sort((a, b) => b.startedAt - a.startedAt), [sessions]);
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
@@ -138,7 +140,7 @@ export function ProfileScreen() {
 
       <div className="section-h">Personal records</div>
       {records.length === 0 && <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>Finish a workout to set your first record.</p>}
-      {records.map((r) => {
+      {(showAllRecords ? records : records.slice(0, 5)).map((r) => {
         const ex = exerciseById(r.exerciseId);
         if (!ex) return null;
         return (
@@ -155,6 +157,11 @@ export function ProfileScreen() {
           </div>
         );
       })}
+      {records.length > 5 && (
+        <button className="feed-more" onClick={() => setShowAllRecords((v) => !v)}>
+          {showAllRecords ? 'Show less' : `Show ${records.length - 5} more`}
+        </button>
+      )}
 
       <div className="section-h">History</div>
       {mySessions.length === 0 && (
@@ -162,7 +169,7 @@ export function ProfileScreen() {
           <p>Your finished workouts will show up here.</p>
         </div>
       )}
-      {mySessions.map((h) => (
+      {(showAllHistory ? mySessions : mySessions.slice(0, 5)).map((h) => (
         <div className="hist-row" key={h.id} onClick={() => openWorkoutSheet(h.id)}>
           <div className="hist-b">
             <div className="hist-name">{h.name}</div>
@@ -174,6 +181,11 @@ export function ProfileScreen() {
           <span className="go-arrow">›</span>
         </div>
       ))}
+      {mySessions.length > 5 && (
+        <button className="feed-more" onClick={() => setShowAllHistory((v) => !v)}>
+          {showAllHistory ? 'Show less' : `Show ${mySessions.length - 5} more`}
+        </button>
+      )}
     </div>
   );
 }
