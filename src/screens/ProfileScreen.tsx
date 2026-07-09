@@ -32,7 +32,6 @@ export function ProfileScreen() {
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const [metric, setMetric] = useState<WeeklyMetric>('volume');
   const [chartPeriod, setChartPeriod] = useState<StatPeriod>('week');
-  const [splitPeriod, setSplitPeriod] = useState<StatPeriod>('all');
   const [showAllRecords, setShowAllRecords] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
@@ -40,8 +39,8 @@ export function ProfileScreen() {
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const weeks = useMemo(() => weeklyMetric(sessions, 12, metric), [sessions, metric]);
-  const splitSince = useMemo(() => periodCutoff(splitPeriod), [splitPeriod]);
-  const radarValues = useMemo(() => muscleSplit(sessions, 'You', splitSince), [sessions, splitSince]);
+  const chartSince = useMemo(() => periodCutoff(chartPeriod), [chartPeriod]);
+  const radarValues = useMemo(() => muscleSplit(sessions, 'You', chartSince), [sessions, chartSince]);
 
   const activeMetric = METRICS.find((m) => m.id === metric)!;
   const { current: periodValue, previous: periodPrev } = useMemo(
@@ -143,14 +142,11 @@ export function ProfileScreen() {
         <TrainingCalendar sessions={sessions} onOpen={openWorkoutSheet} />
       </div>
 
-      <div className="section-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>Muscle split</span>
-        <PeriodPicker value={splitPeriod} onChange={setSplitPeriod} />
-      </div>
+      <div className="section-h">Muscle split</div>
       <div className="card" style={{ textAlign: 'center' }}>
         <RadarChart values={radarValues} labels={MUSCLE_AXES} />
         <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
-          Based on logged sets · {STAT_PERIOD_LABEL[splitPeriod].toLowerCase()}
+          Based on logged sets · {STAT_PERIOD_LABEL[chartPeriod].toLowerCase()}
         </div>
       </div>
 
