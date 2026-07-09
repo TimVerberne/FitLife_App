@@ -12,21 +12,21 @@ export function RadarChart({ values, labels }: { values: number[]; labels: strin
       key={gi}
       points={labels.map((_, i) => pt(i, R * f).join(',')).join(' ')}
       fill="none"
-      stroke="#2c3340"
+      stroke="var(--line-dash)"
       strokeWidth={1}
     />
   ));
 
   const spokes = labels.map((_, i) => {
     const [x, y] = pt(i, R);
-    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="#2c3340" strokeWidth={1} />;
+    return <line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke="var(--line-dash)" strokeWidth={1} />;
   });
 
   const labelEls = labels.map((lab, i) => {
     const [lx, ly] = pt(i, R + 15);
     const anchor = Math.abs(lx - cx) < 5 ? 'middle' : lx < cx ? 'end' : 'start';
     return (
-      <text key={i} x={lx} y={ly + 4} textAnchor={anchor} fill="#9aa4b2" fontSize={11} fontFamily="Barlow Condensed" fontWeight={700}>
+      <text key={i} x={lx} y={ly + 4} textAnchor={anchor} fill="var(--muted)" fontSize={11} fontFamily="Barlow Condensed" fontWeight={700}>
         {lab}
       </text>
     );
@@ -35,14 +35,14 @@ export function RadarChart({ values, labels }: { values: number[]; labels: strin
   const poly = values.map((v, i) => pt(i, (R * v) / max).join(',')).join(' ');
   const dots = values.map((v, i) => {
     const [x, y] = pt(i, (R * v) / max);
-    return <circle key={i} cx={x} cy={y} r={2.6} fill="#74e0ae" />;
+    return <circle key={i} cx={x} cy={y} r={2.6} fill="var(--accent)" />;
   });
 
   return (
     <svg viewBox="0 0 220 200" width="100%" height={205}>
       {gridRings}
       {spokes}
-      <polygon points={poly} fill="rgba(116,224,174,.24)" stroke="#74e0ae" strokeWidth={2} />
+      <polygon points={poly} fill="var(--accent)" fillOpacity={0.24} stroke="var(--accent)" strokeWidth={2} />
       {dots}
       {labelEls}
     </svg>
