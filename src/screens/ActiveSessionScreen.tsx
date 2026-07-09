@@ -4,6 +4,21 @@ import { exerciseById } from '../lib/exercises';
 import { epley, personalRecords, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { Thumb } from '../components/Thumb';
+import { NumberField } from '../components/NumberField';
+import type { SetEntry } from '../lib/types';
+
+function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
+  let best = startingBest;
+  return sets.map((s) => {
+    if (!s.done || s.weight <= 0) return false;
+    const oneRepMax = epley(s.weight, s.reps);
+    if (oneRepMax > best) {
+      best = oneRepMax;
+      return true;
+    }
+    return false;
+  });
+}
 
 export function ActiveSessionScreen() {
   const active = useStore((s) => s.active);
@@ -97,6 +112,7 @@ export function ActiveSessionScreen() {
         const ex = exerciseById(en.exerciseId);
         if (!ex) return null;
         const rec = records.find((r) => r.exerciseId === ex.id);
+        const prFlags = prFlagsFor(en.sets, rec?.estOneRepMax ?? 0);
         return (
           <div className="s-ex" key={ei}>
             <div className="s-top">
@@ -105,7 +121,7 @@ export function ActiveSessionScreen() {
                 {ex.name}
                 <span className="sub">{ex.target} · {ex.equipment}</span>
               </div>
-              <button className="s-del" onClick={() => removeExercise(ei)}>
+              <button className="s-del" aria-label={`Remove ${ex.name} from workout`} onClick={() => removeExercise(ei)}>
                 ✕
               </button>
             </div>
@@ -117,7 +133,6 @@ export function ActiveSessionScreen() {
               <span></span>
             </div>
             {en.sets.map((st, si) => {
-              const isPR = st.done && st.weight > 0 && (!rec || epley(st.weight, st.reps) >= rec.estOneRepMax);
               const prev = prevPerformance(en.exerciseId, si);
               return (
                 <div key={si}>
@@ -125,26 +140,21 @@ export function ActiveSessionScreen() {
                     <div className="set-idx">{si + 1}</div>
                     <div className="set-prev">{prev ?? '—'}</div>
                     <div className="set-fld">
-                      <input
-                        type="number"
-                        inputMode="decimal"
-                        value={st.weight}
-                        onChange={(e) => setVal(ei, si, 'weight', parseFloat(e.target.value) || 0)}
-                      />
+                      <NumberField value={st.weight} inputMode="decimal" onCommit={(n) => setVal(ei, si, 'weight', n)} />
                     </div>
                     <div className="set-fld">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={st.reps}
-                        onChange={(e) => setVal(ei, si, 'reps', parseFloat(e.target.value) || 0)}
-                      />
+                      <NumberField value={st.reps} inputMode="numeric" onCommit={(n) => setVal(ei, si, 'reps', n)} />
                     </div>
-                    <button className="set-check" onClick={() => toggleSet(ei, si)}>
+                    <button
+                      className="set-check"
+                      aria-label={st.done ? `Mark set ${si + 1} not done` : `Mark set ${si + 1} done`}
+                      aria-pressed={st.done}
+                      onClick={() => toggleSet(ei, si)}
+                    >
                       {st.done ? '✓' : ''}
                     </button>
                   </div>
-                  {isPR && (
+                  {prFlags[si] && (
                     <div style={{ textAlign: 'right', marginTop: -4, marginBottom: 6 }}>
                       <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 11 }}>
                         🏆 new record
@@ -168,7 +178,7 @@ export function ActiveSessionScreen() {
       <button
         className="btn light"
         style={{ marginTop: 16 }}
-        disabled={total === 0}
+        disabled={done === 0}
         onClick={finishSession}
       >
         Finish & save {done < total ? `(${done}/${total})` : '▶'}

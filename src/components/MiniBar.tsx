@@ -33,14 +33,24 @@ function MiniBarInner({
     <div id="mini">
       <div className="mini">
         <span className="mini-dot" />
-        <span className="mini-b" style={{ cursor: 'pointer' }} onClick={onRestore}>
+        <button
+          className="mini-b"
+          style={{ cursor: 'pointer', border: 'none', background: 'none', textAlign: 'left', padding: 0, color: 'inherit', font: 'inherit' }}
+          aria-label={`Resume ${name} workout`}
+          onClick={onRestore}
+        >
           <span className="mini-name">{name}</span>
           <span className="mini-sub">In progress · {done}/{total} sets</span>
-        </span>
-        <span className="mini-clock" style={{ cursor: 'pointer' }} onClick={onRestore}>
+        </button>
+        <button
+          className="mini-clock"
+          style={{ cursor: 'pointer', border: 'none', background: 'none', padding: 0, font: 'inherit' }}
+          aria-label={`Resume workout, ${mins} minutes elapsed`}
+          onClick={onRestore}
+        >
           {mins}m
-        </span>
-        <button className="mini-x" onClick={onCancel}>
+        </button>
+        <button className="mini-x" aria-label="Discard workout" onClick={onCancel}>
           ✕
         </button>
       </div>

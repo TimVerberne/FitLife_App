@@ -205,6 +205,11 @@
   border-color: #39424f;
 }
 
+.routine-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .routine-top {
   display: flex;
   justify-content: space-between;
@@ -1217,4 +1222,11 @@
   font-size: 20px;
   color: var(--ink);
   margin-bottom: 6px;
+}
+
+.empty-state p {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 260px;
 }

@@ -73,6 +73,7 @@ export function PickerSheet() {
             </div>
             <button
               className="info-btn"
+              aria-label={`View ${ex.name} details`}
               onClick={(e) => {
                 e.stopPropagation();
                 openDetail(ex.id);

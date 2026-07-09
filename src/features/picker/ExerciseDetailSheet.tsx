@@ -15,7 +15,7 @@ export function ExerciseDetailSheet() {
     <div className="sheet-in">
       <div className="detail-hero">
         <Thumb className="anim" src={ex.gif_url} alt={ex.name} />
-        <button className="icon-btn" style={{ left: 18 }} onClick={closeSheet}>
+        <button className="icon-btn" style={{ left: 18 }} aria-label="Close" onClick={closeSheet}>
           ←
         </button>
       </div>

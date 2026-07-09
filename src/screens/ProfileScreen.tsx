@@ -109,6 +109,11 @@ export function ProfileScreen() {
       })}
 
       <div className="section-h">History</div>
+      {mySessions.length === 0 && (
+        <div className="empty-state">
+          <p>Your finished workouts will show up here.</p>
+        </div>
+      )}
       {mySessions.map((h) => (
         <div className="hist-row" key={h.id} onClick={() => openWorkoutSheet(h.id)}>
           <div className="hist-b">

@@ -4,7 +4,7 @@ import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
 import type { ActiveSession, Routine, SessionEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
-export type SheetKind = 'picker' | 'detail' | 'workout' | null;
+export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | null;
 
 export interface FinishResult {
   entries: SessionEntry[];
@@ -28,6 +28,17 @@ const DEFAULT_SETS = () => [
   { reps: 10, weight: 20, done: false },
 ];
 
+function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
+  const prior = sessions
+    .filter((h) => h.person === 'You' && h.entries.some((e) => e.exerciseId === exerciseId))
+    .sort((a, b) => b.startedAt - a.startedAt)[0];
+  const entry = prior?.entries.find((e) => e.exerciseId === exerciseId);
+  if (entry && entry.sets.length > 0) {
+    return entry.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false }));
+  }
+  return DEFAULT_SETS();
+}
+
 interface StoreState {
   // data
   loaded: boolean;
@@ -46,6 +57,7 @@ interface StoreState {
   sheet: SheetKind;
   detailExerciseId: string | null;
   viewingSessionId: string | null;
+  viewingRoutineId: string | null;
   pickQuery: string;
   pickBodyPart: string;
 
@@ -74,6 +86,9 @@ interface StoreState {
   openPicker(): void;
   openDetail(id: string): void;
   openWorkoutSheet(id: string): void;
+  openRoutineActions(id: string): void;
+  renameRoutine(id: string, name: string): void;
+  deleteRoutine(id: string): void;
   closeSheet(): void;
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
@@ -102,6 +117,7 @@ export const useStore = create<StoreState>((set, get) => ({
   sheet: null,
   detailExerciseId: null,
   viewingSessionId: null,
+  viewingRoutineId: null,
   pickQuery: '',
   pickBodyPart: 'all',
 
@@ -132,7 +148,7 @@ export const useStore = create<StoreState>((set, get) => ({
         routineId,
         name: routine ? routine.name : 'New routine',
         startedAt: Date.now(),
-        entries: (routine ? routine.exerciseIds : []).map((exerciseId) => ({ exerciseId, sets: DEFAULT_SETS() })),
+        entries: (routine ? routine.exerciseIds : []).map((exerciseId) => ({ exerciseId, sets: startingSetsFor(get().sessions, exerciseId) })),
       };
       set({ active, mode: 'session' });
       if (!routine) get().openPicker();
@@ -199,7 +215,7 @@ export const useStore = create<StoreState>((set, get) => ({
       get().showToast('Already in your workout');
       return;
     }
-    set({ active: { ...active, entries: [...active.entries, { exerciseId, sets: DEFAULT_SETS() }] } });
+    set({ active: { ...active, entries: [...active.entries, { exerciseId, sets: startingSetsFor(get().sessions, exerciseId) }] } });
     get().showToast('Added');
     get().closeSheet();
   },
@@ -210,8 +226,9 @@ export const useStore = create<StoreState>((set, get) => ({
     const existing = new Set(active.entries.map((e) => e.exerciseId));
     const toAdd = exerciseIds.filter((id) => !existing.has(id));
     if (toAdd.length === 0) return;
+    const { sessions } = get();
     set({
-      active: { ...active, entries: [...active.entries, ...toAdd.map((exerciseId) => ({ exerciseId, sets: DEFAULT_SETS() }))] },
+      active: { ...active, entries: [...active.entries, ...toAdd.map((exerciseId) => ({ exerciseId, sets: startingSetsFor(sessions, exerciseId) }))] },
     });
     get().showToast(toAdd.length === 1 ? 'Added 1 exercise' : `Added ${toAdd.length} exercises`);
     get().closeSheet();
@@ -236,6 +253,10 @@ export const useStore = create<StoreState>((set, get) => ({
     const active = get().active;
     if (!active) return;
     const entries = active.entries.filter((e) => e.sets.some((s) => s.done));
+    if (entries.length === 0) {
+      get().showToast('Log at least one set before finishing');
+      return;
+    }
     const durationMin = Math.max(1, Math.round((Date.now() - active.startedAt) / 60000));
     const newSession: WorkoutSession = {
       id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -274,6 +295,26 @@ export const useStore = create<StoreState>((set, get) => ({
 
   openWorkoutSheet(id) {
     set({ sheet: 'workout', viewingSessionId: id });
+  },
+
+  openRoutineActions(id) {
+    set({ sheet: 'routineActions', viewingRoutineId: id });
+  },
+
+  renameRoutine(id, name) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    void db.routines.update(id, { name: trimmed });
+    set((s) => ({ routines: s.routines.map((r) => (r.id === id ? { ...r, name: trimmed } : r)), sheet: null }));
+    get().showToast('Routine renamed');
+  },
+
+  deleteRoutine(id) {
+    get().confirm('Delete this routine? This can\'t be undone.', 'Yes, delete', () => {
+      void db.routines.delete(id);
+      set((s) => ({ routines: s.routines.filter((r) => r.id !== id), sheet: null }));
+      get().showToast('Routine deleted');
+    }, true);
   },
 
   closeSheet() {

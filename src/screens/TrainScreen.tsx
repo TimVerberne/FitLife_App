@@ -9,6 +9,7 @@ export function TrainScreen() {
   const routines = useStore((s) => s.routines);
   const sessions = useStore((s) => s.sessions);
   const startSession = useStore((s) => s.startSession);
+  const openRoutineActions = useStore((s) => s.openRoutineActions);
 
   const lastTrained = useMemo(() => {
     const map = new Map<string, number>();
@@ -27,6 +28,7 @@ export function TrainScreen() {
         <div className="h1" style={{ fontSize: 30 }}>Routines</div>
         <button
           onClick={() => startSession(null)}
+          aria-label="Start a new routine"
           style={{
             width: 36,
             height: 36,
@@ -45,12 +47,28 @@ export function TrainScreen() {
         </button>
       </div>
 
+      {routines.length === 0 && (
+        <div className="empty-state">
+          <div className="h1">No routines yet</div>
+          <p>Build one now, or finish a workout and save it as a routine afterwards.</p>
+        </div>
+      )}
+
       {routines.map((r) => {
         const exercises = r.exerciseIds.map(exerciseById).filter((e): e is Exercise => e !== undefined);
         const bodyParts = Array.from(new Set(exercises.map((e) => e.target)));
         const last = lastTrained.get(r.id);
         return (
-          <button className="routine-card" key={r.id} onClick={() => startSession(r.id)}>
+          <div
+            className="routine-card"
+            key={r.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => startSession(r.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') startSession(r.id);
+            }}
+          >
             <div className="routine-top">
               <div style={{ minWidth: 0 }}>
                 <div className="routine-name">{r.name}</div>
@@ -58,7 +76,19 @@ export function TrainScreen() {
                   {r.exerciseIds.length} EXERCISES{last ? ` · LAST ${relativeDate(last).toUpperCase()}` : ''}
                 </div>
               </div>
-              <span className="go-arrow">›</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  className="info-btn"
+                  aria-label={`${r.name} options`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openRoutineActions(r.id);
+                  }}
+                >
+                  ⋯
+                </button>
+                <span className="go-arrow">›</span>
+              </div>
             </div>
             <div style={{ display: 'flex', marginTop: 11 }}>
               {exercises.slice(0, 5).map((e, i) => (
@@ -78,7 +108,7 @@ export function TrainScreen() {
                 </span>
               ))}
             </div>
-          </button>
+          </div>
         );
       })}
 

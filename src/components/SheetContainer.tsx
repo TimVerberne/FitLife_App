@@ -2,6 +2,7 @@ import { useStore } from '../store/useStore';
 import { PickerSheet } from '../features/picker/PickerSheet';
 import { ExerciseDetailSheet } from '../features/picker/ExerciseDetailSheet';
 import { WorkoutDetailSheet } from '../features/history/WorkoutDetailSheet';
+import { RoutineActionsSheet } from '../features/routines/RoutineActionsSheet';
 
 export function SheetContainer() {
   const sheet = useStore((s) => s.sheet);
@@ -16,6 +17,7 @@ export function SheetContainer() {
         {sheet === 'picker' && <PickerSheet />}
         {sheet === 'detail' && <ExerciseDetailSheet />}
         {sheet === 'workout' && <WorkoutDetailSheet />}
+        {sheet === 'routineActions' && <RoutineActionsSheet />}
       </div>
     </>
   );
