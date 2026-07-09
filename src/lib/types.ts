@@ -11,7 +11,7 @@ export interface Exercise {
   attribution: string;
 }
 
-export type SetKind = 'normal' | 'warmup' | 'failure' | 'dropset';
+export type SetKind = 'normal' | 'warmup' | 'failure' | 'dropset' | 'superset';
 
 export interface SetEntry {
   reps: number;

@@ -24,6 +24,7 @@ function setLabelFor(sets: SetEntry[], index: number): { text: string; kind: Set
   const kind = sets[index].kind ?? 'normal';
   if (kind === 'warmup') return { text: 'W', kind };
   if (kind === 'failure') return { text: 'F', kind };
+  if (kind === 'superset') return { text: 'S', kind };
   if (kind === 'dropset') {
     let start = index;
     while (start > 0 && (sets[start - 1].kind ?? 'normal') === 'dropset') start--;
@@ -58,6 +59,7 @@ export function ActiveSessionScreen() {
   const minimizeSession = useStore((s) => s.minimizeSession);
   const cancelSession = useStore((s) => s.cancelSession);
   const finishSession = useStore((s) => s.finishSession);
+  const confirm = useStore((s) => s.confirm);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
@@ -168,7 +170,11 @@ export function ActiveSessionScreen() {
                 {ex.name}
                 <span className="sub">{ex.target} · {ex.equipment}</span>
               </div>
-              <button className="s-del" aria-label={`Remove ${ex.name} from workout`} onClick={() => removeExercise(ei)}>
+              <button
+                className="s-del"
+                aria-label={`Remove ${ex.name} from workout`}
+                onClick={() => confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true)}
+              >
                 ✕
               </button>
             </div>
@@ -213,6 +219,9 @@ export function ActiveSessionScreen() {
                                 </button>
                                 <button className="set-menu-item" onClick={() => pickKind('dropset')}>
                                   <span className="set-menu-badge dropset">D</span> Drop set
+                                </button>
+                                <button className="set-menu-item" onClick={() => pickKind('superset')}>
+                                  <span className="set-menu-badge superset">S</span> Superset
                                 </button>
                                 <button className="set-menu-item danger" onClick={() => { removeSet(ei, si); closeMenu(); }}>
                                   <span className="set-menu-badge">✕</span> Remove set
