@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { db, seedIfEmpty } from '../lib/db';
+import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
 import type { ActiveSession, Routine, SessionEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -108,9 +109,16 @@ export const useStore = create<StoreState>((set, get) => ({
   toastMsg: '',
 
   async init() {
-    await seedIfEmpty();
-    const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
-    set({ routines, sessions, loaded: true });
+    try {
+      await seedIfEmpty();
+      const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
+      set({ routines, sessions, loaded: true });
+    } catch (err) {
+      // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
+      // fall back to in-memory seed data so the app still works, just without persistence.
+      console.error('Local storage unavailable, falling back to in-memory data', err);
+      set({ routines: SEED_ROUTINES, sessions: SEED_SESSIONS, loaded: true });
+    }
   },
 
   go(tab) {

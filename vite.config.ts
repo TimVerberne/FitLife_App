@@ -6,6 +6,11 @@ const base = process.env.VITE_BASE_PATH || '/';
 
 export default defineConfig({
   base,
+  build: {
+    // Conservative target so older/mobile browser JS engines can parse the
+    // bundle instead of failing silently on newer syntax.
+    target: 'es2018',
+  },
   plugins: [
     react(),
     VitePWA({
