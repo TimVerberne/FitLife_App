@@ -1,10 +1,14 @@
 import { create } from 'zustand';
 import { db, seedIfEmpty } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
+import { applyTheme, loadSettings, saveSettings, type Settings } from '../lib/settings';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
-export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | null;
+export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | null;
+
+// Apply the persisted theme immediately on load, before the first paint.
+applyTheme(loadSettings());
 
 export interface FinishResult {
   entries: SessionEntry[];
@@ -20,6 +24,15 @@ interface DialogState {
   cancelLabel: string;
   danger: boolean;
   onYes: () => void;
+}
+
+function defaultRestTimersFor(exerciseIds: string[], defaultRestSeconds: number | null): Record<string, number> {
+  if (defaultRestSeconds === null) return {};
+  const map: Record<string, number> = {};
+  exerciseIds.forEach((id) => {
+    map[id] = defaultRestSeconds;
+  });
+  return map;
 }
 
 function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
@@ -60,6 +73,9 @@ interface StoreState {
   // dialog + toast
   dialog: DialogState | null;
   toastMsg: string;
+
+  // settings
+  settings: Settings;
 
   // actions
   init(): Promise<void>;
@@ -103,6 +119,12 @@ interface StoreState {
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
   updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight', value: number): void;
+
+  openSettings(): void;
+  updateSettings(patch: Partial<Settings>): void;
+  exportData(): void;
+  importData(file: File): void;
+  clearAllData(): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -128,7 +150,10 @@ export const useStore = create<StoreState>((set, get) => ({
   dialog: null,
   toastMsg: '',
 
+  settings: loadSettings(),
+
   async init() {
+    set({ tab: get().settings.defaultTab });
     try {
       await seedIfEmpty();
       const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
@@ -148,12 +173,13 @@ export const useStore = create<StoreState>((set, get) => ({
   startSession(routineId) {
     const doStart = () => {
       const routine = routineId ? get().routines.find((r) => r.id === routineId) : null;
+      const exerciseIds = routine ? routine.exerciseIds : [];
       const active: ActiveSession = {
         routineId,
         name: routine ? routine.name : 'New routine',
         startedAt: Date.now(),
-        entries: (routine ? routine.exerciseIds : []).map((exerciseId) => ({ exerciseId, sets: startingSetsFor(get().sessions, exerciseId) })),
-        restTimers: {},
+        entries: exerciseIds.map((exerciseId) => ({ exerciseId, sets: startingSetsFor(get().sessions, exerciseId) })),
+        restTimers: defaultRestTimersFor(exerciseIds, get().settings.defaultRestSeconds),
       };
       set({ active, mode: 'session', restTimer: null });
       if (!routine) get().openPicker();
@@ -197,6 +223,9 @@ export const useStore = create<StoreState>((set, get) => ({
       const sets = e.sets.map((s, si) => (si === setIdx ? { ...s, done: !s.done } : s));
       return { ...e, sets };
     });
+    if (turningOn && get().settings.hapticsOnSetComplete && 'vibrate' in navigator) {
+      navigator.vibrate(15);
+    }
     const restSeconds = turningOn ? active.restTimers[entry.exerciseId] : undefined;
     set({
       active: { ...active, entries },
@@ -270,7 +299,8 @@ export const useStore = create<StoreState>((set, get) => ({
       get().showToast('Already in your workout');
       return;
     }
-    set({ active: { ...active, entries: [...active.entries, { exerciseId, sets: startingSetsFor(get().sessions, exerciseId) }] } });
+    const restTimers = { ...active.restTimers, ...defaultRestTimersFor([exerciseId], get().settings.defaultRestSeconds) };
+    set({ active: { ...active, entries: [...active.entries, { exerciseId, sets: startingSetsFor(get().sessions, exerciseId) }], restTimers } });
     get().showToast('Added');
     get().closeSheet();
   },
@@ -282,8 +312,9 @@ export const useStore = create<StoreState>((set, get) => ({
     const toAdd = exerciseIds.filter((id) => !existing.has(id));
     if (toAdd.length === 0) return;
     const { sessions } = get();
+    const restTimers = { ...active.restTimers, ...defaultRestTimersFor(toAdd, get().settings.defaultRestSeconds) };
     set({
-      active: { ...active, entries: [...active.entries, ...toAdd.map((exerciseId) => ({ exerciseId, sets: startingSetsFor(sessions, exerciseId) }))] },
+      active: { ...active, entries: [...active.entries, ...toAdd.map((exerciseId) => ({ exerciseId, sets: startingSetsFor(sessions, exerciseId) }))], restTimers },
     });
     get().showToast(toAdd.length === 1 ? 'Added 1 exercise' : `Added ${toAdd.length} exercises`);
     get().closeSheet();
@@ -436,7 +467,7 @@ export const useStore = create<StoreState>((set, get) => ({
         name: session.name,
         startedAt: Date.now(),
         entries: session.entries.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: s.kind })) })),
-        restTimers: {},
+        restTimers: defaultRestTimersFor(Array.from(new Set(session.entries.map((e) => e.exerciseId))), get().settings.defaultRestSeconds),
       };
       set({ active, mode: 'session', restTimer: null });
     };
@@ -482,5 +513,59 @@ export const useStore = create<StoreState>((set, get) => ({
 
   skipRestTimer() {
     set({ restTimer: null });
+  },
+
+  openSettings() {
+    set({ sheet: 'settings' });
+  },
+
+  updateSettings(patch) {
+    const settings = { ...get().settings, ...patch };
+    set({ settings });
+    saveSettings(settings);
+    if (patch.theme || patch.accent) applyTheme(settings);
+  },
+
+  exportData() {
+    const { routines, sessions, settings } = get();
+    const blob = new Blob([JSON.stringify({ routines, sessions, settings }, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fitflow-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    get().showToast('Data exported');
+  },
+
+  importData(file) {
+    file
+      .text()
+      .then((text) => {
+        const data = JSON.parse(text) as { routines?: Routine[]; sessions?: WorkoutSession[]; settings?: Partial<Settings> };
+        if (!Array.isArray(data.routines) || !Array.isArray(data.sessions)) {
+          get().showToast('That file doesn\'t look like a FitFlow backup');
+          return;
+        }
+        get().confirm('Import this backup? It will replace all current routines and workout history.', 'Import', () => {
+          void db.routines.clear().then(() => db.routines.bulkPut(data.routines!));
+          void db.sessions.clear().then(() => db.sessions.bulkPut(data.sessions!));
+          const settings = data.settings ? { ...get().settings, ...data.settings } : get().settings;
+          set({ routines: data.routines!, sessions: data.sessions!, settings, sheet: null });
+          saveSettings(settings);
+          applyTheme(settings);
+          get().showToast('Backup imported');
+        }, true);
+      })
+      .catch(() => get().showToast('Could not read that file'));
+  },
+
+  clearAllData() {
+    get().confirm('Delete all routines and workout history? This can\'t be undone.', 'Yes, delete everything', () => {
+      void db.routines.clear();
+      void db.sessions.clear();
+      set({ routines: [], sessions: [], sheet: null });
+      get().showToast('All data cleared');
+    }, true);
   },
 }));

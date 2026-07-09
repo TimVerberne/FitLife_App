@@ -607,7 +607,7 @@
 
 .ex-lead-row.on {
   border-color: var(--accent);
-  background: rgba(116, 224, 174, 0.08);
+  background: var(--accent-soft);
 }
 
 .ex-lead-rank {
@@ -1265,6 +1265,96 @@
 .delta.down {
   color: #f2828a;
   background: var(--danger-soft);
+}
+
+/* -------- settings -------- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 2px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-row:last-of-type {
+  border-bottom: none;
+}
+
+.settings-row-label {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.settings-row-desc {
+  font-size: 11px;
+  color: var(--faint);
+  margin-top: 2px;
+  max-width: 220px;
+}
+
+.seg {
+  display: flex;
+  flex: 1;
+  max-width: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 3px;
+}
+
+.seg button {
+  flex: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.seg button.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+.switch {
+  position: relative;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  flex: none;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.switch.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink);
+  transition: transform 0.15s;
+}
+
+.switch.on .switch-knob {
+  transform: translateX(18px);
+  background: var(--accent-ink);
 }
 
 /* -------- period picker -------- */

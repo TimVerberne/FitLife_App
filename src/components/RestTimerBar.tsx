@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
+import { playBeep } from '../lib/beep';
 
 export function RestTimerBar() {
   const restTimer = useStore((s) => s.restTimer);
   const adjustRestTimer = useStore((s) => s.adjustRestTimer);
   const skipRestTimer = useStore((s) => s.skipRestTimer);
+  const soundEnabled = useStore((s) => s.settings.restTimerSound);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -15,8 +17,11 @@ export function RestTimerBar() {
   }, [restTimer]);
 
   useEffect(() => {
-    if (restTimer && restTimer.endsAt <= now) skipRestTimer();
-  }, [restTimer, now, skipRestTimer]);
+    if (restTimer && restTimer.endsAt <= now) {
+      if (soundEnabled) playBeep();
+      skipRestTimer();
+    }
+  }, [restTimer, now, soundEnabled, skipRestTimer]);
 
   if (!restTimer) return null;
 

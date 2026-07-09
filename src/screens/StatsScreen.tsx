@@ -4,6 +4,7 @@ import type { Person, WorkoutSession } from '../lib/types';
 import { MUSCLE_AXES, MUSCLE_GROUP, epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
 import { exerciseById } from '../lib/exercises';
+import { formatWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
 
 type Period = 'week' | 'month' | 'all';
@@ -51,6 +52,7 @@ function exerciseStatsFor(sessions: WorkoutSession[], person: Person, exerciseId
 
 export function StatsScreen() {
   const sessions = useStore((s) => s.sessions);
+  const units = useStore((s) => s.settings.units);
   const [period, setPeriod] = useState<Period>('week');
   const [selectedRival, setSelectedRival] = useState<Person | null>(null);
   const now = Date.now();
@@ -144,6 +146,7 @@ export function StatsScreen() {
       {board.map((row, i) => {
         const colors = AVATAR_COLORS[row.person];
         const isTop = i === 0;
+        const displayVolume = toDisplayWeight(row.volume, units);
         return (
           <div
             key={row.person}
@@ -151,7 +154,7 @@ export function StatsScreen() {
               display: 'flex',
               alignItems: 'center',
               gap: 11,
-              background: isTop ? 'rgba(116,224,174,.1)' : 'var(--surface)',
+              background: isTop ? 'var(--accent-soft)' : 'var(--surface)',
               border: `1px solid ${isTop ? 'var(--accent)' : 'var(--line)'}`,
               borderRadius: 13,
               padding: '11px 12px',
@@ -169,8 +172,8 @@ export function StatsScreen() {
               <div className="crew-meta">{row.workouts} WORKOUTS</div>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 19, color: isTop ? 'var(--accent)' : 'var(--ink)', lineHeight: 1 }}>
-              {row.volume >= 1000 ? `${(row.volume / 1000).toFixed(1)}` : Math.round(row.volume)}
-              {row.volume >= 1000 && <span style={{ fontSize: 10, color: 'var(--faint)' }}>k</span>}
+              {displayVolume >= 1000 ? `${(displayVolume / 1000).toFixed(1)}` : Math.round(displayVolume)}
+              {displayVolume >= 1000 && <span style={{ fontSize: 10, color: 'var(--faint)' }}>k</span>}
             </div>
           </div>
         );
@@ -197,9 +200,9 @@ export function StatsScreen() {
             <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
             <HeadToHeadTile
               label="Volume"
-              youVal={you.volume}
-              rivalVal={rival.volume}
-              format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
+              youVal={toDisplayWeight(you.volume, units)}
+              rivalVal={toDisplayWeight(rival.volume, units)}
+              format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
               rivalColor={AVATAR_COLORS[rival.person].bg}
             />
             <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
@@ -267,25 +270,25 @@ export function StatsScreen() {
                   <div className="h2h-grid">
                     <HeadToHeadTile
                       label="Heaviest set"
-                      youVal={youExStats.maxWeight}
-                      rivalVal={rivalExStats.maxWeight}
-                      format={(v) => `${v}kg`}
-                      youDisplay={youExStats.maxWeight > 0 ? `${youExStats.maxWeight}×${youExStats.maxWeightReps}` : '—'}
-                      rivalDisplay={rivalExStats.maxWeight > 0 ? `${rivalExStats.maxWeight}×${rivalExStats.maxWeightReps}` : '—'}
+                      youVal={toDisplayWeight(youExStats.maxWeight, units)}
+                      rivalVal={toDisplayWeight(rivalExStats.maxWeight, units)}
+                      format={(v) => `${Math.round(v)}${units}`}
+                      youDisplay={youExStats.maxWeight > 0 ? `${formatWeight(youExStats.maxWeight, units)}×${youExStats.maxWeightReps}` : '—'}
+                      rivalDisplay={rivalExStats.maxWeight > 0 ? `${formatWeight(rivalExStats.maxWeight, units)}×${rivalExStats.maxWeightReps}` : '—'}
                       rivalColor={AVATAR_COLORS[rival.person].bg}
                     />
                     <HeadToHeadTile
                       label="Est. 1RM"
-                      youVal={youExStats.best1RM}
-                      rivalVal={rivalExStats.best1RM}
-                      format={(v) => (v > 0 ? `${Math.round(v)}kg` : '—')}
+                      youVal={toDisplayWeight(youExStats.best1RM, units)}
+                      rivalVal={toDisplayWeight(rivalExStats.best1RM, units)}
+                      format={(v) => (v > 0 ? `${Math.round(v)}${units}` : '—')}
                       rivalColor={AVATAR_COLORS[rival.person].bg}
                     />
                     <HeadToHeadTile
                       label="Total volume"
-                      youVal={youExStats.volume}
-                      rivalVal={rivalExStats.volume}
-                      format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
+                      youVal={toDisplayWeight(youExStats.volume, units)}
+                      rivalVal={toDisplayWeight(rivalExStats.volume, units)}
+                      format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
                       rivalColor={AVATAR_COLORS[rival.person].bg}
                     />
                     <HeadToHeadTile

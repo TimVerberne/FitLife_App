@@ -3,6 +3,8 @@ import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
 import { isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
+import { toDisplayWeight } from '../lib/units';
+import { useStore } from '../store/useStore';
 import { Thumb } from './Thumb';
 
 const COLLAPSED_COUNT = 3;
@@ -21,6 +23,7 @@ export function WorkoutFeedCard({
   onOpen: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const units = useStore((s) => s.settings.units);
   const colors = AVATAR_COLORS[session.person];
   const records = newRecordsInWorkout(allSessions, session);
   const shown = expanded ? session.entries : session.entries.slice(0, COLLAPSED_COUNT);
@@ -47,7 +50,7 @@ export function WorkoutFeedCard({
         </div>
         <div className="feed-stat">
           <div className="l">Volume</div>
-          <div className="v">{Math.round(volumeOf(session.entries)).toLocaleString('en-US')} kg</div>
+          <div className="v">{Math.round(toDisplayWeight(volumeOf(session.entries), units)).toLocaleString('en-US')} {units}</div>
         </div>
         <div className="feed-stat">
           <div className="l">Records</div>

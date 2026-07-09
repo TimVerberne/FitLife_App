@@ -1,13 +1,15 @@
 import { useStore } from '../store/useStore';
 import { setsCountOf, volumeOf } from '../lib/records';
+import { toDisplayWeight } from '../lib/units';
 
 export function FinishScreen() {
   const result = useStore((s) => s.finishResult);
   const saveRoutineFromFinish = useStore((s) => s.saveRoutineFromFinish);
   const go = useStore((s) => s.go);
+  const units = useStore((s) => s.settings.units);
 
   if (!result) return null;
-  const volume = Math.round(volumeOf(result.entries));
+  const volume = Math.round(toDisplayWeight(volumeOf(result.entries), units));
   const sets = setsCountOf(result.entries);
 
   return (
@@ -18,7 +20,7 @@ export function FinishScreen() {
       </div>
       <div className="summary">
         <div className="n">{volume.toLocaleString('en-US')}</div>
-        <div style={{ color: '#9fe3c4', fontSize: 13, marginTop: 4 }}>kg total volume</div>
+        <div style={{ color: '#9fe3c4', fontSize: 13, marginTop: 4 }}>{units} total volume</div>
       </div>
       <div className="stat-grid" style={{ marginTop: 14 }}>
         <div className="stat-tile">

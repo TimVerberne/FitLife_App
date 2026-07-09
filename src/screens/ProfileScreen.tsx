@@ -15,21 +15,23 @@ import {
   type StatPeriod,
   type WeeklyMetric,
 } from '../lib/records';
+import { formatWeight, toDisplayWeight } from '../lib/units';
 import { BarChart } from '../components/BarChart';
 import { RadarChart } from '../components/RadarChart';
 import { TrainingCalendar } from '../components/TrainingCalendar';
 import { PeriodPicker } from '../components/PeriodPicker';
 import { Thumb } from '../components/Thumb';
 
-const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
-  { id: 'volume', label: 'Volume', unit: 'kg' },
-  { id: 'duration', label: 'Duration', unit: 'min' },
-  { id: 'reps', label: 'Reps', unit: '' },
-];
-
 export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
+  const openSettings = useStore((s) => s.openSettings);
+  const units = useStore((s) => s.settings.units);
+  const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
+    { id: 'volume', label: 'Volume', unit: units },
+    { id: 'duration', label: 'Duration', unit: 'min' },
+    { id: 'reps', label: 'Reps', unit: '' },
+  ];
   const [metric, setMetric] = useState<WeeklyMetric>('volume');
   const [chartPeriod, setChartPeriod] = useState<StatPeriod>('week');
   const [showAllRecords, setShowAllRecords] = useState(false);
@@ -54,15 +56,20 @@ export function ProfileScreen() {
 
   return (
     <div className="screen">
-      <div className="top">
-        <div className="eyebrow">Profile</div>
-        <div className="h1" style={{ fontSize: 30 }}>You</div>
+      <div className="top top-row">
+        <div>
+          <div className="eyebrow">Profile</div>
+          <div className="h1" style={{ fontSize: 30 }}>You</div>
+        </div>
+        <button className="info-btn" aria-label="Settings" onClick={openSettings} style={{ width: 38, height: 38, fontSize: 17 }}>
+          ⚙
+        </button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 6 }}>
         <div
           className="av round"
-          style={{ width: 58, height: 58, fontSize: 23, background: 'linear-gradient(135deg,#74e0ae,#4fae82)', color: '#0a0b0a' }}
+          style={{ width: 58, height: 58, fontSize: 23, background: 'var(--accent)', color: 'var(--accent-ink)' }}
         >
           Y
         </div>
@@ -80,8 +87,8 @@ export function ProfileScreen() {
           <div className="l">Workouts</div>
         </div>
         <div className="stat-tile">
-          <div className="n">{Math.round(totalVolume / 1000)}k</div>
-          <div className="l">kg lifted</div>
+          <div className="n">{Math.round(toDisplayWeight(totalVolume, units) / 1000)}k</div>
+          <div className="l">{units} lifted</div>
         </div>
         <div className="stat-tile">
           <div className="n" style={{ color: 'var(--accent)' }}>{records.length}</div>
@@ -94,7 +101,8 @@ export function ProfileScreen() {
           <div>
             <div className="eyebrow">{STAT_PERIOD_LABEL[chartPeriod]} · {activeMetric.label.toLowerCase()}</div>
             <div className="chart-big">
-              {Math.round(periodValue).toLocaleString('en-US')} {activeMetric.unit && <span>{activeMetric.unit}</span>}
+              {Math.round(metric === 'volume' ? toDisplayWeight(periodValue, units) : periodValue).toLocaleString('en-US')}{' '}
+              {activeMetric.unit && <span>{activeMetric.unit}</span>}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -160,10 +168,10 @@ export function ProfileScreen() {
             <Thumb className="ph" src={ex.image} alt={ex.name} />
             <div className="rec-b">
               <div className="rec-name">{ex.name}</div>
-              <div className="rec-sub">Best set: {r.maxWeight} kg × {r.maxWeightReps}</div>
+              <div className="rec-sub">Best set: {formatWeight(r.maxWeight, units)} {units} × {r.maxWeightReps}</div>
             </div>
             <div className="rec-val">
-              <div className="n">{Math.round(r.estOneRepMax)}</div>
+              <div className="n">{Math.round(toDisplayWeight(r.estOneRepMax, units))}</div>
               <div className="u">est. 1RM</div>
             </div>
           </div>
@@ -198,7 +206,7 @@ export function ProfileScreen() {
               {relativeDate(h.startedAt)} · {h.durationMin} min · {setsCountOf(h.entries)} sets
             </div>
           </div>
-          <div className="hist-vol">{Math.round(volumeOf(h.entries))} kg</div>
+          <div className="hist-vol">{Math.round(toDisplayWeight(volumeOf(h.entries), units))} {units}</div>
           <span className="go-arrow">›</span>
         </div>
       ))}

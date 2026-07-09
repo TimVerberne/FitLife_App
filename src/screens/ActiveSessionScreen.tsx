@@ -1,21 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
 import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
+import { REST_PRESETS, formatRest } from '../lib/rest';
+import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
 import { NumberField } from '../components/NumberField';
 import { RestTimerBar } from '../components/RestTimerBar';
 import type { SetEntry, SetKind } from '../lib/types';
-
-const REST_PRESETS = [5, 10, 15, 30, 45, 60, 75, 90, 105, 120];
-
-function formatRest(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const r = seconds % 60;
-  return r === 0 ? `${m}m` : `${m}m ${r}s`;
-}
 
 function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
   let best = startingBest;
@@ -71,17 +64,37 @@ export function ActiveSessionScreen() {
   const finishSession = useStore((s) => s.finishSession);
   const confirm = useStore((s) => s.confirm);
   const setRestDuration = useStore((s) => s.setRestDuration);
+  const settings = useStore((s) => s.settings);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (!settings.keepScreenAwake) return;
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    if (!nav.wakeLock) return;
+    let sentinel: { release: () => Promise<void> } | null = null;
+    let cancelled = false;
+    nav.wakeLock
+      .request('screen')
+      .then((s) => {
+        if (cancelled) void s.release();
+        else sentinel = s;
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      void sentinel?.release();
+    };
+  }, [settings.keepScreenAwake]);
+
   if (!active) return null;
 
   const done = setsCountOf(active.entries);
   const total = active.entries.reduce((a, e) => a + e.sets.length, 0);
-  const liveVolume = Math.round(volumeOf(active.entries));
+  const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
   function prevPerformance(exerciseId: string, setIdx: number): string | null {
     const prior = sessions
@@ -91,7 +104,7 @@ export function ActiveSessionScreen() {
     const entry = prior.entries.find((e) => e.exerciseId === exerciseId);
     const set = entry?.sets[setIdx];
     if (!set) return null;
-    return `${set.weight}×${set.reps}`;
+    return `${formatWeight(set.weight, settings.units)}×${set.reps}`;
   }
 
   function closeMenu() {
@@ -127,7 +140,7 @@ export function ActiveSessionScreen() {
           <div className="sess-clock">{mins}m</div>
           <div className="sess-vol">
             <div className="n">{liveVolume.toLocaleString('en-US')}</div>
-            <div className="l">KG VOLUME</div>
+            <div className="l">{settings.units.toUpperCase()} VOLUME</div>
           </div>
         </div>
         <input
@@ -185,7 +198,13 @@ export function ActiveSessionScreen() {
               <button
                 className="s-del"
                 aria-label={`Remove ${ex.name} from workout`}
-                onClick={() => confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true)}
+                onClick={() => {
+                  if (settings.confirmRemoveExercise) {
+                    confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true);
+                  } else {
+                    removeExercise(ei);
+                  }
+                }}
               >
                 ✕
               </button>
@@ -230,7 +249,7 @@ export function ActiveSessionScreen() {
               <div className="set-head">
                 <span>#</span>
                 <span>Prev</span>
-                <span>Kg</span>
+                <span>{settings.units === 'kg' ? 'Kg' : 'Lb'}</span>
                 <span>Reps</span>
                 <span></span>
               </div>
@@ -298,7 +317,11 @@ export function ActiveSessionScreen() {
                     </div>
                     <div className="set-prev">{prev ?? '—'}</div>
                     <div className="set-fld">
-                      <NumberField value={st.weight} inputMode="decimal" onCommit={(n) => setVal(ei, si, 'weight', n)} />
+                      <NumberField
+                        value={toDisplayWeight(st.weight, settings.units)}
+                        inputMode="decimal"
+                        onCommit={(n) => setVal(ei, si, 'weight', fromDisplayWeight(n, settings.units))}
+                      />
                     </div>
                     <div className="set-fld">
                       <NumberField value={st.reps} inputMode="numeric" onCommit={(n) => setVal(ei, si, 'reps', n)} />

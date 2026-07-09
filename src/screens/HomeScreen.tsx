@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
+import { toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
@@ -9,9 +10,13 @@ export function HomeScreen() {
   const startSession = useStore((s) => s.startSession);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const go = useStore((s) => s.go);
+  const settings = useStore((s) => s.settings);
 
   const mySessions = useMemo(() => sessions.filter((s) => s.person === 'You'), [sessions]);
-  const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
+  const totalVolume = useMemo(
+    () => toDisplayWeight(mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), settings.units),
+    [mySessions, settings.units],
+  );
   const streak = useMemo(() => weeklyStreak(sessions), [sessions]);
 
   const nextRoutine = useMemo(() => {
@@ -23,14 +28,14 @@ export function HomeScreen() {
       if (h.startedAt > prev) lastTrainedAt.set(h.routineId, h.startedAt);
     });
     const byRecency = [...routines].sort((a, b) => (lastTrainedAt.get(a.id) ?? 0) - (lastTrainedAt.get(b.id) ?? 0));
-    if (byRecency.length <= 1) return byRecency[0] ?? null;
+    if (byRecency.length <= 1 || !settings.smartRoutineRotation) return byRecency[0] ?? null;
     // Prefer a routine that trains a different muscle group than your last workout,
     // so back-to-back sessions don't hammer the same muscles two days running.
     const lastSession = [...mySessions].sort((a, b) => b.startedAt - a.startedAt)[0];
     const lastGroup = lastSession ? primaryMuscleGroup(lastSession.entries.map((e) => e.exerciseId)) : null;
     const freshGroup = byRecency.find((r) => primaryMuscleGroup(r.exerciseIds) !== lastGroup);
     return freshGroup ?? byRecency[0];
-  }, [routines, mySessions]);
+  }, [routines, mySessions, settings.smartRoutineRotation]);
 
   const estMinutes = nextRoutine
     ? (() => {

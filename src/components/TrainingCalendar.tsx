@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { WorkoutSession } from '../lib/types';
 import { daysSinceLastWorkout, sessionsByDay, weeklyStreak } from '../lib/records';
+import { useStore } from '../store/useStore';
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_LABELS_SUN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_LABELS_MON = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -19,15 +21,18 @@ function isSameMonth(a: Date, b: Date): boolean {
 }
 
 export function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSession[]; onOpen: (id: string) => void }) {
+  const weekStart = useStore((s) => s.settings.weekStart);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const byDay = useMemo(() => sessionsByDay(sessions), [sessions]);
   const streak = useMemo(() => weeklyStreak(sessions), [sessions]);
   const restDays = useMemo(() => daysSinceLastWorkout(sessions), [sessions]);
   const todayKey = useMemo(() => startOfDay(new Date()).getTime(), []);
+  const weekdayLabels = weekStart === 'mon' ? WEEKDAY_LABELS_MON : WEEKDAY_LABELS_SUN;
 
   const weeks = useMemo(() => {
     const first = startOfMonth(cursor);
-    const startWeekday = first.getDay();
+    const rawWeekday = first.getDay();
+    const startWeekday = weekStart === 'mon' ? (rawWeekday + 6) % 7 : rawWeekday;
     const daysInMonth = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0).getDate();
     const cells: (Date | null)[] = [];
     for (let i = 0; i < startWeekday; i++) cells.push(null);
@@ -36,7 +41,7 @@ export function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSessio
     const rows: (Date | null)[][] = [];
     for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
     return rows;
-  }, [cursor]);
+  }, [cursor, weekStart]);
 
   const monthLabel = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const isCurrentMonth = isSameMonth(cursor, new Date());
@@ -68,7 +73,7 @@ export function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSessio
       </div>
 
       <div className="cal-weekdays">
-        {WEEKDAY_LABELS.map((l) => (
+        {weekdayLabels.map((l) => (
           <div className="cal-weekday" key={l}>
             {l}
           </div>

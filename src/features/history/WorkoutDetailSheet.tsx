@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { exerciseById } from '../../lib/exercises';
 import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { AVATAR_COLORS } from '../../lib/seedData';
+import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { Thumb } from '../../components/Thumb';
 import { NumberField } from '../../components/NumberField';
 
@@ -12,6 +13,7 @@ export function WorkoutDetailSheet() {
   const copyWorkoutToRoutines = useStore((s) => s.copyWorkoutToRoutines);
   const repeatWorkout = useStore((s) => s.repeatWorkout);
   const updateHistorySet = useStore((s) => s.updateHistorySet);
+  const units = useStore((s) => s.settings.units);
   const [editing, setEditing] = useState(false);
 
   if (!session) return null;
@@ -45,8 +47,8 @@ export function WorkoutDetailSheet() {
       </div>
       <div className="stat-grid" style={{ marginBottom: 6 }}>
         <div className="stat-tile">
-          <div className="n">{Math.round(volumeOf(session.entries)).toLocaleString('en-US')}</div>
-          <div className="l">kg volume</div>
+          <div className="n">{Math.round(toDisplayWeight(volumeOf(session.entries), units)).toLocaleString('en-US')}</div>
+          <div className="l">{units} volume</div>
         </div>
         <div className="stat-tile">
           <div className="n">{setsCountOf(session.entries)}</div>
@@ -71,9 +73,13 @@ export function WorkoutDetailSheet() {
                 {entry.sets.map((s, si) => (
                   <div className="hist-edit-row" key={si}>
                     <div className="set-fld">
-                      <NumberField value={s.weight} inputMode="decimal" onCommit={(n) => updateHistorySet(session.id, i, si, 'weight', n)} />
+                      <NumberField
+                        value={toDisplayWeight(s.weight, units)}
+                        inputMode="decimal"
+                        onCommit={(n) => updateHistorySet(session.id, i, si, 'weight', fromDisplayWeight(n, units))}
+                      />
                     </div>
-                    <span className="hist-edit-x">kg ×</span>
+                    <span className="hist-edit-x">{units} ×</span>
                     <div className="set-fld">
                       <NumberField value={s.reps} inputMode="numeric" onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)} />
                     </div>
@@ -84,7 +90,7 @@ export function WorkoutDetailSheet() {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {entry.sets.map((s, si) => (
                   <span className="tag" key={si} style={{ color: 'var(--ink)', background: 'var(--surface-2)' }}>
-                    {s.weight > 0 ? `${s.weight}kg` : 'bodyweight'} × {s.reps}
+                    {s.weight > 0 ? `${formatWeight(s.weight, units)}${units}` : 'bodyweight'} × {s.reps}
                   </span>
                 ))}
               </div>
