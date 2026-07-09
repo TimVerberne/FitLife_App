@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import { relativeDate, volumeOf, weeklyStreak } from '../lib/records';
-import { AVATAR_COLORS } from '../lib/seedData';
+import { volumeOf, weeklyStreak } from '../lib/records';
+import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
   const routines = useStore((s) => s.routines);
@@ -116,24 +116,9 @@ export function HomeScreen() {
         The crew
       </div>
       {crew.length === 0 && <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>No activity from your crew yet.</p>}
-      {crew.map((h) => {
-        const colors = AVATAR_COLORS[h.person];
-        return (
-          <div className="crew-row" key={h.id} onClick={() => openWorkoutSheet(h.id)}>
-            <div className="av" style={{ background: colors.bg, color: colors.ink }}>
-              {h.person.slice(0, 1)}
-            </div>
-            <div className="crew-b">
-              <div className="crew-name">
-                {h.person} · {h.name}
-              </div>
-              <div className="crew-meta">
-                {relativeDate(h.startedAt).toUpperCase()} · {h.durationMin} MIN · {Math.round(volumeOf(h.entries)).toLocaleString('en-US')} KG
-              </div>
-            </div>
-          </div>
-        );
-      })}
+      {crew.map((h) => (
+        <WorkoutFeedCard key={h.id} session={h} allSessions={sessions} onOpen={() => openWorkoutSheet(h.id)} />
+      ))}
     </div>
   );
 }

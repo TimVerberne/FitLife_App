@@ -55,6 +55,19 @@ export function personalRecords(sessions: WorkoutSession[], person = 'You'): Per
   return Array.from(map.values()).sort((a, b) => b.estOneRepMax - a.estOneRepMax);
 }
 
+export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {
+  const priorSessions = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt);
+  const priorBest = new Map(personalRecords(priorSessions, target.person).map((r) => [r.exerciseId, r.estOneRepMax]));
+  let count = 0;
+  target.entries.forEach((entry) => {
+    const bestInSession = entry.sets
+      .filter((s) => s.done && s.weight > 0)
+      .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
+    if (bestInSession > 0 && bestInSession > (priorBest.get(entry.exerciseId) ?? 0)) count++;
+  });
+  return count;
+}
+
 export interface WeekBucket {
   label: string;
   volume: number;
