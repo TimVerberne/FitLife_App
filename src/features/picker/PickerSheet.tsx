@@ -65,7 +65,16 @@ export function PickerSheet() {
         const isIn = alreadyIn.has(ex.id);
         const isSelected = selected.has(ex.id);
         return (
-          <div className="pick-row" key={ex.id} onClick={() => toggle(ex.id)}>
+          <div
+            className="pick-row"
+            key={ex.id}
+            role="button"
+            tabIndex={0}
+            onClick={() => toggle(ex.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') toggle(ex.id);
+            }}
+          >
             <Thumb className="pick-thumb" src={ex.image} alt={ex.name} />
             <div className="pick-b">
               <div className="pick-name">{ex.name}</div>

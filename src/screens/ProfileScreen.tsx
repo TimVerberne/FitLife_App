@@ -170,7 +170,16 @@ export function ProfileScreen() {
         </div>
       )}
       {(showAllHistory ? mySessions : mySessions.slice(0, 5)).map((h) => (
-        <div className="hist-row" key={h.id} onClick={() => openWorkoutSheet(h.id)}>
+        <div
+          className="hist-row"
+          key={h.id}
+          role="button"
+          tabIndex={0}
+          onClick={() => openWorkoutSheet(h.id)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') openWorkoutSheet(h.id);
+          }}
+        >
           <div className="hist-b">
             <div className="hist-name">{h.name}</div>
             <div className="hist-date">

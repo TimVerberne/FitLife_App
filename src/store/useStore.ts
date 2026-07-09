@@ -98,6 +98,7 @@ interface StoreState {
 
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
+  updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight', value: number): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -290,7 +291,10 @@ export const useStore = create<StoreState>((set, get) => ({
   finishSession() {
     const active = get().active;
     if (!active) return;
-    const entries = active.entries.filter((e) => e.sets.some((s) => s.done));
+    // Only keep sets you actually checked off — unfilled rows shouldn't be saved as if you did them.
+    const entries = active.entries
+      .map((e) => ({ ...e, sets: e.sets.filter((s) => s.done) }))
+      .filter((e) => e.sets.length > 0);
     if (entries.length === 0) {
       get().showToast('Log at least one set before finishing');
       return;
@@ -414,7 +418,7 @@ export const useStore = create<StoreState>((set, get) => ({
         routineId: null,
         name: session.name,
         startedAt: Date.now(),
-        entries: session.entries.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false })) })),
+        entries: session.entries.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: s.kind })) })),
       };
       set({ active, mode: 'session' });
     };
@@ -426,5 +430,20 @@ export const useStore = create<StoreState>((set, get) => ({
     } else {
       doStart();
     }
+  },
+
+  updateHistorySet(sessionId, entryIdx, setIdx, field, value) {
+    const sessions = get().sessions.map((sess) => {
+      if (sess.id !== sessionId) return sess;
+      const entries = sess.entries.map((e, ei) => {
+        if (ei !== entryIdx) return e;
+        const sets = e.sets.map((s, si) => (si === setIdx ? { ...s, [field]: Math.max(0, value) } : s));
+        return { ...e, sets };
+      });
+      return { ...sess, entries };
+    });
+    set({ sessions });
+    const updated = sessions.find((s) => s.id === sessionId);
+    if (updated) void db.sessions.put(updated);
   },
 }));
