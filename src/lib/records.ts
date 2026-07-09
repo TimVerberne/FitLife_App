@@ -169,6 +169,26 @@ export const MUSCLE_GROUP: Record<string, string> = {
   cardio: 'Core',
 };
 
+export function primaryMuscleGroup(exerciseIds: string[]): string | null {
+  const counts = new Map<string, number>();
+  exerciseIds.forEach((id) => {
+    const ex = exerciseById(id);
+    if (!ex) return;
+    const axis = MUSCLE_GROUP[ex.body_part];
+    if (!axis) return;
+    counts.set(axis, (counts.get(axis) ?? 0) + 1);
+  });
+  let best: string | null = null;
+  let bestCount = 0;
+  counts.forEach((count, axis) => {
+    if (count > bestCount) {
+      best = axis;
+      bestCount = count;
+    }
+  });
+  return best;
+}
+
 export function muscleSplit(sessions: WorkoutSession[], person = 'You'): number[] {
   const counts = new Map(MUSCLE_AXES.map((a) => [a, 0]));
   sessions

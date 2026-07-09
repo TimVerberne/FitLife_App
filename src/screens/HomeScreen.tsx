@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
-import { volumeOf, weeklyStreak } from '../lib/records';
+import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
@@ -22,7 +22,14 @@ export function HomeScreen() {
       const prev = lastTrainedAt.get(h.routineId) ?? 0;
       if (h.startedAt > prev) lastTrainedAt.set(h.routineId, h.startedAt);
     });
-    return [...routines].sort((a, b) => (lastTrainedAt.get(a.id) ?? 0) - (lastTrainedAt.get(b.id) ?? 0))[0];
+    const byRecency = [...routines].sort((a, b) => (lastTrainedAt.get(a.id) ?? 0) - (lastTrainedAt.get(b.id) ?? 0));
+    if (byRecency.length <= 1) return byRecency[0] ?? null;
+    // Prefer a routine that trains a different muscle group than your last workout,
+    // so back-to-back sessions don't hammer the same muscles two days running.
+    const lastSession = [...mySessions].sort((a, b) => b.startedAt - a.startedAt)[0];
+    const lastGroup = lastSession ? primaryMuscleGroup(lastSession.entries.map((e) => e.exerciseId)) : null;
+    const freshGroup = byRecency.find((r) => primaryMuscleGroup(r.exerciseIds) !== lastGroup);
+    return freshGroup ?? byRecency[0];
   }, [routines, mySessions]);
 
   const estMinutes = nextRoutine
