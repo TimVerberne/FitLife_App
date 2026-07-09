@@ -24,18 +24,24 @@ anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
   build a new one from scratch or save one automatically after finishing an
   ad-hoc workout.
 - **Active session logging** — add exercises mid-workout, edit reps/weight per
-  set, mark sets done, see live volume and a "previous performance" hint per
-  set, get a 🏆 flag on new personal records. Tap a set's number to reclassify
-  it as a warm-up, failure, or drop set (with a configurable round count), or
-  remove it — warm-up sets are excluded from volume/PR calculations. A
+  set, mark sets done (which fully fills the kg/reps boxes with the accent
+  color), see live volume and a "previous performance" hint per set, get a 🏆
+  flag on new personal records. Tap a set's number to reclassify it as a
+  warm-up, failure, drop set (with a configurable round count), or superset,
+  or remove it — warm-up sets are excluded from volume/PR calculations. A
   never-before-logged exercise starts with zero rows instead of pre-filled
-  guesses. Minimize to a persistent bar and resume from anywhere; discarding
-  or ending a workout uses a custom in-app dialog (no native
-  `confirm()`/`alert()`).
+  guesses. Turn on an optional per-exercise rest timer (5s–2min presets); it
+  pops up a countdown with −5s/+5s/skip after every completed set and
+  dismisses itself when time's up. Removing a whole exercise asks for
+  confirmation first. Minimize to a persistent bar and resume from anywhere;
+  discarding or ending a workout uses a custom in-app dialog (no native
+  `confirm()`/`alert()`), and Escape or swiping down the handle dismisses any
+  sheet or dialog.
 - **Profile ("You")** — workout count, total volume, personal records
   (heaviest set + estimated 1RM via Epley) and history (top 5 with a show
   more/less toggle), a volume/duration/reps training heatmap, and a
-  muscle-split radar.
+  muscle-split radar. Your own past workouts are editable (fix a logging
+  mistake after the fact) via the edit toggle in the workout detail sheet.
 - **Stats** — volume leaderboard, and a head-to-head vs. either demo training
   partner (Sanne & Joost — seeded sample data standing in for real friends
   until Phase 5 social/auth is built) shown as pill-bar comparison tiles.
@@ -64,6 +70,34 @@ browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
 
 ## Update notes
+
+**Rest timer**
+- Each exercise gets an optional rest timer: tap "Rest timer: Off" for a
+  preset picker (5s up to 2min). Completing a set for an exercise with a
+  timer configured docks a countdown bar at the bottom of the screen with
+  −5s/+5s/skip controls; it dismisses itself when time runs out and
+  reappears on the next completed set.
+- Completed sets now fully fill the kg/reps boxes with the accent color
+  (instead of a faint tinted border), matching the session header's look.
+
+**Bug fixes & polish pass**
+- Fixed workout history showing sets you never checked off as if you'd done
+  them — only sets marked done are saved.
+- "Do again" now preserves each set's warm-up/failure/drop/superset type
+  instead of flattening everything to normal.
+- History rows (You page) and exercise rows (Add exercise picker) are now
+  keyboard-accessible, matching the rest of the app's clickable cards.
+- Your own past workouts are now editable — an edit toggle in the workout
+  detail sheet turns each set into weight/reps fields you can correct.
+- Muscle-split radar chart now uses the app's actual color tokens instead of
+  hardcoded off-theme colors.
+- Escape now dismisses whatever sheet or dialog is open; bottom sheets also
+  support swipe-down-to-dismiss via the grab handle.
+- "Today's session" now avoids suggesting the same muscle group two days in
+  a row instead of pure least-recently-trained ordering.
+- Added **Superset** as a fifth set type (yellow **S**) alongside Warm
+  up/Failure/Drop set, and removing a whole exercise mid-session now asks
+  for confirmation first (removing a single set stays instant).
 
 **Set types & drop sets**
 - Tapping a set's number badge during a live session opens a menu to mark it
