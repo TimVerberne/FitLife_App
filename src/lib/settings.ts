@@ -3,7 +3,7 @@ import type { Tab } from '../store/useStore';
 export type Units = 'kg' | 'lb';
 export type WeekStart = 'sun' | 'mon';
 export type ThemeMode = 'dark' | 'light';
-export type AccentPreset = 'mint' | 'blue' | 'orange' | 'violet';
+export type AccentPreset = 'mint' | 'blue' | 'orange' | 'violet' | 'red' | 'yellow' | 'teal' | 'pink';
 
 export interface Settings {
   units: Units;
@@ -58,6 +58,10 @@ export const ACCENT_PRESETS: Record<AccentPreset, { accent: string; accentInk: s
   blue: { accent: '#5b8def', accentInk: '#050f24', accentSoft: 'rgba(91, 141, 239, 0.14)' },
   orange: { accent: '#f2994a', accentInk: '#241300', accentSoft: 'rgba(242, 153, 74, 0.14)' },
   violet: { accent: '#b58cf2', accentInk: '#180a24', accentSoft: 'rgba(181, 140, 242, 0.14)' },
+  red: { accent: '#f2617a', accentInk: '#240a10', accentSoft: 'rgba(242, 97, 122, 0.14)' },
+  yellow: { accent: '#f2c94c', accentInk: '#241d00', accentSoft: 'rgba(242, 201, 76, 0.14)' },
+  teal: { accent: '#4fd1c5', accentInk: '#00201d', accentSoft: 'rgba(79, 209, 197, 0.14)' },
+  pink: { accent: '#f28cd0', accentInk: '#240a1c', accentSoft: 'rgba(242, 140, 208, 0.14)' },
 };
 
 export function applyTheme(settings: Settings): void {

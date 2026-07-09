@@ -10,7 +10,7 @@ const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'you', label: 'You' },
 ];
 
-const ACCENT_ORDER: AccentPreset[] = ['mint', 'blue', 'orange', 'violet'];
+const ACCENT_ORDER: AccentPreset[] = ['mint', 'blue', 'teal', 'violet', 'pink', 'red', 'orange', 'yellow'];
 
 export function SettingsSheet() {
   const settings = useStore((s) => s.settings);
@@ -119,9 +119,9 @@ export function SettingsSheet() {
           </button>
         </div>
       </div>
-      <div className="settings-row">
+      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
         <div className="settings-row-label">Accent color</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {ACCENT_ORDER.map((a) => (
             <button
               key={a}
@@ -129,11 +129,12 @@ export function SettingsSheet() {
               aria-pressed={settings.accent === a}
               onClick={() => updateSettings({ accent: a })}
               style={{
-                width: 26,
-                height: 26,
+                width: 30,
+                height: 30,
                 borderRadius: '50%',
                 background: ACCENT_PRESETS[a].accent,
                 border: settings.accent === a ? '2px solid var(--ink)' : '2px solid transparent',
+                boxShadow: settings.accent === a ? '0 0 0 2px var(--surface-2)' : 'none',
                 cursor: 'pointer',
                 padding: 0,
               }}
