@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
-import { volumeOf, weeklyStreak } from '../lib/records';
+import { newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
 
 type Period = 'week' | 'month' | 'all';
@@ -14,6 +14,9 @@ function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number
     person,
     workouts: mine.length,
     volume: mine.reduce((a, h) => a + volumeOf(h.entries), 0),
+    sets: mine.reduce((a, h) => a + setsCountOf(h.entries), 0),
+    totalMinutes: mine.reduce((a, h) => a + h.durationMin, 0),
+    records: mine.reduce((a, h) => a + newRecordsInWorkout(sessions, h), 0),
     streak: weeklyStreak(sessions, person, now),
   };
 }
@@ -21,6 +24,7 @@ function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number
 export function StatsScreen() {
   const sessions = useStore((s) => s.sessions);
   const [period, setPeriod] = useState<Period>('week');
+  const [selectedRival, setSelectedRival] = useState<Person | null>(null);
   const now = Date.now();
 
   const board = useMemo(() => {
@@ -31,7 +35,8 @@ export function StatsScreen() {
   }, [sessions, period, now]);
 
   const you = board.find((b) => b.person === 'You')!;
-  const rival = board.find((b) => b.person !== 'You') ?? board[1];
+  const friends = board.filter((b) => b.person !== 'You');
+  const rival = friends.find((f) => f.person === selectedRival) ?? friends[0];
 
   return (
     <div className="screen">
@@ -96,17 +101,33 @@ export function StatsScreen() {
         );
       })}
 
-      {rival && rival.person !== 'You' && (
+      {rival && (
         <>
-          <div className="section-h">Head to head · vs {rival.person}</div>
+          <div className="section-h">Head to head</div>
+          {friends.length > 1 && (
+            <div className="chips" style={{ marginBottom: 6 }}>
+              {friends.map((f) => (
+                <button
+                  key={f.person}
+                  className={`chip${rival.person === f.person ? ' on' : ''}`}
+                  onClick={() => setSelectedRival(f.person)}
+                >
+                  vs {f.person}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="card">
             <HeadToHeadRow label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} />
             <HeadToHeadRow
               label="Volume"
               youVal={you.volume}
               rivalVal={rival.volume}
-              format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(Math.round(v)))}
+              format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
             />
+            <HeadToHeadRow label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} />
+            <HeadToHeadRow label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} />
+            <HeadToHeadRow label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} />
             <HeadToHeadRow label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} last />
           </div>
         </>
