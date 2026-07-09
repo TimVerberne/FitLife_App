@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { db, seedIfEmpty } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
 import { applyTheme, loadSettings, saveSettings, type Settings } from '../lib/settings';
+import { randomQuote } from '../lib/quotes';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -77,6 +78,9 @@ interface StoreState {
   // settings
   settings: Settings;
 
+  // home page — picked once per app load, not per tab visit
+  quote: string;
+
   // actions
   init(): Promise<void>;
   go(tab: Tab): void;
@@ -151,6 +155,7 @@ export const useStore = create<StoreState>((set, get) => ({
   toastMsg: '',
 
   settings: loadSettings(),
+  quote: randomQuote(),
 
   async init() {
     set({ tab: get().settings.defaultTab });

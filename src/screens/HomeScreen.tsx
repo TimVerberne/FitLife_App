@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
-import { randomQuote } from '../lib/quotes';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
@@ -51,7 +50,7 @@ export function HomeScreen() {
     [sessions],
   );
 
-  const quote = useMemo(() => randomQuote(), []);
+  const quote = useStore((s) => s.quote);
   const quoteWords = quote.split(' ');
   const quoteLastWord = quoteWords[quoteWords.length - 1];
   const quoteLead = quoteWords.slice(0, -1).join(' ');
