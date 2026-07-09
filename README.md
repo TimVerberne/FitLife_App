@@ -39,15 +39,27 @@ anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
   sheet or dialog.
 - **Profile ("You")** — workout count, total volume, personal records
   (heaviest set + estimated 1RM via Epley) and history (top 5 with a show
-  more/less toggle), a volume/duration/reps training heatmap, and a
-  muscle-split radar. Your own past workouts are editable (fix a logging
-  mistake after the fact) via the edit toggle in the workout detail sheet.
+  more/less toggle), a volume/duration/reps chart and muscle-split radar that
+  share one period selector (This week/This month/Past 3 months/All time),
+  and a monthly training calendar you can page through — trained days show
+  the workout title and open the full detail sheet on tap, with your current
+  week streak and days since your last workout above it. Your own past
+  workouts are editable (fix a logging mistake after the fact) via the edit
+  toggle in the workout detail sheet.
 - **Stats** — volume leaderboard, and a head-to-head vs. either demo training
   partner (Sanne & Joost — seeded sample data standing in for real friends
   until Phase 5 social/auth is built) shown as pill-bar comparison tiles.
   Exercise-level head-to-head lets you pick a muscle group and ranks the top
   exercises you've both logged, each with its own heaviest-set/1RM/volume/
   frequency comparison.
+- **Settings** — a gear icon on the You page opens units (kg/lb, applied
+  everywhere weight and volume appear), week-starts-on, a default rest timer
+  and default landing tab, the smart-routine-rotation and
+  confirm-before-removing-an-exercise toggles, keep-screen-awake/haptics/
+  rest-timer-sound, a dark/light theme with 8 accent color presets, and
+  export/import/clear for your local data.
+- **Home page** — a random line from a 50-quote pool stands in for the
+  headline, picked fresh each time you open or reload the app.
 - **PWA** — installable via "Add to Home Screen" on iOS/Android, offline
   app-shell + exercise media caching via `vite-plugin-pwa`.
 
@@ -70,6 +82,37 @@ browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
 
 ## Update notes
+
+**Home page quote**
+- The "Let's get to work." headline is now a random line from a 50-quote
+  pool, in the same two-tone style (closing word/phrase in the accent
+  color). Picked once per app load/reload — it stays put while you move
+  between tabs, so it doesn't feel like it's flickering at you.
+
+**Settings sheet**
+- New gear icon on the You page opens a categorized Settings sheet: units
+  (kg/lb — converts every weight and volume figure in the app, session
+  logging through Stats, while data stays stored in kg), week-starts-on,
+  default rest timer, default landing tab, smart-routine-rotation and
+  confirm-before-removing-an-exercise toggles, keep-screen-awake (Wake
+  Lock), haptics on set completion, a rest-timer-end sound, a dark/light
+  theme, 8 accent color presets (all applied as live CSS variable
+  overrides), and export/import/clear for your local backup.
+- Fixed a couple of accent-consistency bugs found while building the color
+  presets (the volume chart's highlighted bar and a couple of highlight
+  backgrounds were hardcoded to mint instead of following the accent), and
+  a bug where lb-converted weights showed long float tails instead of one
+  decimal place.
+
+**You page: shared period selector + training calendar**
+- The volume/duration/reps chart and the muscle-split radar now share a
+  single period picker (This week/This month/Past 3 months/All time) in
+  the chart's top-right, instead of two separate ones.
+- Replaced the training heatmap with a full monthly calendar you can page
+  through with ‹/›: trained days show a filled accent circle and the
+  workout's title, and tapping one opens the same workout detail sheet
+  used elsewhere. A stats row above shows your current week streak and
+  days since your last workout.
 
 **Rest timer**
 - Each exercise gets an optional rest timer: tap "Rest timer: Off" for a
