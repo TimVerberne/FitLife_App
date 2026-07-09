@@ -55,11 +55,13 @@ export function SheetContainer() {
         >
           <div className="grab" />
         </div>
-        {sheet === 'picker' && <PickerSheet />}
-        {sheet === 'detail' && <ExerciseDetailSheet />}
-        {sheet === 'workout' && <WorkoutDetailSheet />}
-        {sheet === 'routineActions' && <RoutineActionsSheet />}
-        {sheet === 'settings' && <SettingsSheet />}
+        <div className="sheet-scroll">
+          {sheet === 'picker' && <PickerSheet />}
+          {sheet === 'detail' && <ExerciseDetailSheet />}
+          {sheet === 'workout' && <WorkoutDetailSheet />}
+          {sheet === 'routineActions' && <RoutineActionsSheet />}
+          {sheet === 'settings' && <SettingsSheet />}
+        </div>
       </div>
     </>
   );

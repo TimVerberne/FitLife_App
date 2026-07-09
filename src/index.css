@@ -1696,7 +1696,9 @@
   z-index: 50;
   border-radius: 20px 20px 0 0;
   max-height: 90dvh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   border-top: 1px solid var(--line);
 }
@@ -1711,6 +1713,7 @@
   padding: 10px 0 12px;
   touch-action: none;
   cursor: grab;
+  flex: none;
 }
 
 .grab {
@@ -1718,6 +1721,12 @@
   height: 4px;
   background: var(--line-dash);
   border-radius: 99px;
+}
+
+.sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .sheet-in {
