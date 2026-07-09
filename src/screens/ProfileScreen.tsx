@@ -98,13 +98,13 @@ export function ProfileScreen() {
               {Math.round(periodValue).toLocaleString('en-US')} {activeMetric.unit && <span>{activeMetric.unit}</span>}
             </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-            <PeriodPicker value={chartPeriod} onChange={setChartPeriod} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {periodPrev !== null && periodPrev > 0 && (
               <div className={`delta ${up ? 'up' : 'down'}`}>
                 {up ? '▲' : '▼'} {Math.abs(delta)}%
               </div>
             )}
+            <PeriodPicker value={chartPeriod} onChange={setChartPeriod} />
           </div>
         </div>
         <BarChart weeks={weeks} />
