@@ -1267,6 +1267,69 @@
   background: var(--danger-soft);
 }
 
+/* -------- period picker -------- */
+.period-picker {
+  position: relative;
+  flex: none;
+}
+
+.period-picker-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  color: var(--accent);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.period-picker-btn .caret {
+  font-size: 8px;
+}
+
+.period-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 46;
+  width: 168px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.period-picker-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 9px 10px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.period-picker-item:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.period-picker-item.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
 /* -------- training calendar -------- */
 .cal-stats-row {
   display: flex;

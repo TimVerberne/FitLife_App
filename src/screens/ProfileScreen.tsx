@@ -4,16 +4,21 @@ import { exerciseById } from '../lib/exercises';
 import {
   MUSCLE_AXES,
   muscleSplit,
+  periodCutoff,
+  periodTotal,
   personalRecords,
   relativeDate,
   setsCountOf,
+  STAT_PERIOD_LABEL,
   volumeOf,
   weeklyMetric,
+  type StatPeriod,
   type WeeklyMetric,
 } from '../lib/records';
 import { BarChart } from '../components/BarChart';
 import { RadarChart } from '../components/RadarChart';
 import { TrainingCalendar } from '../components/TrainingCalendar';
+import { PeriodPicker } from '../components/PeriodPicker';
 import { Thumb } from '../components/Thumb';
 
 const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
@@ -26,6 +31,8 @@ export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const [metric, setMetric] = useState<WeeklyMetric>('volume');
+  const [chartPeriod, setChartPeriod] = useState<StatPeriod>('week');
+  const [splitPeriod, setSplitPeriod] = useState<StatPeriod>('all');
   const [showAllRecords, setShowAllRecords] = useState(false);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
@@ -33,12 +40,15 @@ export function ProfileScreen() {
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const weeks = useMemo(() => weeklyMetric(sessions, 12, metric), [sessions, metric]);
-  const radarValues = useMemo(() => muscleSplit(sessions), [sessions]);
+  const splitSince = useMemo(() => periodCutoff(splitPeriod), [splitPeriod]);
+  const radarValues = useMemo(() => muscleSplit(sessions, 'You', splitSince), [sessions, splitSince]);
 
   const activeMetric = METRICS.find((m) => m.id === metric)!;
-  const thisWeek = weeks[weeks.length - 1]?.value ?? 0;
-  const lastWeek = weeks[weeks.length - 2]?.value ?? 0;
-  const delta = lastWeek ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : 0;
+  const { current: periodValue, previous: periodPrev } = useMemo(
+    () => periodTotal(sessions, chartPeriod, metric),
+    [sessions, chartPeriod, metric],
+  );
+  const delta = periodPrev ? Math.round(((periodValue - periodPrev) / periodPrev) * 100) : 0;
   const up = delta >= 0;
 
   const oldestSessionYear = mySessions.length > 0 ? new Date(mySessions[mySessions.length - 1].startedAt).getFullYear() : new Date().getFullYear();
@@ -83,16 +93,19 @@ export function ProfileScreen() {
       <div className="card" style={{ marginTop: 14 }}>
         <div className="chart-head">
           <div>
-            <div className="eyebrow">This week · {activeMetric.label.toLowerCase()}</div>
+            <div className="eyebrow">{STAT_PERIOD_LABEL[chartPeriod]} · {activeMetric.label.toLowerCase()}</div>
             <div className="chart-big">
-              {Math.round(thisWeek).toLocaleString('en-US')} {activeMetric.unit && <span>{activeMetric.unit}</span>}
+              {Math.round(periodValue).toLocaleString('en-US')} {activeMetric.unit && <span>{activeMetric.unit}</span>}
             </div>
           </div>
-          {lastWeek > 0 && (
-            <div className={`delta ${up ? 'up' : 'down'}`}>
-              {up ? '▲' : '▼'} {Math.abs(delta)}%
-            </div>
-          )}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            <PeriodPicker value={chartPeriod} onChange={setChartPeriod} />
+            {periodPrev !== null && periodPrev > 0 && (
+              <div className={`delta ${up ? 'up' : 'down'}`}>
+                {up ? '▲' : '▼'} {Math.abs(delta)}%
+              </div>
+            )}
+          </div>
         </div>
         <BarChart weeks={weeks} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: 12 }}>
@@ -130,10 +143,15 @@ export function ProfileScreen() {
         <TrainingCalendar sessions={sessions} onOpen={openWorkoutSheet} />
       </div>
 
-      <div className="section-h">Muscle split</div>
+      <div className="section-h" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Muscle split</span>
+        <PeriodPicker value={splitPeriod} onChange={setSplitPeriod} />
+      </div>
       <div className="card" style={{ textAlign: 'center' }}>
         <RadarChart values={radarValues} labels={MUSCLE_AXES} />
-        <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>Based on logged sets · last {mySessions.length} workouts</div>
+        <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+          Based on logged sets · {STAT_PERIOD_LABEL[splitPeriod].toLowerCase()}
+        </div>
       </div>
 
       <div className="section-h">Personal records</div>

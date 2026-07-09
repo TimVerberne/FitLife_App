@@ -106,6 +106,52 @@ export function weeklyMetric(
   return weeks;
 }
 
+export type StatPeriod = 'week' | 'month' | '3months' | 'all';
+
+export const STAT_PERIOD_DAYS: Record<StatPeriod, number | null> = {
+  week: 7,
+  month: 30,
+  '3months': 90,
+  all: null,
+};
+
+export const STAT_PERIOD_LABEL: Record<StatPeriod, string> = {
+  week: 'This week',
+  month: 'This month',
+  '3months': 'Past 3 months',
+  all: 'All time',
+};
+
+export function periodCutoff(period: StatPeriod, now = Date.now()): number {
+  const days = STAT_PERIOD_DAYS[period];
+  return days === null ? -Infinity : now - days * DAY;
+}
+
+export function periodTotal(
+  sessions: WorkoutSession[],
+  period: StatPeriod,
+  metric: WeeklyMetric,
+  person = 'You',
+  now = Date.now(),
+): { current: number; previous: number | null } {
+  const mine = sessions.filter((h) => h.person === person);
+  const metricOf = (list: WorkoutSession[]) => {
+    if (metric === 'volume') return list.reduce((a, h) => a + volumeOf(h.entries), 0);
+    if (metric === 'duration') return list.reduce((a, h) => a + h.durationMin, 0);
+    return list.reduce((a, h) => a + repsOf(h.entries), 0);
+  };
+  const days = STAT_PERIOD_DAYS[period];
+  if (days === null) {
+    return { current: metricOf(mine), previous: null };
+  }
+  const cutoff = now - days * DAY;
+  const prevCutoff = now - days * 2 * DAY;
+  return {
+    current: metricOf(mine.filter((h) => h.startedAt >= cutoff)),
+    previous: metricOf(mine.filter((h) => h.startedAt >= prevCutoff && h.startedAt < cutoff)),
+  };
+}
+
 export function sessionsByDay(sessions: WorkoutSession[], person = 'You'): Map<number, WorkoutSession[]> {
   const map = new Map<number, WorkoutSession[]>();
   sessions
@@ -180,10 +226,10 @@ export function primaryMuscleGroup(exerciseIds: string[]): string | null {
   return best;
 }
 
-export function muscleSplit(sessions: WorkoutSession[], person = 'You'): number[] {
+export function muscleSplit(sessions: WorkoutSession[], person = 'You', since = -Infinity): number[] {
   const counts = new Map(MUSCLE_AXES.map((a) => [a, 0]));
   sessions
-    .filter((h) => h.person === person)
+    .filter((h) => h.person === person && h.startedAt >= since)
     .forEach((h) =>
       h.entries.forEach((e) => {
         const ex = exerciseById(e.exerciseId);
