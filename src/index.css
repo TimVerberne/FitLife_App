@@ -1710,7 +1710,7 @@
 .grab-zone {
   display: flex;
   justify-content: center;
-  padding: 10px 0 12px;
+  padding: 16px 0 26px;
   touch-action: none;
   cursor: grab;
   flex: none;
