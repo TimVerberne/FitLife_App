@@ -106,39 +106,30 @@ export function weeklyMetric(
   return weeks;
 }
 
-export interface HeatmapDay {
-  date: number;
-  volume: number;
-}
-
-export function trainingHeatmap(sessions: WorkoutSession[], weeks: number, person = 'You', now = Date.now()): HeatmapDay[][] {
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const dayOfWeek = (today.getDay() + 6) % 7; // Monday = 0
-  const weekEnd = today.getTime() + (6 - dayOfWeek) * DAY;
-  const totalDays = weeks * 7;
-  const start = weekEnd - (totalDays - 1) * DAY;
-
-  const volByDay = new Map<number, number>();
+export function sessionsByDay(sessions: WorkoutSession[], person = 'You'): Map<number, WorkoutSession[]> {
+  const map = new Map<number, WorkoutSession[]>();
   sessions
     .filter((h) => h.person === person)
     .forEach((h) => {
       const d = new Date(h.startedAt);
       d.setHours(0, 0, 0, 0);
       const key = d.getTime();
-      volByDay.set(key, (volByDay.get(key) ?? 0) + volumeOf(h.entries));
+      const list = map.get(key) ?? [];
+      list.push(h);
+      map.set(key, list);
     });
+  return map;
+}
 
-  const cols: HeatmapDay[][] = [];
-  for (let w = 0; w < weeks; w++) {
-    const col: HeatmapDay[] = [];
-    for (let d = 0; d < 7; d++) {
-      const date = start + (w * 7 + d) * DAY;
-      col.push({ date, volume: volByDay.get(date) ?? 0 });
-    }
-    cols.push(col);
-  }
-  return cols;
+export function daysSinceLastWorkout(sessions: WorkoutSession[], person = 'You', now = Date.now()): number {
+  const mine = sessions.filter((h) => h.person === person);
+  if (mine.length === 0) return 0;
+  const lastStartedAt = Math.max(...mine.map((h) => h.startedAt));
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const lastDay = new Date(lastStartedAt);
+  lastDay.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((today.getTime() - lastDay.getTime()) / DAY));
 }
 
 export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = Date.now()): number {

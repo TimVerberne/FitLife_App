@@ -7,14 +7,13 @@ import {
   personalRecords,
   relativeDate,
   setsCountOf,
-  trainingHeatmap,
   volumeOf,
   weeklyMetric,
   type WeeklyMetric,
 } from '../lib/records';
 import { BarChart } from '../components/BarChart';
 import { RadarChart } from '../components/RadarChart';
-import { TrainingHeatmap } from '../components/TrainingHeatmap';
+import { TrainingCalendar } from '../components/TrainingCalendar';
 import { Thumb } from '../components/Thumb';
 
 const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
@@ -35,7 +34,6 @@ export function ProfileScreen() {
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const weeks = useMemo(() => weeklyMetric(sessions, 12, metric), [sessions, metric]);
   const radarValues = useMemo(() => muscleSplit(sessions), [sessions]);
-  const heatmapWeeks = useMemo(() => trainingHeatmap(sessions, 16), [sessions]);
 
   const activeMetric = METRICS.find((m) => m.id === metric)!;
   const thisWeek = weeks[weeks.length - 1]?.value ?? 0;
@@ -129,7 +127,7 @@ export function ProfileScreen() {
 
       <div className="section-h">Training days</div>
       <div className="card">
-        <TrainingHeatmap weeks={heatmapWeeks} />
+        <TrainingCalendar sessions={sessions} onOpen={openWorkoutSheet} />
       </div>
 
       <div className="section-h">Muscle split</div>

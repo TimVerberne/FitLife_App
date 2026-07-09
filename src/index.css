@@ -1267,6 +1267,138 @@
   background: var(--danger-soft);
 }
 
+/* -------- training calendar -------- */
+.cal-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.cal-stat {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--muted);
+  position: relative;
+}
+
+.cal-stat b {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.cal-stat + .cal-stat {
+  border-left: 1px solid var(--line);
+}
+
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cal-arrow {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.cal-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cal-month {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cal-weekdays,
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.cal-weekday {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-bottom: 6px;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 3px;
+  padding-top: 3px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: default;
+  overflow: hidden;
+}
+
+.cal-cell.trained {
+  cursor: pointer;
+}
+
+.cal-daynum {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint-2);
+}
+
+.cal-cell.trained .cal-daynum {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.cal-cell.today .cal-daynum {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+
+.cal-cell.today:not(.trained) .cal-daynum {
+  color: var(--accent);
+}
+
+.cal-title {
+  font-size: 7.5px;
+  color: var(--faint);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+
 .bars {
   display: flex;
   align-items: flex-end;
