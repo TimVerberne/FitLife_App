@@ -5,6 +5,9 @@ progress with a small training crew. Built with Vite + React + TypeScript, style
 the confirmed "Onyx Volt" direction (true-black canvas, mint accent, oversized
 condensed type, monospaced stats).
 
+**Try it live:** https://timverberne.github.io/FitLife_App/ (auto-deploys on every
+push to this branch via GitHub Actions — see `.github/workflows/deploy-pages.yml`).
+
 ## Status: Phases 0–2 (browser-only, no backend yet)
 
 Everything runs client-side. Routines and workout history persist in IndexedDB
@@ -51,6 +54,37 @@ npm run dev
 Open the printed local URL on your phone (same network) or in a desktop
 browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
+
+## Update notes
+
+**Fine-tuning pass (routines, session logging, accessibility)**
+- Routines can now be renamed or deleted (tap "⋯" on a routine card) — previously
+  create-only.
+- Finishing a workout with zero completed sets is now blocked, instead of silently
+  logging an empty session.
+- New sets pre-fill from your last logged performance for that exercise instead of
+  a flat 20kg × 10 default.
+- Fixed weight/reps inputs snapping to "0" while clearing a value to retype it.
+- "🏆 New record" now only fires for a genuine PR (compared against history *and*
+  earlier sets in the same session), not for every set of a brand-new exercise.
+- Added aria-labels to icon-only buttons (routine options, mini-bar controls,
+  remove-exercise, exercise info, etc.) and friendlier empty states for routines
+  and workout history.
+
+**Crew feed redesign**
+- Home's "The Crew" section now shows full workout cards (avatar, name, time,
+  workout title, a stats row of Time/Volume/Records/Sets, and an exercise list
+  with thumbnails that expands past the first 3) instead of a single summary line.
+- "Records" is computed for real — an exercise counts only if its best set in that
+  workout beats that person's best from every earlier session.
+
+**Deployment**
+- Added GitHub Pages deployment via GitHub Actions, auto-building and publishing
+  on every push to this branch.
+- Fixed a white-screen crash on some mobile browsers caused by the production
+  build targeting overly modern JS syntax; build now targets ES2018. Added an
+  error boundary and a local-storage fallback so a crash or blocked IndexedDB
+  shows a real message instead of a blank page.
 
 ## Attribution
 
