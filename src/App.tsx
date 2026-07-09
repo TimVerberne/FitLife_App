@@ -34,6 +34,17 @@ function App() {
     void init();
   }, [init]);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      const { dialog, sheet, resolveDialog, closeSheet } = useStore.getState();
+      if (dialog) resolveDialog(false);
+      else if (sheet) closeSheet();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const hasMiniActive = !!active && mode === 'tabs';
 
   if (!loaded) {
