@@ -25,15 +25,23 @@ anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
   ad-hoc workout.
 - **Active session logging** — add exercises mid-workout, edit reps/weight per
   set, mark sets done, see live volume and a "previous performance" hint per
-  set, get a 🏆 flag on new personal records. Minimize to a persistent bar and
-  resume from anywhere; discarding or ending a workout uses a custom in-app
-  dialog (no native `confirm()`/`alert()`).
+  set, get a 🏆 flag on new personal records. Tap a set's number to reclassify
+  it as a warm-up, failure, or drop set (with a configurable round count), or
+  remove it — warm-up sets are excluded from volume/PR calculations. A
+  never-before-logged exercise starts with zero rows instead of pre-filled
+  guesses. Minimize to a persistent bar and resume from anywhere; discarding
+  or ending a workout uses a custom in-app dialog (no native
+  `confirm()`/`alert()`).
 - **Profile ("You")** — workout count, total volume, personal records
-  (heaviest set + estimated 1RM via Epley), weekly volume chart, muscle-split
-  radar, and full history.
-- **Stats** — leaderboard and head-to-head vs. two demo training partners
-  (Sanne & Joost — seeded sample data standing in for real friends until
-  Phase 5 social/auth is built).
+  (heaviest set + estimated 1RM via Epley) and history (top 5 with a show
+  more/less toggle), a volume/duration/reps training heatmap, and a
+  muscle-split radar.
+- **Stats** — volume leaderboard, and a head-to-head vs. either demo training
+  partner (Sanne & Joost — seeded sample data standing in for real friends
+  until Phase 5 social/auth is built) shown as pill-bar comparison tiles.
+  Exercise-level head-to-head lets you pick a muscle group and ranks the top
+  exercises you've both logged, each with its own heaviest-set/1RM/volume/
+  frequency comparison.
 - **PWA** — installable via "Add to Home Screen" on iOS/Android, offline
   app-shell + exercise media caching via `vite-plugin-pwa`.
 
@@ -56,6 +64,37 @@ browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
 
 ## Update notes
+
+**Set types & drop sets**
+- Tapping a set's number badge during a live session opens a menu to mark it
+  as a Warm up (orange **W**), Failure (red **F**), or Drop set (blue
+  **D1/D2/...**), or to remove it. Drop set asks for a round count (2–6, default
+  3) and generates that many linked rows in one step.
+- Warm-up sets no longer count toward volume, set totals, or personal
+  records anywhere in the app.
+- A freshly-added exercise you've never logged before now starts with zero
+  set rows (just "+ Add set") instead of three guessed defaults.
+
+**Stats page redesign**
+- Head-to-head comparisons (both the overall stats and the per-exercise
+  breakdown) now render as a grid of pill-bar tiles — two rounded bars per
+  stat, sized proportionally, with a color legend — instead of one thin
+  stacked bar per row.
+- The exercise-comparison picker is now muscle-group chips + a ranked top-5
+  leaderboard (by combined volume with your rival) with a show more/less
+  toggle, instead of a plain dropdown of every shared exercise.
+- Fixed Joost's accent color, which was too close to the app's mint green to
+  read against the new colored comparison bars.
+
+**You page redesign & Stats head-to-head**
+- Personal records and history sections now show the top 5 with a "show
+  N more" / "show less" toggle instead of an ever-growing list.
+- Replaced the weekly volume bar chart with a bigger, higher-contrast
+  training heatmap (with a legend and headline stat) that can toggle between
+  volume, duration, and reps.
+- Stats now lets you pick which training partner to compare against and
+  head-to-head covers six metrics (workouts, volume, sets, time trained,
+  records, streak) plus a dedicated exercise-level comparison.
 
 **Fine-tuning pass (routines, session logging, accessibility)**
 - Routines can now be renamed or deleted (tap "⋯" on a routine card) — previously
