@@ -2,7 +2,7 @@ import type { WeekBucket } from '../lib/records';
 
 export function BarChart({ weeks }: { weeks: WeekBucket[] }) {
   const w = weeks.length;
-  const max = Math.max(1, ...weeks.map((x) => x.volume));
+  const max = Math.max(1, ...weeks.map((x) => x.value));
   const H = 52;
   const gap = 2.4;
   const bw = (100 - gap * (w - 1)) / w;
@@ -20,7 +20,7 @@ export function BarChart({ weeks }: { weeks: WeekBucket[] }) {
         </linearGradient>
       </defs>
       {weeks.map((wk, i) => {
-        const bh = Math.max((wk.volume / max) * H, 0.8);
+        const bh = Math.max((wk.value / max) * H, 0.8);
         const x = i * (bw + gap);
         const isCurrent = i === w - 1;
         return <rect key={i} x={x} y={H - bh} width={bw} height={bh} rx={1} fill={isCurrent ? 'url(#gAcc)' : 'url(#gBar)'} />;

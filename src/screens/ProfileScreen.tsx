@@ -1,23 +1,43 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
-import { MUSCLE_AXES, muscleSplit, personalRecords, relativeDate, setsCountOf, volumeOf, weeklyVolume } from '../lib/records';
+import {
+  MUSCLE_AXES,
+  muscleSplit,
+  personalRecords,
+  relativeDate,
+  setsCountOf,
+  trainingHeatmap,
+  volumeOf,
+  weeklyMetric,
+  type WeeklyMetric,
+} from '../lib/records';
 import { BarChart } from '../components/BarChart';
 import { RadarChart } from '../components/RadarChart';
+import { TrainingHeatmap } from '../components/TrainingHeatmap';
 import { Thumb } from '../components/Thumb';
+
+const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
+  { id: 'volume', label: 'Volume', unit: 'kg' },
+  { id: 'duration', label: 'Duration', unit: 'min' },
+  { id: 'reps', label: 'Reps', unit: '' },
+];
 
 export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
+  const [metric, setMetric] = useState<WeeklyMetric>('volume');
 
   const mySessions = useMemo(() => sessions.filter((s) => s.person === 'You').sort((a, b) => b.startedAt - a.startedAt), [sessions]);
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
   const records = useMemo(() => personalRecords(sessions), [sessions]);
-  const weeks = useMemo(() => weeklyVolume(sessions, 9), [sessions]);
+  const weeks = useMemo(() => weeklyMetric(sessions, 12, metric), [sessions, metric]);
   const radarValues = useMemo(() => muscleSplit(sessions), [sessions]);
+  const heatmapWeeks = useMemo(() => trainingHeatmap(sessions, 16), [sessions]);
 
-  const thisWeek = weeks[weeks.length - 1]?.volume ?? 0;
-  const lastWeek = weeks[weeks.length - 2]?.volume ?? 0;
+  const activeMetric = METRICS.find((m) => m.id === metric)!;
+  const thisWeek = weeks[weeks.length - 1]?.value ?? 0;
+  const lastWeek = weeks[weeks.length - 2]?.value ?? 0;
   const delta = lastWeek ? Math.round(((thisWeek - lastWeek) / lastWeek) * 100) : 0;
   const up = delta >= 0;
 
@@ -63,9 +83,9 @@ export function ProfileScreen() {
       <div className="card" style={{ marginTop: 14 }}>
         <div className="chart-head">
           <div>
-            <div className="eyebrow">Weekly volume</div>
+            <div className="eyebrow">This week · {activeMetric.label.toLowerCase()}</div>
             <div className="chart-big">
-              {Math.round(thisWeek).toLocaleString('en-US')} <span>kg</span>
+              {Math.round(thisWeek).toLocaleString('en-US')} {activeMetric.unit && <span>{activeMetric.unit}</span>}
             </div>
           </div>
           {lastWeek > 0 && (
@@ -75,11 +95,39 @@ export function ProfileScreen() {
           )}
         </div>
         <BarChart weeks={weeks} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 700, marginBottom: 12 }}>
           <span>{weeks[0]?.label}</span>
           <span>{weeks[Math.floor(weeks.length / 2)]?.label}</span>
           <span>Now</span>
         </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {METRICS.map((m) => (
+            <button
+              key={m.id}
+              onClick={() => setMetric(m.id)}
+              style={{
+                flex: 1,
+                fontFamily: 'var(--font-display)',
+                fontWeight: metric === m.id ? 800 : 700,
+                fontSize: 12,
+                background: metric === m.id ? 'var(--accent)' : 'var(--surface-2)',
+                color: metric === m.id ? 'var(--accent-ink)' : 'var(--faint)',
+                border: 'none',
+                borderRadius: 8,
+                padding: '7px 0',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="section-h">Training days</div>
+      <div className="card">
+        <TrainingHeatmap weeks={heatmapWeeks} />
       </div>
 
       <div className="section-h">Muscle split</div>
