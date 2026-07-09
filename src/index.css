@@ -1071,7 +1071,11 @@
 
 .set-row.done .set-fld {
   border-color: var(--accent);
-  background: rgba(116, 224, 174, 0.12);
+  background: var(--accent);
+}
+
+.set-row.done .set-fld input {
+  color: var(--accent-ink);
 }
 
 .set-fld input {
