@@ -1,16 +1,16 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
-import { epley, personalRecords, setsCountOf, volumeOf } from '../lib/records';
+import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { Thumb } from '../components/Thumb';
 import { NumberField } from '../components/NumberField';
-import type { SetEntry } from '../lib/types';
+import type { SetEntry, SetKind } from '../lib/types';
 
 function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
   let best = startingBest;
   return sets.map((s) => {
-    if (!s.done || s.weight <= 0) return false;
+    if (!isWorkingSet(s) || s.weight <= 0) return false;
     const oneRepMax = epley(s.weight, s.reps);
     if (oneRepMax > best) {
       best = oneRepMax;
@@ -20,6 +20,29 @@ function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
   });
 }
 
+function setLabelFor(sets: SetEntry[], index: number): { text: string; kind: SetKind } {
+  const kind = sets[index].kind ?? 'normal';
+  if (kind === 'warmup') return { text: 'W', kind };
+  if (kind === 'failure') return { text: 'F', kind };
+  if (kind === 'dropset') {
+    let start = index;
+    while (start > 0 && (sets[start - 1].kind ?? 'normal') === 'dropset') start--;
+    return { text: `D${index - start + 1}`, kind };
+  }
+  let n = 0;
+  for (let i = 0; i <= index; i++) {
+    if ((sets[i].kind ?? 'normal') === 'normal') n++;
+  }
+  return { text: String(n), kind: 'normal' };
+}
+
+interface MenuState {
+  entryIdx: number;
+  setIdx: number;
+  step: 'options' | 'dropCount';
+  dropCount: number;
+}
+
 export function ActiveSessionScreen() {
   const active = useStore((s) => s.active);
   const sessions = useStore((s) => s.sessions);
@@ -27,6 +50,9 @@ export function ActiveSessionScreen() {
   const setVal = useStore((s) => s.setVal);
   const toggleSet = useStore((s) => s.toggleSet);
   const addSet = useStore((s) => s.addSet);
+  const removeSet = useStore((s) => s.removeSet);
+  const setSetKind = useStore((s) => s.setSetKind);
+  const applyDropSet = useStore((s) => s.applyDropSet);
   const removeExercise = useStore((s) => s.removeExercise);
   const openPicker = useStore((s) => s.openPicker);
   const minimizeSession = useStore((s) => s.minimizeSession);
@@ -35,6 +61,7 @@ export function ActiveSessionScreen() {
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
+  const [menu, setMenu] = useState<MenuState | null>(null);
 
   if (!active) return null;
 
@@ -51,6 +78,26 @@ export function ActiveSessionScreen() {
     const set = entry?.sets[setIdx];
     if (!set) return null;
     return `${set.weight}×${set.reps}`;
+  }
+
+  function closeMenu() {
+    setMenu(null);
+  }
+
+  function pickKind(kind: SetKind) {
+    if (!menu) return;
+    if (kind === 'dropset') {
+      setMenu({ ...menu, step: 'dropCount', dropCount: 3 });
+      return;
+    }
+    setSetKind(menu.entryIdx, menu.setIdx, kind);
+    closeMenu();
+  }
+
+  function confirmDropSet() {
+    if (!menu) return;
+    applyDropSet(menu.entryIdx, menu.setIdx, menu.dropCount);
+    closeMenu();
   }
 
   return (
@@ -125,19 +172,73 @@ export function ActiveSessionScreen() {
                 ✕
               </button>
             </div>
-            <div className="set-head">
-              <span>#</span>
-              <span>Prev</span>
-              <span>Kg</span>
-              <span>Reps</span>
-              <span></span>
-            </div>
+            {en.sets.length > 0 && (
+              <div className="set-head">
+                <span>#</span>
+                <span>Prev</span>
+                <span>Kg</span>
+                <span>Reps</span>
+                <span></span>
+              </div>
+            )}
             {en.sets.map((st, si) => {
               const prev = prevPerformance(en.exerciseId, si);
+              const label = setLabelFor(en.sets, si);
+              const menuOpen = menu?.entryIdx === ei && menu?.setIdx === si;
               return (
                 <div key={si}>
                   <div className={`set-row${st.done ? ' done' : ''}`}>
-                    <div className="set-idx">{si + 1}</div>
+                    <div className="set-idx-wrap">
+                      <button
+                        className={`set-idx${label.kind !== 'normal' ? ` kind-${label.kind}` : ''}`}
+                        aria-label={`Set ${si + 1} type: ${label.kind}. Tap to change.`}
+                        onClick={() => setMenu(menuOpen ? null : { entryIdx: ei, setIdx: si, step: 'options', dropCount: 3 })}
+                      >
+                        {label.text}
+                      </button>
+                      {menuOpen && (
+                        <>
+                          <div className="set-menu-scrim" onClick={closeMenu} />
+                          <div className="set-menu">
+                            {menu!.step === 'options' ? (
+                              <>
+                                <button className="set-menu-item" onClick={() => pickKind('warmup')}>
+                                  <span className="set-menu-badge warmup">W</span> Warm up
+                                </button>
+                                <button className="set-menu-item" onClick={() => pickKind('normal')}>
+                                  <span className="set-menu-badge">{si + 1}</span> Normal
+                                </button>
+                                <button className="set-menu-item" onClick={() => pickKind('failure')}>
+                                  <span className="set-menu-badge failure">F</span> Failure
+                                </button>
+                                <button className="set-menu-item" onClick={() => pickKind('dropset')}>
+                                  <span className="set-menu-badge dropset">D</span> Drop set
+                                </button>
+                                <button className="set-menu-item danger" onClick={() => { removeSet(ei, si); closeMenu(); }}>
+                                  <span className="set-menu-badge">✕</span> Remove set
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <div className="set-menu-title">Drop set rounds</div>
+                                <div className="set-menu-stepper">
+                                  <button onClick={() => setMenu((m) => (m ? { ...m, dropCount: Math.max(2, m.dropCount - 1) } : m))}>
+                                    −
+                                  </button>
+                                  <span className="count">{menu!.dropCount}</span>
+                                  <button onClick={() => setMenu((m) => (m ? { ...m, dropCount: Math.min(6, m.dropCount + 1) } : m))}>
+                                    +
+                                  </button>
+                                </div>
+                                <button className="btn" style={{ marginTop: 4 }} onClick={confirmDropSet}>
+                                  Add
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                     <div className="set-prev">{prev ?? '—'}</div>
                     <div className="set-fld">
                       <NumberField value={st.weight} inputMode="decimal" onCommit={(n) => setVal(ei, si, 'weight', n)} />

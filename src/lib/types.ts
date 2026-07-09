@@ -11,10 +11,13 @@ export interface Exercise {
   attribution: string;
 }
 
+export type SetKind = 'normal' | 'warmup' | 'failure' | 'dropset';
+
 export interface SetEntry {
   reps: number;
   weight: number;
   done: boolean;
+  kind?: SetKind;
 }
 
 export interface SessionEntry {

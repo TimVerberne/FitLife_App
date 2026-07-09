@@ -723,7 +723,7 @@
 
 .set-head {
   display: grid;
-  grid-template-columns: 20px 56px 1fr 1fr 34px;
+  grid-template-columns: 30px 56px 1fr 1fr 34px;
   gap: 6px;
   padding: 0 2px 6px;
   font-family: var(--font-mono);
@@ -737,18 +737,156 @@
 
 .set-row {
   display: grid;
-  grid-template-columns: 20px 56px 1fr 1fr 34px;
+  grid-template-columns: 30px 56px 1fr 1fr 34px;
   gap: 6px;
   align-items: center;
   margin-bottom: 8px;
 }
 
+.set-idx-wrap {
+  position: relative;
+}
+
 .set-idx {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: none;
+  background: var(--surface-2);
   font-family: var(--font-mono);
   font-weight: 700;
   color: var(--faint);
-  text-align: center;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  cursor: pointer;
+  margin: 0 auto;
+}
+
+.set-idx.kind-warmup {
+  background: rgba(242, 153, 74, 0.16);
+  color: #f2994a;
+}
+
+.set-idx.kind-failure {
+  background: rgba(229, 72, 77, 0.16);
+  color: #e5484d;
+}
+
+.set-idx.kind-dropset {
+  background: rgba(76, 111, 255, 0.18);
+  color: #6b8bff;
+}
+
+.set-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.set-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 46;
+  width: 180px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.set-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: var(--font-body);
   font-size: 13px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.set-menu-item:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.set-menu-item.danger {
+  color: #f2828a;
+}
+
+.set-menu-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 11px;
+  flex: none;
+  background: var(--surface);
+  color: var(--faint);
+}
+
+.set-menu-badge.warmup {
+  background: rgba(242, 153, 74, 0.16);
+  color: #f2994a;
+}
+
+.set-menu-badge.failure {
+  background: rgba(229, 72, 77, 0.16);
+  color: #e5484d;
+}
+
+.set-menu-badge.dropset {
+  background: rgba(76, 111, 255, 0.18);
+  color: #6b8bff;
+}
+
+.set-menu-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 6px 8px 4px;
+}
+
+.set-menu-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 8px 4px;
+}
+
+.set-menu-stepper button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.set-menu-stepper .count {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  min-width: 24px;
+  text-align: center;
 }
 
 .set-prev {

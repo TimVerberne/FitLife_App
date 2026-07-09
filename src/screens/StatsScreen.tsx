@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
-import { epley, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
+import { epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
 import { exerciseById } from '../lib/exercises';
 import { Thumb } from '../components/Thumb';
@@ -34,7 +34,7 @@ function exerciseStatsFor(sessions: WorkoutSession[], person: Person, exerciseId
     .filter((h) => h.person === person && h.startedAt >= cutoff)
     .forEach((h) => {
       const entry = h.entries.find((e) => e.exerciseId === exerciseId);
-      const doneSets = entry?.sets.filter((s) => s.done) ?? [];
+      const doneSets = entry?.sets.filter(isWorkingSet) ?? [];
       if (doneSets.length === 0) return;
       timesPerformed += 1;
       doneSets.forEach((s) => {

@@ -1,4 +1,4 @@
-import type { SessionEntry, WorkoutSession } from './types';
+import type { SessionEntry, SetEntry, WorkoutSession } from './types';
 import { exerciseById } from './exercises';
 
 const DAY = 86_400_000;
@@ -7,19 +7,24 @@ export function epley(weight: number, reps: number): number {
   return reps <= 1 ? weight : weight * (1 + reps / 30);
 }
 
+// Warm-up sets don't count toward volume, reps, or records — only working sets do.
+export function isWorkingSet(s: SetEntry): boolean {
+  return s.done && s.kind !== 'warmup';
+}
+
 export function volumeOf(entries: SessionEntry[]): number {
   return entries.reduce(
-    (a, e) => a + e.sets.filter((s) => s.done).reduce((b, s) => b + s.reps * s.weight, 0),
+    (a, e) => a + e.sets.filter(isWorkingSet).reduce((b, s) => b + s.reps * s.weight, 0),
     0,
   );
 }
 
 export function setsCountOf(entries: SessionEntry[]): number {
-  return entries.reduce((a, e) => a + e.sets.filter((s) => s.done).length, 0);
+  return entries.reduce((a, e) => a + e.sets.filter(isWorkingSet).length, 0);
 }
 
 export function repsOf(entries: SessionEntry[]): number {
-  return entries.reduce((a, e) => a + e.sets.filter((s) => s.done).reduce((b, s) => b + s.reps, 0), 0);
+  return entries.reduce((a, e) => a + e.sets.filter(isWorkingSet).reduce((b, s) => b + s.reps, 0), 0);
 }
 
 export function relativeDate(ts: number, now = Date.now()): string {
@@ -44,7 +49,7 @@ export function personalRecords(sessions: WorkoutSession[], person = 'You'): Per
     .forEach((h) =>
       h.entries.forEach((e) => {
         e.sets
-          .filter((s) => s.done)
+          .filter(isWorkingSet)
           .forEach((s) => {
             const cur = map.get(e.exerciseId) ?? { exerciseId: e.exerciseId, maxWeight: 0, maxWeightReps: 0, estOneRepMax: 0 };
             if (s.weight > cur.maxWeight || (s.weight === cur.maxWeight && s.reps > cur.maxWeightReps)) {
@@ -65,7 +70,7 @@ export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutS
   let count = 0;
   target.entries.forEach((entry) => {
     const bestInSession = entry.sets
-      .filter((s) => s.done && s.weight > 0)
+      .filter((s) => isWorkingSet(s) && s.weight > 0)
       .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
     if (bestInSession > 0 && bestInSession > (priorBest.get(entry.exerciseId) ?? 0)) count++;
   });
@@ -151,7 +156,7 @@ export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = D
 
 export const MUSCLE_AXES = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];
 
-const MUSCLE_GROUP: Record<string, string> = {
+export const MUSCLE_GROUP: Record<string, string> = {
   chest: 'Chest',
   back: 'Back',
   'upper legs': 'Legs',
@@ -174,7 +179,7 @@ export function muscleSplit(sessions: WorkoutSession[], person = 'You'): number[
         if (!ex) return;
         const axis = MUSCLE_GROUP[ex.body_part];
         if (axis && counts.has(axis)) {
-          counts.set(axis, (counts.get(axis) ?? 0) + e.sets.filter((s) => s.done).length);
+          counts.set(axis, (counts.get(axis) ?? 0) + e.sets.filter(isWorkingSet).length);
         }
       }),
     );

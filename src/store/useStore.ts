@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { db, seedIfEmpty } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
-import type { ActiveSession, Routine, SessionEntry, WorkoutSession } from '../lib/types';
+import type { ActiveSession, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
 export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | null;
@@ -22,21 +22,16 @@ interface DialogState {
   onYes: () => void;
 }
 
-const DEFAULT_SETS = () => [
-  { reps: 10, weight: 20, done: false },
-  { reps: 10, weight: 20, done: false },
-  { reps: 10, weight: 20, done: false },
-];
-
 function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
   const prior = sessions
     .filter((h) => h.person === 'You' && h.entries.some((e) => e.exerciseId === exerciseId))
     .sort((a, b) => b.startedAt - a.startedAt)[0];
   const entry = prior?.entries.find((e) => e.exerciseId === exerciseId);
   if (entry && entry.sets.length > 0) {
-    return entry.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false }));
+    return entry.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: 'normal' as SetKind }));
   }
-  return DEFAULT_SETS();
+  // No history for this exercise — start with zero rows; the user adds sets manually.
+  return [];
 }
 
 interface StoreState {
@@ -74,6 +69,9 @@ interface StoreState {
   setVal(entryIdx: number, setIdx: number, field: 'reps' | 'weight', value: number): void;
   toggleSet(entryIdx: number, setIdx: number): void;
   addSet(entryIdx: number): void;
+  removeSet(entryIdx: number, setIdx: number): void;
+  setSetKind(entryIdx: number, setIdx: number, kind: SetKind): void;
+  applyDropSet(entryIdx: number, setIdx: number, rounds: number): void;
   removeExercise(entryIdx: number): void;
   addExerciseToSession(exerciseId: string): void;
   addExercisesToSession(exerciseIds: string[]): void;
@@ -196,8 +194,48 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!active) return;
     const entries = active.entries.map((e, ei) => {
       if (ei !== entryIdx) return e;
-      const last = e.sets[e.sets.length - 1] ?? { reps: 10, weight: 20, done: false };
-      return { ...e, sets: [...e.sets, { reps: last.reps, weight: last.weight, done: false }] };
+      const last = e.sets[e.sets.length - 1] ?? { reps: 10, weight: 20 };
+      return { ...e, sets: [...e.sets, { reps: last.reps, weight: last.weight, done: false, kind: 'normal' as SetKind }] };
+    });
+    set({ active: { ...active, entries } });
+  },
+
+  removeSet(entryIdx, setIdx) {
+    const active = get().active;
+    if (!active) return;
+    const entries = active.entries.map((e, ei) => {
+      if (ei !== entryIdx) return e;
+      return { ...e, sets: e.sets.filter((_, si) => si !== setIdx) };
+    });
+    set({ active: { ...active, entries } });
+  },
+
+  setSetKind(entryIdx, setIdx, kind) {
+    const active = get().active;
+    if (!active) return;
+    const entries = active.entries.map((e, ei) => {
+      if (ei !== entryIdx) return e;
+      const sets = e.sets.map((s, si) => (si === setIdx ? { ...s, kind } : s));
+      return { ...e, sets };
+    });
+    set({ active: { ...active, entries } });
+  },
+
+  applyDropSet(entryIdx, setIdx, rounds) {
+    const active = get().active;
+    if (!active) return;
+    const entries = active.entries.map((e, ei) => {
+      if (ei !== entryIdx) return e;
+      const base = e.sets[setIdx];
+      if (!base) return e;
+      const dropRounds = Array.from({ length: Math.max(1, rounds) }, () => ({
+        reps: base.reps,
+        weight: base.weight,
+        done: false,
+        kind: 'dropset' as SetKind,
+      }));
+      const sets = [...e.sets.slice(0, setIdx), ...dropRounds, ...e.sets.slice(setIdx + 1)];
+      return { ...e, sets };
     });
     set({ active: { ...active, entries } });
   },

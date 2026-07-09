@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
-import { newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
+import { isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
 import { Thumb } from './Thumb';
 
 const COLLAPSED_COUNT = 3;
 
 function doneCount(entry: SessionEntry): number {
-  return entry.sets.filter((s) => s.done).length;
+  return entry.sets.filter(isWorkingSet).length;
 }
 
 export function WorkoutFeedCard({
