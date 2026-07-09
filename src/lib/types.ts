@@ -49,4 +49,11 @@ export interface ActiveSession {
   name: string;
   startedAt: number;
   entries: SessionEntry[];
+  restTimers: Record<string, number>;
+}
+
+export interface RestTimerState {
+  exerciseId: string;
+  endsAt: number;
+  total: number;
 }

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { db, seedIfEmpty } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
-import type { ActiveSession, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
+import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
 export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | null;
@@ -47,6 +47,7 @@ interface StoreState {
   // active session
   active: ActiveSession | null;
   finishResult: FinishResult | null;
+  restTimer: RestTimerState | null;
 
   // sheets
   sheet: SheetKind;
@@ -75,6 +76,9 @@ interface StoreState {
   removeExercise(entryIdx: number): void;
   addExerciseToSession(exerciseId: string): void;
   addExercisesToSession(exerciseIds: string[]): void;
+  setRestDuration(exerciseId: string, seconds: number | null): void;
+  adjustRestTimer(deltaSeconds: number): void;
+  skipRestTimer(): void;
   minimizeSession(): void;
   restoreSession(): void;
   cancelSession(): void;
@@ -112,6 +116,7 @@ export const useStore = create<StoreState>((set, get) => ({
   mode: 'tabs',
   active: null,
   finishResult: null,
+  restTimer: null,
 
   sheet: null,
   detailExerciseId: null,
@@ -148,8 +153,9 @@ export const useStore = create<StoreState>((set, get) => ({
         name: routine ? routine.name : 'New routine',
         startedAt: Date.now(),
         entries: (routine ? routine.exerciseIds : []).map((exerciseId) => ({ exerciseId, sets: startingSetsFor(get().sessions, exerciseId) })),
+        restTimers: {},
       };
-      set({ active, mode: 'session' });
+      set({ active, mode: 'session', restTimer: null });
       if (!routine) get().openPicker();
     };
     if (get().active) {
@@ -182,12 +188,22 @@ export const useStore = create<StoreState>((set, get) => ({
   toggleSet(entryIdx, setIdx) {
     const active = get().active;
     if (!active) return;
+    const entry = active.entries[entryIdx];
+    const target = entry?.sets[setIdx];
+    if (!target) return;
+    const turningOn = !target.done;
     const entries = active.entries.map((e, ei) => {
       if (ei !== entryIdx) return e;
       const sets = e.sets.map((s, si) => (si === setIdx ? { ...s, done: !s.done } : s));
       return { ...e, sets };
     });
-    set({ active: { ...active, entries } });
+    const restSeconds = turningOn ? active.restTimers[entry.exerciseId] : undefined;
+    set({
+      active: { ...active, entries },
+      restTimer: restSeconds
+        ? { exerciseId: entry.exerciseId, endsAt: Date.now() + restSeconds * 1000, total: restSeconds }
+        : get().restTimer,
+    });
   },
 
   addSet(entryIdx) {
@@ -283,7 +299,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   cancelSession() {
     get().confirm('Discard this workout? Your progress will be lost.', 'Yes, discard', () => {
-      set({ active: null, mode: 'tabs' });
+      set({ active: null, mode: 'tabs', restTimer: null });
       get().showToast('Workout discarded');
     }, true, 'Keep training');
   },
@@ -316,6 +332,7 @@ export const useStore = create<StoreState>((set, get) => ({
       sessions: [newSession, ...s.sessions],
       active: null,
       mode: 'finish',
+      restTimer: null,
       finishResult: { entries, durationMin, name: active.name, exerciseIds, newRoutine },
     }));
   },
@@ -419,8 +436,9 @@ export const useStore = create<StoreState>((set, get) => ({
         name: session.name,
         startedAt: Date.now(),
         entries: session.entries.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: s.kind })) })),
+        restTimers: {},
       };
-      set({ active, mode: 'session' });
+      set({ active, mode: 'session', restTimer: null });
     };
     if (get().active) {
       get().confirm('You already have a workout in progress. Discard it and start this one?', 'Yes, start', () => {
@@ -445,5 +463,24 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ sessions });
     const updated = sessions.find((s) => s.id === sessionId);
     if (updated) void db.sessions.put(updated);
+  },
+
+  setRestDuration(exerciseId, seconds) {
+    const active = get().active;
+    if (!active) return;
+    const restTimers = { ...active.restTimers };
+    if (seconds === null) delete restTimers[exerciseId];
+    else restTimers[exerciseId] = seconds;
+    set({ active: { ...active, restTimers } });
+  },
+
+  adjustRestTimer(deltaSeconds) {
+    const rt = get().restTimer;
+    if (!rt) return;
+    set({ restTimer: { ...rt, endsAt: Math.max(Date.now(), rt.endsAt + deltaSeconds * 1000) } });
+  },
+
+  skipRestTimer() {
+    set({ restTimer: null });
   },
 }));

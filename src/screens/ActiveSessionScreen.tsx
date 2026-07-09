@@ -5,7 +5,17 @@ import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { Thumb } from '../components/Thumb';
 import { NumberField } from '../components/NumberField';
+import { RestTimerBar } from '../components/RestTimerBar';
 import type { SetEntry, SetKind } from '../lib/types';
+
+const REST_PRESETS = [5, 10, 15, 30, 45, 60, 75, 90, 105, 120];
+
+function formatRest(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const r = seconds % 60;
+  return r === 0 ? `${m}m` : `${m}m ${r}s`;
+}
 
 function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
   let best = startingBest;
@@ -60,10 +70,12 @@ export function ActiveSessionScreen() {
   const cancelSession = useStore((s) => s.cancelSession);
   const finishSession = useStore((s) => s.finishSession);
   const confirm = useStore((s) => s.confirm);
+  const setRestDuration = useStore((s) => s.setRestDuration);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [restMenuFor, setRestMenuFor] = useState<number | null>(null);
 
   if (!active) return null;
 
@@ -177,6 +189,42 @@ export function ActiveSessionScreen() {
               >
                 ✕
               </button>
+            </div>
+            <div className="rest-toggle-wrap">
+              <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuFor === ei ? null : ei)}>
+                ⏱ Rest timer: {active.restTimers[en.exerciseId] ? formatRest(active.restTimers[en.exerciseId]) : 'Off'}
+              </button>
+              {restMenuFor === ei && (
+                <>
+                  <div className="set-menu-scrim" onClick={() => setRestMenuFor(null)} />
+                  <div className="rest-menu">
+                    <div className="set-menu-title">Rest timer</div>
+                    <div className="rest-menu-grid">
+                      {REST_PRESETS.map((s) => (
+                        <button
+                          key={s}
+                          className={`rest-chip${active.restTimers[en.exerciseId] === s ? ' on' : ''}`}
+                          onClick={() => {
+                            setRestDuration(en.exerciseId, s);
+                            setRestMenuFor(null);
+                          }}
+                        >
+                          {formatRest(s)}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      className="set-menu-item danger"
+                      onClick={() => {
+                        setRestDuration(en.exerciseId, null);
+                        setRestMenuFor(null);
+                      }}
+                    >
+                      Turn off
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
             {en.sets.length > 0 && (
               <div className="set-head">
@@ -296,6 +344,7 @@ export function ActiveSessionScreen() {
       <button className="discard" onClick={cancelSession}>
         Discard workout
       </button>
+      <RestTimerBar />
     </div>
   );
 }
