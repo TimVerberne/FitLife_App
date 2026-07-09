@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
-import { epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
+import { MUSCLE_AXES, MUSCLE_GROUP, epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
 import { AVATAR_COLORS } from '../lib/seedData';
 import { exerciseById } from '../lib/exercises';
 import { Thumb } from '../components/Thumb';
@@ -78,9 +78,37 @@ export function StatsScreen() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [sessions, rival]);
 
+  const muscleGroups = useMemo(() => {
+    const set = new Set<string>();
+    sharedExercises.forEach((ex) => {
+      const axis = MUSCLE_GROUP[ex.body_part];
+      if (axis) set.add(axis);
+    });
+    return MUSCLE_AXES.filter((a) => set.has(a));
+  }, [sharedExercises]);
+
+  const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
+  const [showAllExercises, setShowAllExercises] = useState(false);
+  const muscle = muscleGroups.includes(selectedMuscle ?? '') ? selectedMuscle! : muscleGroups[0];
+
+  const rankedExercises = useMemo(() => {
+    if (!muscle || !rival) return [];
+    return sharedExercises
+      .filter((ex) => MUSCLE_GROUP[ex.body_part] === muscle)
+      .map((ex) => {
+        const y = exerciseStatsFor(sessions, 'You', ex.id, PERIOD_DAYS[period], now);
+        const r = exerciseStatsFor(sessions, rival.person, ex.id, PERIOD_DAYS[period], now);
+        return { ex, combined: y.volume + r.volume };
+      })
+      .sort((a, b) => b.combined - a.combined)
+      .map((x) => x.ex);
+  }, [sharedExercises, muscle, rival, sessions, period, now]);
+
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
-  const exerciseId = sharedExercises.some((e) => e.id === selectedExerciseId) ? selectedExerciseId! : sharedExercises[0]?.id;
+  const exerciseId = rankedExercises.some((e) => e.id === selectedExerciseId) ? selectedExerciseId! : rankedExercises[0]?.id;
   const exercise = exerciseId ? exerciseById(exerciseId) : undefined;
+  const visibleExercises = showAllExercises ? rankedExercises : rankedExercises.slice(0, 5);
+  const hiddenCount = rankedExercises.length - visibleExercises.length;
 
   const youExStats = exercise ? exerciseStatsFor(sessions, 'You', exercise.id, PERIOD_DAYS[period], now) : null;
   const rivalExStats = exercise && rival ? exerciseStatsFor(sessions, rival.person, exercise.id, PERIOD_DAYS[period], now) : null;
@@ -164,18 +192,20 @@ export function StatsScreen() {
               ))}
             </div>
           )}
-          <div className="card">
-            <HeadToHeadRow label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} />
-            <HeadToHeadRow
+          <HeadToHeadLegend rivalName={rival.person} rivalColor={AVATAR_COLORS[rival.person].bg} />
+          <div className="h2h-grid">
+            <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile
               label="Volume"
               youVal={you.volume}
               rivalVal={rival.volume}
               format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
+              rivalColor={AVATAR_COLORS[rival.person].bg}
             />
-            <HeadToHeadRow label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} />
-            <HeadToHeadRow label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} />
-            <HeadToHeadRow label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} />
-            <HeadToHeadRow label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} last />
+            <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
           </div>
 
           <div className="section-h">Exercise head to head</div>
@@ -185,30 +215,45 @@ export function StatsScreen() {
             </p>
           ) : (
             <>
-              <select
-                value={exerciseId}
-                onChange={(e) => setSelectedExerciseId(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: 'var(--surface)',
-                  border: '1px solid var(--line)',
-                  borderRadius: 11,
-                  padding: '10px 12px',
-                  color: 'var(--ink)',
-                  fontFamily: 'var(--font-body)',
-                  fontSize: 14,
-                  marginBottom: 10,
-                }}
-              >
-                {sharedExercises.map((ex) => (
-                  <option key={ex.id} value={ex.id} style={{ textTransform: 'capitalize' }}>
-                    {ex.name}
-                  </option>
+              <div className="chips" style={{ marginBottom: 10 }}>
+                {muscleGroups.map((g) => (
+                  <button
+                    key={g}
+                    className={`chip${muscle === g ? ' on' : ''}`}
+                    onClick={() => {
+                      setSelectedMuscle(g);
+                      setSelectedExerciseId(null);
+                      setShowAllExercises(false);
+                    }}
+                  >
+                    {g}
+                  </button>
                 ))}
-              </select>
+              </div>
+
+              {visibleExercises.map((ex, i) => {
+                const active = ex.id === exerciseId;
+                return (
+                  <button
+                    key={ex.id}
+                    className={`ex-lead-row${active ? ' on' : ''}`}
+                    onClick={() => setSelectedExerciseId(ex.id)}
+                  >
+                    <span className="ex-lead-rank">{i + 1}</span>
+                    <Thumb className="ph" src={ex.image} alt={ex.name} style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover' }} />
+                    <span className="ex-lead-name">{ex.name}</span>
+                  </button>
+                );
+              })}
+              {rankedExercises.length > 5 && (
+                <button className="feed-more" onClick={() => setShowAllExercises((v) => !v)}>
+                  {hiddenCount > 0 ? `Show ${hiddenCount} more` : 'Show less'}
+                </button>
+              )}
+
               {exercise && youExStats && rivalExStats && (
-                <div className="card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '14px 2px 10px' }}>
                     <Thumb
                       className="ph"
                       src={exercise.image}
@@ -219,34 +264,39 @@ export function StatsScreen() {
                       {exercise.name}
                     </div>
                   </div>
-                  <HeadToHeadRow
-                    label="Heaviest set"
-                    youVal={youExStats.maxWeight}
-                    rivalVal={rivalExStats.maxWeight}
-                    format={(v) => `${v}kg`}
-                    youDisplay={youExStats.maxWeight > 0 ? `${youExStats.maxWeight}×${youExStats.maxWeightReps}` : '—'}
-                    rivalDisplay={rivalExStats.maxWeight > 0 ? `${rivalExStats.maxWeight}×${rivalExStats.maxWeightReps}` : '—'}
-                  />
-                  <HeadToHeadRow
-                    label="Est. 1RM"
-                    youVal={youExStats.best1RM}
-                    rivalVal={rivalExStats.best1RM}
-                    format={(v) => (v > 0 ? `${Math.round(v)}kg` : '—')}
-                  />
-                  <HeadToHeadRow
-                    label="Total volume"
-                    youVal={youExStats.volume}
-                    rivalVal={rivalExStats.volume}
-                    format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
-                  />
-                  <HeadToHeadRow
-                    label="Times performed"
-                    youVal={youExStats.timesPerformed}
-                    rivalVal={rivalExStats.timesPerformed}
-                    format={(v) => String(v)}
-                    last
-                  />
-                </div>
+                  <div className="h2h-grid">
+                    <HeadToHeadTile
+                      label="Heaviest set"
+                      youVal={youExStats.maxWeight}
+                      rivalVal={rivalExStats.maxWeight}
+                      format={(v) => `${v}kg`}
+                      youDisplay={youExStats.maxWeight > 0 ? `${youExStats.maxWeight}×${youExStats.maxWeightReps}` : '—'}
+                      rivalDisplay={rivalExStats.maxWeight > 0 ? `${rivalExStats.maxWeight}×${rivalExStats.maxWeightReps}` : '—'}
+                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                    />
+                    <HeadToHeadTile
+                      label="Est. 1RM"
+                      youVal={youExStats.best1RM}
+                      rivalVal={rivalExStats.best1RM}
+                      format={(v) => (v > 0 ? `${Math.round(v)}kg` : '—')}
+                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                    />
+                    <HeadToHeadTile
+                      label="Total volume"
+                      youVal={youExStats.volume}
+                      rivalVal={rivalExStats.volume}
+                      format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K kg` : `${Math.round(v)} kg`)}
+                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                    />
+                    <HeadToHeadTile
+                      label="Times performed"
+                      youVal={youExStats.timesPerformed}
+                      rivalVal={rivalExStats.timesPerformed}
+                      format={(v) => String(v)}
+                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                    />
+                  </div>
+                </>
               )}
             </>
           )}
@@ -256,14 +306,23 @@ export function StatsScreen() {
   );
 }
 
-function HeadToHeadRow({
+function HeadToHeadLegend({ rivalName, rivalColor }: { rivalName: string; rivalColor: string }) {
+  return (
+    <div className="h2h-legend">
+      <span className="h2h-legend-item"><i style={{ background: 'var(--accent)' }} /> You</span>
+      <span className="h2h-legend-item"><i style={{ background: rivalColor }} /> {rivalName}</span>
+    </div>
+  );
+}
+
+function HeadToHeadTile({
   label,
   youVal,
   rivalVal,
   format,
   youDisplay,
   rivalDisplay,
-  last,
+  rivalColor,
 }: {
   label: string;
   youVal: number;
@@ -271,20 +330,27 @@ function HeadToHeadRow({
   format: (v: number) => string;
   youDisplay?: string;
   rivalDisplay?: string;
-  last?: boolean;
+  rivalColor: string;
 }) {
-  const total = youVal + rivalVal;
-  const youPct = total > 0 ? (youVal / total) * 100 : 50;
+  const max = Math.max(youVal, rivalVal, 1);
+  const youPct = (youVal / max) * 100;
+  const rivalPct = (rivalVal / max) * 100;
+  const youWins = youVal > rivalVal;
+  const rivalWins = rivalVal > youVal;
   return (
-    <div style={{ marginBottom: last ? 0 : 13 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--faint)', letterSpacing: '.05em', marginBottom: 5 }}>
-        <span>{label.toUpperCase()}</span>
-        <span>{youDisplay ?? format(youVal)} · {rivalDisplay ?? format(rivalVal)}</span>
+    <div className="h2h-tile">
+      <div className="h2h-tile-label">{label}</div>
+      <div className="h2h-bar">
+        <div className="h2h-track">
+          <div className="h2h-fill" style={{ width: `${youPct}%`, background: 'var(--accent)' }} />
+        </div>
+        <span className={`h2h-bar-val${youWins ? ' win' : ''}`}>{youDisplay ?? format(youVal)}</span>
       </div>
-      <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden', background: 'var(--surface-2)' }}>
-        <div style={{ width: `${youPct}%`, background: 'var(--accent)' }} />
-        <div style={{ width: 1, background: '#000' }} />
-        <div style={{ flex: 1, background: '#3a3d38' }} />
+      <div className="h2h-bar">
+        <div className="h2h-track">
+          <div className="h2h-fill" style={{ width: `${rivalPct}%`, background: rivalColor }} />
+        </div>
+        <span className={`h2h-bar-val${rivalWins ? ' win' : ''}`}>{rivalDisplay ?? format(rivalVal)}</span>
       </div>
     </div>
   );
