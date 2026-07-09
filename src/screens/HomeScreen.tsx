@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
+import { randomQuote } from '../lib/quotes';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
@@ -50,6 +51,11 @@ export function HomeScreen() {
     [sessions],
   );
 
+  const quote = useMemo(() => randomQuote(), []);
+  const quoteWords = quote.split(' ');
+  const quoteLastWord = quoteWords[quoteWords.length - 1];
+  const quoteLead = quoteWords.slice(0, -1).join(' ');
+
   const now = new Date();
   const dateLabel = now.toLocaleDateString('en-US', { weekday: 'short', day: '2-digit', month: '2-digit' }).toUpperCase();
   const timeLabel = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -66,6 +72,11 @@ export function HomeScreen() {
           get
           <br />
           <span style={{ color: 'var(--accent)' }}>to work.</span>
+        </div>
+        <div className="home-quote">
+          "
+          {quoteLead && <span style={{ color: 'var(--ink)' }}>{quoteLead} </span>}
+          <span style={{ color: 'var(--accent)' }}>{quoteLastWord}</span>"
         </div>
       </div>
 

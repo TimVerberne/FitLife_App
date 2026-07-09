@@ -37,6 +37,14 @@
   align-items: center;
 }
 
+.home-quote {
+  font-family: var(--font-mono);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 8px;
+}
+
 .section-h {
   font-family: var(--font-display);
   font-weight: 800;
