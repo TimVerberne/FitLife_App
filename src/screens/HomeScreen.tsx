@@ -66,17 +66,9 @@ export function HomeScreen() {
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.1em', color: 'var(--accent)', textTransform: 'uppercase' }}>
           {dateLabel} — {timeLabel}
         </div>
-        <div className="h1" style={{ fontSize: 42, lineHeight: 0.9, marginTop: 6 }}>
-          Let's
-          <br />
-          get
-          <br />
-          <span style={{ color: 'var(--accent)' }}>to work.</span>
-        </div>
-        <div className="home-quote">
-          "
-          {quoteLead && <span style={{ color: 'var(--ink)' }}>{quoteLead} </span>}
-          <span style={{ color: 'var(--accent)' }}>{quoteLastWord}</span>"
+        <div className="h1" style={{ fontSize: 34, lineHeight: 1.02, marginTop: 8 }}>
+          {quoteLead && <>{quoteLead} </>}
+          <span style={{ color: 'var(--accent)' }}>{quoteLastWord}</span>
         </div>
       </div>
 
