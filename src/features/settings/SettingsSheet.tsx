@@ -19,6 +19,7 @@ export function SettingsSheet() {
   const exportData = useStore((s) => s.exportData);
   const importData = useStore((s) => s.importData);
   const clearAllData = useStore((s) => s.clearAllData);
+  const deleteAccount = useStore((s) => s.deleteAccount);
   const fileRef = useRef<HTMLInputElement>(null);
   const { email } = useAuthState();
 
@@ -178,6 +179,14 @@ export function SettingsSheet() {
       />
       <button className="btn danger" style={{ marginTop: 8 }} onClick={clearAllData}>
         Clear all data
+      </button>
+
+      <div className="section-h">Danger zone</div>
+      <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>
+        Permanently deletes your account, not just your data. This can't be undone.
+      </div>
+      <button className="btn danger" onClick={deleteAccount}>
+        Delete account
       </button>
 
       <div className="section-h">About</div>

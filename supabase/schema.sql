@@ -126,3 +126,24 @@ create policy "friends can read your sessions" on public.sessions for select
           or (f.addressee_id = auth.uid() and f.requester_id = sessions.user_id))
     )
   );
+
+-- Self-service account deletion. Deletes the auth.users row for the calling
+-- user, which cascades to profiles, routines, sessions, settings, and
+-- friendships (every one of those tables references auth.users or profiles
+-- with "on delete cascade"), plus Supabase's own internal auth tables
+-- (identities, sessions, refresh tokens) which cascade from auth.users by
+-- Supabase's own schema design. security definer runs this as the function
+-- owner (the postgres role, which has the necessary privileges on the auth
+-- schema) rather than as the calling user, since a normal authenticated
+-- client has no direct access to auth.users.
+create or replace function public.delete_own_account()
+returns void
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.delete_own_account() to authenticated;

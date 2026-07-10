@@ -1,6 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
 import type { Routine, WorkoutSession } from './types';
-import { SEED_ROUTINES, SEED_SESSIONS } from './seedData';
 
 export interface PendingSyncEntry {
   id?: number;
@@ -35,26 +34,14 @@ export async function wipeLocalData(): Promise<void> {
   await Promise.all([db.routines.clear(), db.sessions.clear(), db.pendingSync.clear()]);
 }
 
-// One-time cleanup for installs that predate the real friends system: the
-// old Sanne/Joost demo rows are gone from seedData.ts, but existing local
-// Dexie caches still have them cached from before. Hardcoded to these two
+// One-time cleanup for installs that predate the real friends system:
+// existing local Dexie caches may still have the old Sanne/Joost demo rows
+// cached from before they were retired. Hardcoded to these two
 // exact legacy names (not a generic "anything not You" purge) so it can
 // never touch a real friend's data — friend sessions never reach Dexie in
 // the first place, so there's nothing else here to worry about.
 export async function purgeDemoFriendRows(): Promise<void> {
   await db.sessions.where('person').anyOf(['Sanne', 'Joost']).delete();
-}
-
-export async function seedIfEmpty(): Promise<void> {
-  const [routineCount, sessionCount] = await Promise.all([db.routines.count(), db.sessions.count()]);
-  // Seed IDs are fixed/deterministic, so bulkPut (upsert) keeps this safe if
-  // called concurrently (e.g. React StrictMode double-invoking effects in dev).
-  if (routineCount === 0) {
-    await db.routines.bulkPut(SEED_ROUTINES);
-  }
-  if (sessionCount === 0) {
-    await db.sessions.bulkPut(SEED_SESSIONS);
-  }
 }
 
 // Legacy local ids (e.g. `r1`, `seed-5`, or the old `s-${Date.now()}-...` /

@@ -97,6 +97,14 @@ export async function clearAllRemote(): Promise<void> {
   ]);
 }
 
+// Deletes the auth.users row itself (via the delete_own_account Postgres
+// function) — not just this account's data. Cascades through profiles,
+// routines, sessions, settings, and friendships on the database side.
+export async function deleteOwnAccount(): Promise<void> {
+  const { error } = await supabase.rpc('delete_own_account');
+  if (error) throw error;
+}
+
 export async function replaceAllRemote(routines: Routine[], sessions: WorkoutSession[]): Promise<void> {
   const userId = requireUserId();
   const mine = sessions.filter((s) => s.person === 'You');

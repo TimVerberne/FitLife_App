@@ -1,12 +1,12 @@
 import { create } from 'zustand';
-import { db, seedIfEmpty, remapLegacyIdsToUuid, purgeDemoFriendRows } from '../lib/db';
-import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
+import { db, remapLegacyIdsToUuid, purgeDemoFriendRows } from '../lib/db';
 import { applyTheme, loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
 import * as friendsApi from '../lib/friends';
 import type { Friend, FriendRequest } from '../lib/friends';
 import { onSignedOut } from '../lib/supabase';
+import { signOut } from '../lib/auth';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -140,6 +140,7 @@ interface StoreState {
   exportData(): void;
   importData(file: File): void;
   clearAllData(): void;
+  deleteAccount(): void;
 
   syncWithCloud(userId: string): Promise<void>;
 
@@ -192,15 +193,14 @@ export const useStore = create<StoreState>((set, get) => ({
     // whoever was signed in before, while this reload is still in flight.
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
-      await seedIfEmpty();
       await purgeDemoFriendRows();
       const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
       set({ routines, sessions, loaded: true });
     } catch (err) {
       // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
-      // fall back to in-memory seed data so the app still works, just without persistence.
+      // fall back to an empty in-memory session so the app still works, just without persistence.
       console.error('Local storage unavailable, falling back to in-memory data', err);
-      set({ routines: SEED_ROUTINES, sessions: SEED_SESSIONS, loaded: true });
+      set({ routines: [], sessions: [], loaded: true });
     }
   },
 
@@ -619,6 +619,23 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ routines: [], sessions: [], sheet: null });
       get().showToast('All data cleared');
     }, true);
+  },
+
+  deleteAccount() {
+    get().confirm(
+      'Permanently delete your account? This removes your routines, workout history, settings, and friend connections — for good. Anyone who\'s friends with you will lose access to your stats too.',
+      'Yes, delete my account',
+      () => {
+        void cloudSync
+          .deleteOwnAccount()
+          .then(() => signOut())
+          .catch((err) => {
+            console.error('Failed to delete account', err);
+            get().showToast('Could not delete your account — try again');
+          });
+      },
+      true,
+    );
   },
 
   async syncWithCloud(userId) {
