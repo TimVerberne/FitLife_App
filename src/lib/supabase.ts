@@ -18,8 +18,19 @@ supabase.auth.getSession().then(({ data }) => {
   currentSession = data.session;
 });
 
-supabase.auth.onAuthStateChange((_event, session) => {
+type SignOutListener = () => void;
+const signOutListeners: SignOutListener[] = [];
+
+// Local Dexie cache is per-browser, not per-account — anything that cares
+// about wiping it when the signed-in user changes (see cloudSync.ts) hooks
+// in here rather than each registering its own onAuthStateChange listener.
+export function onSignedOut(listener: SignOutListener): void {
+  signOutListeners.push(listener);
+}
+
+supabase.auth.onAuthStateChange((event, session) => {
   currentSession = session;
+  if (event === 'SIGNED_OUT') signOutListeners.forEach((l) => l());
 });
 
 export function getCurrentUserId(): string | null {

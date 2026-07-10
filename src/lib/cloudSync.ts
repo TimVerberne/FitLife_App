@@ -1,5 +1,5 @@
-import { supabase, getCurrentUserId } from './supabase';
-import { db, type PendingSyncEntry } from './db';
+import { supabase, getCurrentUserId, onSignedOut } from './supabase';
+import { db, wipeLocalData, type PendingSyncEntry } from './db';
 import type { Routine, WorkoutSession } from './types';
 import { loadSettings, type Settings } from './settings';
 
@@ -206,3 +206,5 @@ export async function flushPendingSync(): Promise<void> {
 if (typeof window !== 'undefined') {
   window.addEventListener('online', () => void flushPendingSync());
 }
+
+onSignedOut(() => void wipeLocalData());

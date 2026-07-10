@@ -162,7 +162,10 @@ export const useStore = create<StoreState>((set, get) => ({
   quote: randomQuote(),
 
   async init() {
-    set({ tab: get().settings.defaultTab });
+    // Reset synchronously (not just on first load) so a re-mount after switching
+    // accounts can't leave syncWithCloud reading stale in-memory data from
+    // whoever was signed in before, while this reload is still in flight.
+    set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await seedIfEmpty();
       const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);

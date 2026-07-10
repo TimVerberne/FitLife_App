@@ -26,6 +26,15 @@ db.version(2).stores({
   pendingSync: '++id, table',
 });
 
+// The Dexie cache is per-browser, not per-account. Without this, signing out
+// of one account and into another would let the first account's local cache
+// get treated as "this device's existing history" and uploaded straight into
+// the second account's Supabase tables. Called on every SIGNED_OUT event
+// (see cloudSync.ts) so no local data survives a sign-out.
+export async function wipeLocalData(): Promise<void> {
+  await Promise.all([db.routines.clear(), db.sessions.clear(), db.pendingSync.clear()]);
+}
+
 export async function seedIfEmpty(): Promise<void> {
   const [routineCount, sessionCount] = await Promise.all([db.routines.count(), db.sessions.count()]);
   // Seed IDs are fixed/deterministic, so bulkPut (upsert) keeps this safe if
