@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -19,9 +19,9 @@ function isIos(): boolean {
 type Platform = 'android' | 'ios' | null;
 
 // Chrome fires beforeinstallprompt once, shortly after load — whether or not
-// the You tab (where the install card lives) is mounted yet. So this has to
-// be captured at module scope, not inside the component's effect, or we'd
-// miss the event entirely on every visit that doesn't start on that tab.
+// the You tab (where this pill lives) is mounted yet. So this has to be
+// captured at module scope, not inside the component's effect, or we'd miss
+// the event entirely on every visit that doesn't start on that tab.
 let deferred: BeforeInstallPromptEvent | null = null;
 let platform: Platform = null;
 const listeners = new Set<() => void>();
@@ -52,8 +52,23 @@ function getSnapshot() {
   return platform;
 }
 
+// Android/Chrome can trigger the native install dialog directly. iOS Safari
+// never fires beforeinstallprompt at all — the only install path there is
+// the manual Share sheet — so tapping the pill just reveals those
+// instructions instead of doing anything itself.
 export function InstallCard() {
   const currentPlatform = useSyncExternalStore(subscribe, getSnapshot);
+  const [showTip, setShowTip] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!showTip) return;
+    function onPointerDown(e: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setShowTip(false);
+    }
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [showTip]);
 
   async function install() {
     if (!deferred) return;
@@ -64,27 +79,25 @@ export function InstallCard() {
     notify();
   }
 
+  function onClick() {
+    if (currentPlatform === 'android') void install();
+    else setShowTip((v) => !v);
+  }
+
   if (!currentPlatform) return null;
 
   return (
-    <div className="card install-card">
-      <div className="install-card-icon">⬇</div>
-      <div className="install-card-body">
-        <div className="install-card-title">Install FitFlow</div>
-        <div className="install-card-sub">
-          {currentPlatform === 'ios' ? (
-            <>
-              Tap <b>⬆ Share</b>, then "Add to Home Screen" for quicker access and offline workouts.
-            </>
-          ) : (
-            'Add it to your home screen for quicker access and offline workouts.'
-          )}
+    <div className="install-pill-wrap" ref={wrapRef}>
+      <button className="install-pill" onClick={onClick}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+        </svg>
+        Install
+      </button>
+      {showTip && currentPlatform === 'ios' && (
+        <div className="install-tip">
+          Tap <b>⬆ Share</b>, then "Add to Home Screen" for quicker access and offline workouts.
         </div>
-      </div>
-      {currentPlatform === 'android' && (
-        <button className="install-card-btn" onClick={() => void install()}>
-          Install
-        </button>
       )}
     </div>
   );

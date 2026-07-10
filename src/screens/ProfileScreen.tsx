@@ -64,6 +64,7 @@ export function ProfileScreen() {
           <div className="eyebrow">Profile</div>
           <div className="h1" style={{ fontSize: 30 }}>You</div>
         </div>
+        <InstallCard />
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="info-btn" aria-label="Friends" onClick={openFriends} style={{ width: 38, height: 38 }}>
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -77,8 +78,6 @@ export function ProfileScreen() {
           </button>
         </div>
       </div>
-
-      <InstallCard />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 6 }}>
         <div
