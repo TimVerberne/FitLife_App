@@ -1,4 +1,4 @@
-import { EXERCISES } from './exercises';
+import { EXERCISES, exerciseById, isCardioExercise } from './exercises';
 import type { Exercise, Routine, SetKind, WorkoutSession } from './types';
 
 // Minimal RFC4180-style CSV parser — handles quoted fields (including
@@ -52,9 +52,21 @@ interface HevyRow {
   set_type: string;
   weight_kg: string;
   reps: string;
+  distance_km: string;
+  duration_seconds: string;
 }
 
-const REQUIRED_COLUMNS = ['title', 'start_time', 'end_time', 'exercise_title', 'set_type', 'weight_kg', 'reps'];
+const REQUIRED_COLUMNS = [
+  'title',
+  'start_time',
+  'end_time',
+  'exercise_title',
+  'set_type',
+  'weight_kg',
+  'reps',
+  'distance_km',
+  'duration_seconds',
+];
 
 function parseHevyRows(text: string): HevyRow[] {
   const table = parseCsv(text);
@@ -70,6 +82,8 @@ function parseHevyRows(text: string): HevyRow[] {
     set_type: r[idx.set_type] ?? '',
     weight_kg: r[idx.weight_kg] ?? '',
     reps: r[idx.reps] ?? '',
+    distance_km: r[idx.distance_km] ?? '',
+    duration_seconds: r[idx.duration_seconds] ?? '',
   }));
 }
 
@@ -125,6 +139,17 @@ const NAME_ALIASES: Record<string, string> = {
   'triceps pushdown': '0201', // cable pushdown
   'triceps rope pushdown': '0200', // cable pushdown (with rope attachment)
   'torso rotation': '2399', // cable seated twist
+  // Plain cardio machine names (no equipment parenthetical, so the fuzzy
+  // matcher has nothing to score against) — kept as 4 distinct ids even
+  // though "Cycling"/"Spinning" and "Treadmill"/"Walking" are conceptually
+  // similar, since two of these can legitimately appear as separate
+  // exercises within the same workout and would otherwise merge into one
+  // entry (see the Chest/Iso-Lateral Chest Press note above for why that's
+  // a real problem, not just a labeling nicety).
+  cycling: '2138', // stationary bike run v. 3
+  spinning: '0798', // stationary bike walk
+  treadmill: '3666', // walking on incline treadmill
+  walking: '2141', // walk elliptical cross trainer
 };
 
 function normalizeTokens(s: string): Set<string> {
@@ -263,19 +288,28 @@ export function convertHevyCsv(text: string): HevyImportResult | null {
       continue;
     }
 
-    const setsByExerciseId = new Map<string, { reps: number; weight: number; done: true; kind: SetKind }[]>();
+    const setsByExerciseId = new Map<string, { reps: number; weight: number; durationSec: number; distanceKm: number; done: true; kind: SetKind }[]>();
     for (const r of rs) {
       const name = r.exercise_title.trim();
       if (!name) continue;
-      const repsStr = r.reps.trim();
-      const weightStr = r.weight_kg.trim();
-      if (!repsStr && !weightStr) continue; // cardio / duration-only entry — no reps or weight to import
 
       const exerciseId = matchHevyExerciseName(name);
       if (!exerciseId) {
         unmatchedNames.add(name);
         continue;
       }
+      // Branches on the *matched* exercise's own category, not the Hevy row
+      // shape, so a genuinely non-cardio exercise logged with blank
+      // reps/weight (nothing useful to import — e.g. Hevy's "Plank", which
+      // only has duration_seconds and no distance) is still correctly
+      // skipped rather than landing in FitFlow with a meaningless 0×0 set.
+      const cardio = isCardioExercise(exerciseById(exerciseId)!);
+      const repsStr = r.reps.trim();
+      const weightStr = r.weight_kg.trim();
+      const distanceStr = r.distance_km.trim();
+      const durationStr = r.duration_seconds.trim();
+      if (cardio ? !distanceStr && !durationStr : !repsStr && !weightStr) continue;
+
       matchedNames.add(name);
 
       const rawKind = r.set_type.trim();
@@ -284,8 +318,10 @@ export function convertHevyCsv(text: string): HevyImportResult | null {
         : 'normal';
       const sets = setsByExerciseId.get(exerciseId) ?? [];
       sets.push({
-        reps: repsStr ? Math.round(Number(repsStr)) : 0,
-        weight: weightStr ? Number(weightStr) : 0,
+        reps: !cardio && repsStr ? Math.round(Number(repsStr)) : 0,
+        weight: !cardio && weightStr ? Number(weightStr) : 0,
+        durationSec: cardio && durationStr ? Math.round(Number(durationStr)) : 0,
+        distanceKm: cardio && distanceStr ? Number(distanceStr) : 0,
         done: true,
         kind,
       });

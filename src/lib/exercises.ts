@@ -9,6 +9,10 @@ export function exerciseById(id: string): Exercise | undefined {
   return byIdMap.get(id);
 }
 
+export function isCardioExercise(ex: Exercise): boolean {
+  return ex.body_part === 'cardio';
+}
+
 export function bodyParts(): string[] {
   return Array.from(new Set(EXERCISES.map((e) => e.body_part))).sort();
 }

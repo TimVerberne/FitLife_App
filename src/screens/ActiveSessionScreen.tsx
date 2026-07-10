@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { exerciseById } from '../lib/exercises';
+import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { REST_PRESETS, formatRest } from '../lib/rest';
@@ -128,7 +128,7 @@ export function ActiveSessionScreen() {
   const total = active.entries.reduce((a, e) => a + e.sets.length, 0);
   const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
-  function prevPerformance(exerciseId: string, setIdx: number): string | null {
+  function prevPerformance(exerciseId: string, setIdx: number, cardio: boolean): string | null {
     const prior = sessions
       .filter((h) => h.person === 'You' && h.entries.some((e) => e.exerciseId === exerciseId))
       .sort((a, b) => b.startedAt - a.startedAt)[0];
@@ -136,6 +136,7 @@ export function ActiveSessionScreen() {
     const entry = prior.entries.find((e) => e.exerciseId === exerciseId);
     const set = entry?.sets[setIdx];
     if (!set) return null;
+    if (cardio) return `${Math.round((set.durationSec ?? 0) / 60)}m · ${(set.distanceKm ?? 0).toFixed(1)}km`;
     return `${formatWeight(set.weight, settings.units)}×${set.reps}`;
   }
 
@@ -217,8 +218,9 @@ export function ActiveSessionScreen() {
       {active.entries.map((en, ei) => {
         const ex = exerciseById(en.exerciseId);
         if (!ex) return null;
+        const cardio = isCardioExercise(ex);
         const rec = records.find((r) => r.exerciseId === ex.id);
-        const prFlags = prFlagsFor(en.sets, rec?.estOneRepMax ?? 0);
+        const prFlags = cardio ? [] : prFlagsFor(en.sets, rec?.estOneRepMax ?? 0);
         return (
           <div className="s-ex" key={ei}>
             <div className="s-top">
@@ -281,13 +283,13 @@ export function ActiveSessionScreen() {
               <div className="set-head">
                 <span>#</span>
                 <span>Prev</span>
-                <span>{settings.units === 'kg' ? 'Kg' : 'Lb'}</span>
-                <span>Reps</span>
+                <span>{cardio ? 'Min' : settings.units === 'kg' ? 'Kg' : 'Lb'}</span>
+                <span>{cardio ? 'Km' : 'Reps'}</span>
                 <span></span>
               </div>
             )}
             {en.sets.map((st, si) => {
-              const prev = prevPerformance(en.exerciseId, si);
+              const prev = prevPerformance(en.exerciseId, si, cardio);
               const label = setLabelFor(en.sets, si);
               const menuOpen = menu?.entryIdx === ei && menu?.setIdx === si;
               return (
@@ -348,16 +350,37 @@ export function ActiveSessionScreen() {
                       )}
                     </div>
                     <div className="set-prev">{prev ?? '—'}</div>
-                    <div className="set-fld">
-                      <NumberField
-                        value={toDisplayWeight(st.weight, settings.units)}
-                        inputMode="decimal"
-                        onCommit={(n) => setVal(ei, si, 'weight', fromDisplayWeight(n, settings.units))}
-                      />
-                    </div>
-                    <div className="set-fld">
-                      <NumberField value={st.reps} inputMode="numeric" onCommit={(n) => setVal(ei, si, 'reps', n)} />
-                    </div>
+                    {cardio ? (
+                      <>
+                        <div className="set-fld">
+                          <NumberField
+                            value={Math.round((st.durationSec ?? 0) / 60)}
+                            inputMode="numeric"
+                            onCommit={(n) => setVal(ei, si, 'durationSec', n * 60)}
+                          />
+                        </div>
+                        <div className="set-fld">
+                          <NumberField
+                            value={st.distanceKm ?? 0}
+                            inputMode="decimal"
+                            onCommit={(n) => setVal(ei, si, 'distanceKm', n)}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="set-fld">
+                          <NumberField
+                            value={toDisplayWeight(st.weight, settings.units)}
+                            inputMode="decimal"
+                            onCommit={(n) => setVal(ei, si, 'weight', fromDisplayWeight(n, settings.units))}
+                          />
+                        </div>
+                        <div className="set-fld">
+                          <NumberField value={st.reps} inputMode="numeric" onCommit={(n) => setVal(ei, si, 'reps', n)} />
+                        </div>
+                      </>
+                    )}
                     <button
                       className="set-check"
                       aria-label={st.done ? `Mark set ${si + 1} not done` : `Mark set ${si + 1} done`}

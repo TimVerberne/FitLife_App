@@ -18,6 +18,12 @@ export interface SetEntry {
   weight: number;
   done: boolean;
   kind?: SetKind;
+  // Cardio exercises (body_part === 'cardio') log these instead of
+  // reps/weight — both stay 0 for a cardio set, same as a fresh row for any
+  // other exercise, so nothing downstream needs to special-case "missing"
+  // fields.
+  durationSec?: number;
+  distanceKm?: number;
 }
 
 export interface SessionEntry {

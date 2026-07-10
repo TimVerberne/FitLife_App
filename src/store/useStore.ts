@@ -8,6 +8,7 @@ import type { Friend, FriendRequest } from '../lib/friends';
 import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
+import { exerciseById, isCardioExercise } from '../lib/exercises';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -55,7 +56,14 @@ function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
     .sort((a, b) => b.startedAt - a.startedAt)[0];
   const entry = prior?.entries.find((e) => e.exerciseId === exerciseId);
   if (entry && entry.sets.length > 0) {
-    return entry.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: 'normal' as SetKind }));
+    return entry.sets.map((s) => ({
+      reps: s.reps,
+      weight: s.weight,
+      durationSec: s.durationSec,
+      distanceKm: s.distanceKm,
+      done: false,
+      kind: 'normal' as SetKind,
+    }));
   }
   // No history for this exercise — start with zero rows; the user adds sets manually.
   return [];
@@ -109,7 +117,7 @@ interface StoreState {
 
   startSession(routineId: string | null): void;
   setSessionName(name: string): void;
-  setVal(entryIdx: number, setIdx: number, field: 'reps' | 'weight', value: number): void;
+  setVal(entryIdx: number, setIdx: number, field: 'reps' | 'weight' | 'durationSec' | 'distanceKm', value: number): void;
   toggleSet(entryIdx: number, setIdx: number): void;
   addSet(entryIdx: number): void;
   removeSet(entryIdx: number, setIdx: number): void;
@@ -145,7 +153,7 @@ interface StoreState {
 
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
-  updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight', value: number): void;
+  updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight' | 'durationSec' | 'distanceKm', value: number): void;
 
   openSettings(): void;
   updateSettings(patch: Partial<Settings>): void;
@@ -312,8 +320,23 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!active) return;
     const entries = active.entries.map((e, ei) => {
       if (ei !== entryIdx) return e;
-      const last = e.sets[e.sets.length - 1] ?? { reps: 10, weight: 20 };
-      return { ...e, sets: [...e.sets, { reps: last.reps, weight: last.weight, done: false, kind: 'normal' as SetKind }] };
+      const ex = exerciseById(e.exerciseId);
+      // A brand-new strength set with no prior row falls back to a
+      // reasonable non-zero starting weight/reps — but that same fallback
+      // must never apply to a cardio exercise's first set, or the leftover
+      // reps/weight (never touched by the Min/Km inputs) would silently
+      // count toward kg-lifted volume despite the UI showing neither field.
+      const fallback = ex && isCardioExercise(ex)
+        ? { reps: 0, weight: 0, durationSec: undefined, distanceKm: undefined }
+        : { reps: 10, weight: 20, durationSec: undefined, distanceKm: undefined };
+      const last = e.sets[e.sets.length - 1] ?? fallback;
+      return {
+        ...e,
+        sets: [
+          ...e.sets,
+          { reps: last.reps, weight: last.weight, durationSec: last.durationSec, distanceKm: last.distanceKm, done: false, kind: 'normal' as SetKind },
+        ],
+      };
     });
     set({ active: { ...active, entries } });
   },
@@ -566,7 +589,10 @@ export const useStore = create<StoreState>((set, get) => ({
         routineId: null,
         name: session.name,
         startedAt: Date.now(),
-        entries: session.entries.map((e) => ({ exerciseId: e.exerciseId, sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, done: false, kind: s.kind })) })),
+        entries: session.entries.map((e) => ({
+          exerciseId: e.exerciseId,
+          sets: e.sets.map((s) => ({ reps: s.reps, weight: s.weight, durationSec: s.durationSec, distanceKm: s.distanceKm, done: false, kind: s.kind })),
+        })),
         restTimers: defaultRestTimersFor(Array.from(new Set(session.entries.map((e) => e.exerciseId))), get().settings.defaultRestSeconds),
       };
       set({ active, mode: 'session', restTimer: null });

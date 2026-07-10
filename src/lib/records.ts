@@ -17,6 +17,16 @@ export function isWorkingSet(s: SetEntry): boolean {
   return s.done && s.kind !== 'warmup' && s.reps > 0;
 }
 
+// Broader than isWorkingSet — also counts a completed cardio set (time
+// and/or distance logged, no reps/weight involved). Used anywhere "how many
+// sets did you do" is a plain completion count rather than a weight-training
+// specific figure like volume or a rep-max PR, which stay isWorkingSet-gated
+// so cardio (always 0 reps/weight) can never contribute to them.
+export function isLoggedSet(s: SetEntry): boolean {
+  if (!s.done || s.kind === 'warmup') return false;
+  return s.reps > 0 || (s.durationSec ?? 0) > 0 || (s.distanceKm ?? 0) > 0;
+}
+
 export function volumeOf(entries: SessionEntry[]): number {
   return entries.reduce(
     (a, e) => a + e.sets.filter(isWorkingSet).reduce((b, s) => b + s.reps * s.weight, 0),
@@ -25,7 +35,7 @@ export function volumeOf(entries: SessionEntry[]): number {
 }
 
 export function setsCountOf(entries: SessionEntry[]): number {
-  return entries.reduce((a, e) => a + e.sets.filter(isWorkingSet).length, 0);
+  return entries.reduce((a, e) => a + e.sets.filter(isLoggedSet).length, 0);
 }
 
 export function repsOf(entries: SessionEntry[]): number {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { exerciseById } from '../../lib/exercises';
+import { exerciseById, isCardioExercise } from '../../lib/exercises';
 import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { colorForPerson } from '../../lib/colors';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
@@ -62,6 +62,7 @@ export function WorkoutDetailSheet() {
       {session.entries.map((entry, i) => {
         const ex = exerciseById(entry.exerciseId);
         if (!ex) return null;
+        const cardio = isCardioExercise(ex);
         return (
           <div className="s-ex" key={i}>
             <div className="s-top">
@@ -70,27 +71,50 @@ export function WorkoutDetailSheet() {
             </div>
             {editing ? (
               <div>
-                {entry.sets.map((s, si) => (
-                  <div className="hist-edit-row" key={si}>
-                    <div className="set-fld">
-                      <NumberField
-                        value={toDisplayWeight(s.weight, units)}
-                        inputMode="decimal"
-                        onCommit={(n) => updateHistorySet(session.id, i, si, 'weight', fromDisplayWeight(n, units))}
-                      />
+                {entry.sets.map((s, si) =>
+                  cardio ? (
+                    <div className="hist-edit-row" key={si}>
+                      <div className="set-fld">
+                        <NumberField
+                          value={Math.round((s.durationSec ?? 0) / 60)}
+                          inputMode="numeric"
+                          onCommit={(n) => updateHistorySet(session.id, i, si, 'durationSec', n * 60)}
+                        />
+                      </div>
+                      <span className="hist-edit-x">min ·</span>
+                      <div className="set-fld">
+                        <NumberField
+                          value={s.distanceKm ?? 0}
+                          inputMode="decimal"
+                          onCommit={(n) => updateHistorySet(session.id, i, si, 'distanceKm', n)}
+                        />
+                      </div>
+                      <span className="hist-edit-x">km</span>
                     </div>
-                    <span className="hist-edit-x">{units} ×</span>
-                    <div className="set-fld">
-                      <NumberField value={s.reps} inputMode="numeric" onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)} />
+                  ) : (
+                    <div className="hist-edit-row" key={si}>
+                      <div className="set-fld">
+                        <NumberField
+                          value={toDisplayWeight(s.weight, units)}
+                          inputMode="decimal"
+                          onCommit={(n) => updateHistorySet(session.id, i, si, 'weight', fromDisplayWeight(n, units))}
+                        />
+                      </div>
+                      <span className="hist-edit-x">{units} ×</span>
+                      <div className="set-fld">
+                        <NumberField value={s.reps} inputMode="numeric" onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)} />
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {entry.sets.map((s, si) => (
                   <span className="tag" key={si} style={{ color: 'var(--ink)', background: 'var(--surface-2)' }}>
-                    {s.weight > 0 ? `${formatWeight(s.weight, units)}${units}` : 'bodyweight'} × {s.reps}
+                    {cardio
+                      ? `${Math.round((s.durationSec ?? 0) / 60)}min · ${(s.distanceKm ?? 0).toFixed(1)}km`
+                      : `${s.weight > 0 ? `${formatWeight(s.weight, units)}${units}` : 'bodyweight'} × ${s.reps}`}
                   </span>
                 ))}
               </div>
