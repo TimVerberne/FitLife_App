@@ -56,6 +56,12 @@ export default defineConfig({
               expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
+          {
+            // Auth/data calls must never be served stale from the service worker —
+            // failures here are expected (offline) and handled by the pendingSync queue.
+            urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/.*/,
+            handler: 'NetworkOnly',
+          },
         ],
       },
     }),

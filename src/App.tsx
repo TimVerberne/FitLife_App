@@ -12,6 +12,7 @@ import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
 import { AuthGate } from './features/auth/AuthGate';
+import { useAuthState } from './lib/auth';
 
 function CurrentScreen() {
   const mode = useStore((s) => s.mode);
@@ -38,10 +39,16 @@ function AuthedApp() {
   const loaded = useStore((s) => s.loaded);
   const active = useStore((s) => s.active);
   const mode = useStore((s) => s.mode);
+  const syncWithCloud = useStore((s) => s.syncWithCloud);
+  const { userId } = useAuthState();
 
   useEffect(() => {
     void init();
   }, [init]);
+
+  useEffect(() => {
+    if (loaded && userId) void syncWithCloud(userId);
+  }, [loaded, userId, syncWithCloud]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {

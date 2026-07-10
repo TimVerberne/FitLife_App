@@ -1,8 +1,9 @@
 import { create } from 'zustand';
-import { db, seedIfEmpty } from '../lib/db';
+import { db, seedIfEmpty, remapLegacyIdsToUuid } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
 import { applyTheme, loadSettings, saveSettings, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
+import * as cloudSync from '../lib/cloudSync';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -129,9 +130,12 @@ interface StoreState {
   exportData(): void;
   importData(file: File): void;
   clearAllData(): void;
+
+  syncWithCloud(userId: string): Promise<void>;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
+let cloudSyncStarted = false;
 
 export const useStore = create<StoreState>((set, get) => ({
   loaded: false,
@@ -353,7 +357,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     const durationMin = Math.max(1, Math.round((Date.now() - active.startedAt) / 60000));
     const newSession: WorkoutSession = {
-      id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: crypto.randomUUID(),
       person: 'You',
       name: active.name || 'Workout',
       routineId: active.routineId,
@@ -362,6 +366,7 @@ export const useStore = create<StoreState>((set, get) => ({
       entries,
     };
     void db.sessions.add(newSession);
+    void cloudSync.pushSession(newSession);
     const exerciseIds = Array.from(new Set(active.entries.map((e) => e.exerciseId)));
     const newRoutine = !active.routineId && exerciseIds.length > 0;
     set((s) => ({
@@ -374,8 +379,9 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   saveRoutineFromFinish(name, exerciseIds) {
-    const routine: Routine = { id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, name, exerciseIds, createdAt: Date.now() };
+    const routine: Routine = { id: crypto.randomUUID(), name, exerciseIds, createdAt: Date.now() };
     void db.routines.add(routine);
+    void cloudSync.pushRoutine(routine);
     set((s) => ({ routines: [...s.routines, routine], tab: 'train', mode: 'tabs', finishResult: null }));
     get().showToast('Routine saved');
   },
@@ -400,6 +406,8 @@ export const useStore = create<StoreState>((set, get) => ({
     const trimmed = name.trim();
     if (!trimmed) return;
     void db.routines.update(id, { name: trimmed });
+    const routine = get().routines.find((r) => r.id === id);
+    if (routine) void cloudSync.pushRoutine({ ...routine, name: trimmed });
     set((s) => ({ routines: s.routines.map((r) => (r.id === id ? { ...r, name: trimmed } : r)), sheet: null }));
     get().showToast('Routine renamed');
   },
@@ -407,6 +415,7 @@ export const useStore = create<StoreState>((set, get) => ({
   deleteRoutine(id) {
     get().confirm('Delete this routine? This can\'t be undone.', 'Yes, delete', () => {
       void db.routines.delete(id);
+      void cloudSync.deleteRoutineRemote(id);
       set((s) => ({ routines: s.routines.filter((r) => r.id !== id), sheet: null }));
       get().showToast('Routine deleted');
     }, true);
@@ -450,12 +459,13 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!session) return;
     const exerciseIds = Array.from(new Set(session.entries.map((e) => e.exerciseId)));
     const routine: Routine = {
-      id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      id: crypto.randomUUID(),
       name: `${session.name} (from ${session.person})`,
       exerciseIds,
       createdAt: Date.now(),
     };
     void db.routines.add(routine);
+    void cloudSync.pushRoutine(routine);
     set((s) => ({ routines: [...s.routines, routine] }));
     get().showToast('Copied to your routines');
     get().closeSheet();
@@ -498,7 +508,10 @@ export const useStore = create<StoreState>((set, get) => ({
     });
     set({ sessions });
     const updated = sessions.find((s) => s.id === sessionId);
-    if (updated) void db.sessions.put(updated);
+    if (updated) {
+      void db.sessions.put(updated);
+      void cloudSync.pushSession(updated);
+    }
   },
 
   setRestDuration(exerciseId, seconds) {
@@ -529,6 +542,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ settings });
     saveSettings(settings);
     if (patch.theme || patch.accent) applyTheme(settings);
+    void cloudSync.pushSettings(settings);
   },
 
   exportData() {
@@ -553,12 +567,15 @@ export const useStore = create<StoreState>((set, get) => ({
           return;
         }
         get().confirm('Import this backup? It will replace all current routines and workout history.', 'Import', () => {
-          void db.routines.clear().then(() => db.routines.bulkPut(data.routines!));
-          void db.sessions.clear().then(() => db.sessions.bulkPut(data.sessions!));
+          const { routines, sessions } = remapLegacyIdsToUuid(data.routines!, data.sessions!);
+          void db.routines.clear().then(() => db.routines.bulkPut(routines));
+          void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
+          void cloudSync.replaceAllRemote(routines, sessions);
           const settings = data.settings ? { ...get().settings, ...data.settings } : get().settings;
-          set({ routines: data.routines!, sessions: data.sessions!, settings, sheet: null });
+          set({ routines, sessions, settings, sheet: null });
           saveSettings(settings);
           applyTheme(settings);
+          void cloudSync.pushSettings(settings);
           get().showToast('Backup imported');
         }, true);
       })
@@ -569,8 +586,63 @@ export const useStore = create<StoreState>((set, get) => ({
     get().confirm('Delete all routines and workout history? This can\'t be undone.', 'Yes, delete everything', () => {
       void db.routines.clear();
       void db.sessions.clear();
+      void cloudSync.clearAllRemote();
       set({ routines: [], sessions: [], sheet: null });
       get().showToast('All data cleared');
     }, true);
+  },
+
+  async syncWithCloud(userId) {
+    if (cloudSyncStarted) return;
+    cloudSyncStarted = true;
+    const linkedKey = `fitflow-cloud-linked-${userId}`;
+    try {
+      await cloudSync.flushPendingSync();
+
+      if (localStorage.getItem(linkedKey) === '1') {
+        // Already linked — pull in anything created on another device, additively only.
+        const { newRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
+        if (newRoutines.length > 0) await db.routines.bulkPut(newRoutines);
+        if (newSessions.length > 0) await db.sessions.bulkPut(newSessions);
+        if (newRoutines.length > 0 || newSessions.length > 0) {
+          set((s) => ({ routines: [...s.routines, ...newRoutines], sessions: [...s.sessions, ...newSessions] }));
+        }
+        return;
+      }
+
+      const counts = await cloudSync.remoteCounts();
+      if (counts.routines === 0 && counts.sessions === 0) {
+        // Brand-new account — this device's local history becomes the account's history.
+        const { routines, sessions } = remapLegacyIdsToUuid(get().routines, get().sessions);
+        await db.routines.clear();
+        await db.routines.bulkPut(routines);
+        await db.sessions.clear();
+        await db.sessions.bulkPut(sessions);
+        set({ routines, sessions });
+        await cloudSync.uploadLocalDataOnFirstLogin(routines, sessions);
+      } else {
+        // Account already has data (signing in on a second device) — cloud wins for
+        // routines and your own sessions; local Sanne/Joost demo rows are untouched.
+        const remote = await cloudSync.fetchAllRemote();
+        const keptLocal = get().sessions.filter((s) => s.person !== 'You');
+        const sessions = [...remote.sessions, ...keptLocal];
+        await db.routines.clear();
+        await db.routines.bulkPut(remote.routines);
+        await db.sessions.clear();
+        await db.sessions.bulkPut(sessions);
+        set({ routines: remote.routines, sessions });
+        if (remote.settings) {
+          const settings = remote.settings;
+          set({ settings });
+          saveSettings(settings);
+          applyTheme(settings);
+        }
+      }
+      localStorage.setItem(linkedKey, '1');
+    } catch (err) {
+      console.error('Cloud sync failed, will retry next load', err);
+    } finally {
+      cloudSyncStarted = false;
+    }
   },
 }));
