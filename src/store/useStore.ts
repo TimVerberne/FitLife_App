@@ -682,7 +682,10 @@ export const useStore = create<StoreState>((set, get) => ({
 
   openFriends() {
     set({ sheet: 'friends' });
-    if (!get().friendsLoaded) void get().refreshFriends();
+    // Always refetch (not just on first-ever open) — there's no realtime
+    // subscription, so a request that arrived after this device's last
+    // fetch would otherwise stay invisible until a full page reload.
+    void get().refreshFriends();
   },
 
   async refreshFriends() {
