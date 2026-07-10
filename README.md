@@ -91,6 +91,54 @@ browser at mobile width. `npm run build` produces a production build;
 
 ## Update notes
 
+**Full app audit & bug fixes**
+- Ran a systematic pass across the data/sync layer, UI/calculations, and
+  auth/PWA code looking for real bugs. Fixed, worst first:
+  - **Security**: friendship requests could be forged — the RLS policy that
+    lets you accept/decline a request never pinned who the requester stays
+    as, so anyone could rewrite a throwaway self-request to name a real
+    victim and mark it accepted, instantly granting read access to that
+    victim's workout history. Closed with a database trigger that locks
+    `requester_id` on update.
+  - Every finished workout was timestamped with the *finish* time instead of
+    the actual start time.
+  - A fast account switch could let a stale account's cloud sync or friends
+    list get applied on top of the newly signed-in account (the in-flight
+    guard is now keyed per account, not a single global flag).
+  - A password-reset link could briefly show the live signed-in app before
+    flipping to the "set new password" screen.
+  - A 0-rep "done" set could register as a fake personal record; bodyweight
+    exercises now show your best rep count instead of a static "0 est. 1RM"
+    that never reflected real improvement.
+  - Weekly streak now respects your Monday/Sunday week-start setting instead
+    of a rolling 7-day window that disagreed with the training calendar next
+    to it; `relativeDate` no longer mislabels workouts logged near midnight.
+  - Stats: a friend with zero logged workouts no longer vanishes from the
+    leaderboard; "shared exercises" is now an actual intersection of what
+    you've both logged (was a union); the exercise picker list now respects
+    the selected time period like its stats already did.
+  - Accept/decline/remove-friend now shows an error instead of failing
+    silently; Wake Lock now reacquires itself after the tab is backgrounded
+    mid-workout; importing an old backup file can no longer resurrect
+    retired demo data or collide with a friend's display name.
+
+**Real friends**
+- Replaced the two hardcoded demo training partners (Sanne & Joost) with a
+  real friends system: search a friend by email or browse every account on
+  the app, send a request, accept/decline, unfriend — from a sheet reachable
+  next to the Settings gear on the You page. Accepted friends' workouts sync
+  in read-only (a Postgres row-level-security policy grants exactly that,
+  nothing else about their account is exposed), powering real Stats
+  head-to-head comparisons and Home's crew feed. New accounts now start
+  completely empty instead of pre-seeded with fake demo history.
+
+**Accounts & cloud sync**
+- The app now requires a real account (Supabase Auth, email + password) to
+  use at all. Once signed in it still works offline via a local IndexedDB
+  cache, syncing to Postgres under row-level security in the background —
+  data follows you to a second device, and you can permanently delete your
+  account (and everything tied to it) from Settings.
+
 **Home page quote**
 - The "Let's get to work." headline is now a random line from a 50-quote
   pool, in the same two-tone style (closing word/phrase in the accent
