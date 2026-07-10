@@ -637,17 +637,32 @@
   height: 220px;
   background: linear-gradient(160deg, var(--surface-2), #050505);
   position: relative;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
   margin: 0 -18px;
   width: calc(100% + 36px);
 }
 
-.detail-hero img {
+/* Absolutely positioned (rather than a grid/flex child) so the percentage
+   width/height below resolve against .detail-hero's own fixed 220px height
+   instead of being treated as indefinite and falling back to the GIF's
+   intrinsic aspect ratio, which was blowing the hero up to full width x
+   full width tall and burying the name/meta/instructions underneath it. */
+.detail-hero img,
+.detail-hero .placeholder {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: contain;
   background: #fff;
+}
+
+.detail-hero .placeholder {
+  display: grid;
+  place-items: center;
+  color: #4c4f4a;
+  font-family: var(--font-mono);
+  font-size: 10px;
 }
 
 .icon-btn {
