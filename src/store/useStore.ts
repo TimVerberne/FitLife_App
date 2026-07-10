@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { db, seedIfEmpty, remapLegacyIdsToUuid } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
-import { applyTheme, loadSettings, saveSettings, type Settings } from '../lib/settings';
+import { applyTheme, loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
+import { onSignedOut } from '../lib/supabase';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -602,6 +603,20 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       await cloudSync.flushPendingSync();
 
+      // Settings are account-specific, not device-specific — always adopt
+      // whatever this account has saved in the cloud (or, if it has none
+      // yet, seed the cloud with this device's current settings) regardless
+      // of which branch below runs. This is what makes the theme/accent
+      // switch to the signed-in account's own choice right after login.
+      const remoteSettings = await cloudSync.fetchSettings();
+      if (remoteSettings) {
+        set({ settings: remoteSettings });
+        saveSettings(remoteSettings);
+        applyTheme(remoteSettings);
+      } else {
+        await cloudSync.pushSettings(get().settings);
+      }
+
       if (localStorage.getItem(linkedKey) === '1') {
         // Already linked — pull in anything created on another device, additively only.
         const { newRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
@@ -634,12 +649,6 @@ export const useStore = create<StoreState>((set, get) => ({
         await db.sessions.clear();
         await db.sessions.bulkPut(sessions);
         set({ routines: remote.routines, sessions });
-        if (remote.settings) {
-          const settings = remote.settings;
-          set({ settings });
-          saveSettings(settings);
-          applyTheme(settings);
-        }
       }
       localStorage.setItem(linkedKey, '1');
     } catch (err) {
@@ -649,3 +658,13 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 }));
+
+// Settings are account-specific. Reset to the base defaults on sign-out so
+// the sign-in screen always shows the plain mint theme rather than whatever
+// the previous account had chosen — syncWithCloud() re-applies the signed-in
+// account's own settings right after the next successful login.
+onSignedOut(() => {
+  useStore.setState({ settings: DEFAULT_SETTINGS });
+  saveSettings(DEFAULT_SETTINGS);
+  applyTheme(DEFAULT_SETTINGS);
+});

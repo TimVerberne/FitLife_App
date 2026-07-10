@@ -120,12 +120,18 @@ export async function remoteCounts(): Promise<{ routines: number; sessions: numb
   return { routines: routines.count ?? 0, sessions: sessions.count ?? 0 };
 }
 
-export async function fetchAllRemote(): Promise<{ routines: Routine[]; sessions: WorkoutSession[]; settings: Settings | null }> {
+export async function fetchSettings(): Promise<Settings | null> {
   const userId = requireUserId();
-  const [routinesRes, sessionsRes, settingsRes] = await Promise.all([
+  const { data, error } = await supabase.from('settings').select('data').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return (data?.data as Settings | undefined) ?? null;
+}
+
+export async function fetchAllRemote(): Promise<{ routines: Routine[]; sessions: WorkoutSession[] }> {
+  const userId = requireUserId();
+  const [routinesRes, sessionsRes] = await Promise.all([
     supabase.from('routines').select('*').eq('user_id', userId),
     supabase.from('sessions').select('*').eq('user_id', userId),
-    supabase.from('settings').select('data').eq('user_id', userId).maybeSingle(),
   ]);
   if (routinesRes.error) throw routinesRes.error;
   if (sessionsRes.error) throw sessionsRes.error;
@@ -144,8 +150,7 @@ export async function fetchAllRemote(): Promise<{ routines: Routine[]; sessions:
     durationMin: s.duration_min,
     entries: s.entries,
   }));
-  const settings = (settingsRes.data?.data as Settings | undefined) ?? null;
-  return { routines, sessions, settings };
+  return { routines, sessions };
 }
 
 export async function uploadLocalDataOnFirstLogin(routines: Routine[], sessions: WorkoutSession[]): Promise<void> {
