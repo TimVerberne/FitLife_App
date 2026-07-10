@@ -394,6 +394,9 @@
   font-size: 16px;
   text-transform: capitalize;
   line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pick-tags {

@@ -1,7 +1,59 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { EXERCISES, bodyParts, searchExercises } from '../../lib/exercises';
 import { Thumb } from '../../components/Thumb';
+
+// Must match .pick-row's rendered height (44px thumb + 22px vertical padding
+// + 1px border). The list can run to 1000+ rows with the full exercise
+// dataset, and rendering all of them unconditionally measured ~2.7s to open
+// the sheet and ~38ms/frame while scrolling under a 4x CPU throttle — bad
+// enough to feel like a freeze on a real phone. Single-line name truncation
+// (see .pick-name) keeps every row exactly this height, which is what makes
+// simple fixed-height virtualization possible without a layout library.
+const ROW_HEIGHT = 67;
+const OVERSCAN = 6;
+
+function useVirtualRange(count: number, listRef: React.RefObject<HTMLDivElement | null>) {
+  const [range, setRange] = useState({ start: 0, end: Math.min(count, 24) });
+
+  useEffect(() => {
+    const listEl = listRef.current;
+    const scrollEl = listEl?.closest('.sheet-scroll') as HTMLElement | null;
+    if (!listEl || !scrollEl) return;
+
+    // getBoundingClientRect() forces a synchronous layout read, so calling it
+    // on every scroll frame (the naive approach) reintroduces the exact kind
+    // of jank virtualization is meant to remove. The list's offset within
+    // the scroll container only changes when the header above it does (query
+    // text edits don't resize it), so it's measured once here and the scroll
+    // handler afterwards only reads scrollTop/clientHeight — both already
+    // cached by the browser, no layout pass triggered.
+    const listTop = listEl.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop;
+
+    let raf = 0;
+    function update() {
+      raf = 0;
+      const scrolledIntoList = scrollEl!.scrollTop - listTop;
+      const start = Math.max(0, Math.floor(scrolledIntoList / ROW_HEIGHT) - OVERSCAN);
+      const visibleRows = Math.ceil(scrollEl!.clientHeight / ROW_HEIGHT) + OVERSCAN * 2;
+      setRange({ start, end: Math.min(count, start + visibleRows) });
+    }
+    function onScroll() {
+      if (raf) return;
+      raf = requestAnimationFrame(update);
+    }
+    update();
+    scrollEl.addEventListener('scroll', onScroll);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      scrollEl.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [count, listRef]);
+
+  return range;
+}
 
 export function PickerSheet() {
   const active = useStore((s) => s.active);
@@ -21,6 +73,17 @@ export function PickerSheet() {
 
   const list = useMemo(() => searchExercises(pickQuery, pickBodyPart), [pickQuery, pickBodyPart]);
   const bps = useMemo(() => ['all', ...bodyParts()], []);
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const range = useVirtualRange(list.length, listRef);
+
+  // A filtered-down list makes the previous scroll offset meaningless (it
+  // could now point past the end, or mid-way through unrelated rows) — jump
+  // back to the top of the list whenever the query or filter changes.
+  useEffect(() => {
+    const scrollEl = listRef.current?.closest('.sheet-scroll');
+    scrollEl?.scrollTo(0, 0);
+  }, [pickQuery, pickBodyPart]);
 
   if (!active) return null;
   const alreadyIn = new Set(active.entries.map((e) => e.exerciseId));
@@ -60,39 +123,43 @@ export function PickerSheet() {
         </div>
       </div>
 
-      {list.map((ex) => {
-        const isIn = alreadyIn.has(ex.id);
-        const isSelected = selected.has(ex.id);
-        return (
-          <div
-            className="pick-row"
-            key={ex.id}
-            role="button"
-            tabIndex={0}
-            onClick={() => toggle(ex.id)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') toggle(ex.id);
-            }}
-          >
-            <Thumb className="pick-thumb" src={ex.image} alt={ex.name} />
-            <div className="pick-b">
-              <div className="pick-name">{ex.name}</div>
-              <div className="pick-tags">{ex.target} · {ex.equipment}</div>
-            </div>
-            <button
-              className="info-btn"
-              aria-label={`View ${ex.name} details`}
-              onClick={(e) => {
-                e.stopPropagation();
-                openDetail(ex.id);
+      <div ref={listRef}>
+        <div style={{ height: range.start * ROW_HEIGHT }} />
+        {list.slice(range.start, range.end).map((ex) => {
+          const isIn = alreadyIn.has(ex.id);
+          const isSelected = selected.has(ex.id);
+          return (
+            <div
+              className="pick-row"
+              key={ex.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => toggle(ex.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') toggle(ex.id);
               }}
             >
-              i
-            </button>
-            <div className={`pick-check${isIn || isSelected ? ' on' : ''}`}>✓</div>
-          </div>
-        );
-      })}
+              <Thumb className="pick-thumb" src={ex.image} alt={ex.name} />
+              <div className="pick-b">
+                <div className="pick-name">{ex.name}</div>
+                <div className="pick-tags">{ex.target} · {ex.equipment}</div>
+              </div>
+              <button
+                className="info-btn"
+                aria-label={`View ${ex.name} details`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openDetail(ex.id);
+                }}
+              >
+                i
+              </button>
+              <div className={`pick-check${isIn || isSelected ? ' on' : ''}`}>✓</div>
+            </div>
+          );
+        })}
+        <div style={{ height: (list.length - range.end) * ROW_HEIGHT }} />
+      </div>
       {list.length === 0 && <p style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>Nothing found</p>}
 
       <div className="sheet-footer">
