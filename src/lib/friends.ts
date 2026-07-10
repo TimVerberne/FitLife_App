@@ -38,6 +38,17 @@ export async function searchProfileByEmail(email: string): Promise<FriendProfile
   return toProfile(data);
 }
 
+// Every other account on the app — the "profiles readable by authenticated
+// users" policy already permits this, no schema change needed. Used for the
+// "browse all accounts" list so you can send a request with one tap instead
+// of typing an exact email.
+export async function fetchAllProfiles(): Promise<FriendProfile[]> {
+  const userId = requireUserId();
+  const { data, error } = await supabase.from('profiles').select('id, email, display_name').neq('id', userId).order('email');
+  if (error) throw error;
+  return (data ?? []).map(toProfile);
+}
+
 export type SendFriendRequestResult = { ok: true } | { ok: false; reason: 'self' | 'already-pending' | 'already-friends' | 'unknown' };
 
 export async function sendFriendRequest(addresseeId: string): Promise<SendFriendRequestResult> {

@@ -147,6 +147,7 @@ interface StoreState {
   refreshFriends(): Promise<void>;
   refreshFriendSessions(): Promise<void>;
   sendFriendRequest(email: string): Promise<friendsApi.SendFriendRequestResult | { ok: false; reason: 'not-found' }>;
+  sendFriendRequestToProfile(profileId: string): Promise<friendsApi.SendFriendRequestResult>;
   acceptFriendRequest(friendshipId: string): Promise<void>;
   declineFriendRequest(friendshipId: string): Promise<void>;
   removeFriend(friendshipId: string): void;
@@ -714,7 +715,11 @@ export const useStore = create<StoreState>((set, get) => ({
   async sendFriendRequest(email) {
     const profile = await friendsApi.searchProfileByEmail(email);
     if (!profile) return { ok: false, reason: 'not-found' };
-    const result = await friendsApi.sendFriendRequest(profile.id);
+    return get().sendFriendRequestToProfile(profile.id);
+  },
+
+  async sendFriendRequestToProfile(profileId) {
+    const result = await friendsApi.sendFriendRequest(profileId);
     if (result.ok) void get().refreshFriends();
     return result;
   },
