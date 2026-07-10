@@ -9,8 +9,6 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 60px rgba(0, 0, 0, 0.6);
-  padding-top: var(--install-banner-h, 0px);
-  transition: padding-top 0.2s ease;
 }
 
 .screen {
@@ -1912,60 +1910,59 @@
 }
 
 /* -------- install prompt -------- */
-.install-banner {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: var(--maxw);
-  z-index: 70;
+.install-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  padding-top: max(10px, env(safe-area-inset-top));
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--line);
+  gap: 12px;
+  margin-top: 12px;
+  border-color: var(--accent);
 }
 
-.install-banner-text {
+.install-card-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 17px;
+}
+
+.install-card-body {
   flex: 1;
   min-width: 0;
+}
+
+.install-card-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.install-card-sub {
   font-size: 12px;
   line-height: 1.4;
+  color: var(--faint);
+  margin-top: 2px;
+}
+
+.install-card-sub b {
   color: var(--muted);
 }
 
-.install-banner-text b {
-  color: var(--ink);
-}
-
-.install-banner-icon {
-  color: var(--accent);
-}
-
-.install-banner-btn {
+.install-card-btn {
   flex: none;
   background: var(--accent);
   color: var(--accent-ink);
   border: none;
   border-radius: var(--r-sm);
-  padding: 7px 12px;
+  padding: 8px 14px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 12px;
   text-transform: uppercase;
-  cursor: pointer;
-}
-
-.install-banner-close {
-  flex: none;
-  background: none;
-  border: none;
-  color: var(--faint);
-  font-size: 15px;
-  padding: 4px;
   cursor: pointer;
 }
 

@@ -12,7 +12,6 @@ import { RestTimerWatcher } from './components/RestTimerWatcher';
 import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
-import { InstallPrompt } from './components/InstallPrompt';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuthState } from './lib/auth';
 
@@ -30,12 +29,9 @@ function CurrentScreen() {
 
 function App() {
   return (
-    <>
-      <InstallPrompt />
-      <AuthGate>
-        <AuthedApp />
-      </AuthGate>
-    </>
+    <AuthGate>
+      <AuthedApp />
+    </AuthGate>
   );
 }
 

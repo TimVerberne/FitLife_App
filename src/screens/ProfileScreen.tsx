@@ -21,6 +21,7 @@ import { RadarChart } from '../components/RadarChart';
 import { TrainingCalendar } from '../components/TrainingCalendar';
 import { PeriodPicker } from '../components/PeriodPicker';
 import { Thumb } from '../components/Thumb';
+import { InstallCard } from '../components/InstallCard';
 
 export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
@@ -64,14 +65,20 @@ export function ProfileScreen() {
           <div className="h1" style={{ fontSize: 30 }}>You</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="info-btn" aria-label="Friends" onClick={openFriends} style={{ width: 38, height: 38, fontSize: 15 }}>
-            👥
+          <button className="info-btn" aria-label="Friends" onClick={openFriends} style={{ width: 38, height: 38 }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+            </svg>
           </button>
           <button className="info-btn" aria-label="Settings" onClick={openSettings} style={{ width: 38, height: 38, fontSize: 17 }}>
             ⚙
           </button>
         </div>
       </div>
+
+      <InstallCard />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 6 }}>
         <div
