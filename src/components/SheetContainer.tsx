@@ -6,6 +6,7 @@ import { WorkoutDetailSheet } from '../features/history/WorkoutDetailSheet';
 import { RoutineActionsSheet } from '../features/routines/RoutineActionsSheet';
 import { SettingsSheet } from '../features/settings/SettingsSheet';
 import { FriendsSheet } from '../features/friends/FriendsSheet';
+import { ImportPreviewSheet } from '../features/settings/ImportPreviewSheet';
 
 const DISMISS_THRESHOLD = 90;
 
@@ -73,6 +74,7 @@ export function SheetContainer() {
           {sheet === 'routineActions' && <RoutineActionsSheet />}
           {sheet === 'settings' && <SettingsSheet />}
           {sheet === 'friends' && <FriendsSheet />}
+          {sheet === 'importPreview' && <ImportPreviewSheet />}
         </div>
       </div>
     </>

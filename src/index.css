@@ -1841,6 +1841,16 @@
   color: var(--muted);
 }
 
+.import-note {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 11px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 /* -------- sheets -------- */
 .scrim {
   position: fixed;

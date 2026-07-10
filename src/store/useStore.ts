@@ -11,7 +11,15 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
-export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | null;
+export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | 'importPreview' | null;
+
+export interface ImportPreview {
+  routines: Routine[];
+  sessions: WorkoutSession[];
+  unmatchedNames: string[];
+  isCsv: boolean;
+  settingsPatch?: Partial<Settings>;
+}
 
 // Apply the persisted theme immediately on load, before the first paint.
 applyTheme(loadSettings());
@@ -75,6 +83,7 @@ interface StoreState {
   viewingRoutineId: string | null;
   pickQuery: string;
   pickBodyPart: string;
+  importPreview: ImportPreview | null;
   pickSelected: Set<string>;
 
   // dialog + toast
@@ -142,6 +151,8 @@ interface StoreState {
   updateSettings(patch: Partial<Settings>): void;
   exportData(): void;
   importData(file: File): void;
+  confirmImport(): void;
+  cancelImportPreview(): void;
   clearAllData(): void;
   deleteAccount(): void;
 
@@ -196,6 +207,7 @@ export const useStore = create<StoreState>((set, get) => ({
   pickQuery: '',
   pickBodyPart: 'all',
   pickSelected: new Set(),
+  importPreview: null,
 
   dialog: null,
   toastMsg: '',
@@ -477,6 +489,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const { sheet, active } = get();
     if (sheet === 'detail' && active) {
       set({ sheet: 'picker' });
+    } else if (sheet === 'importPreview') {
+      // Dismissing any way (swipe, backdrop tap, Escape) should discard the
+      // pending import and land back on Settings, same as tapping Cancel —
+      // otherwise the preview data would linger in memory even though the
+      // sheet closed, and closing to nothing would drop the user out of
+      // Settings entirely just for backing out of an import attempt.
+      set({ sheet: 'settings', importPreview: null });
     } else {
       set({ sheet: null });
     }
@@ -634,22 +653,10 @@ export const useStore = create<StoreState>((set, get) => ({
             get().showToast('No importable workouts found in that file');
             return;
           }
-          const skippedNote = result.unmatchedNames.length > 0
-            ? ` ${result.unmatchedNames.length} exercise${result.unmatchedNames.length === 1 ? '' : 's'} couldn't be matched and will be skipped (e.g. ${result.unmatchedNames.slice(0, 3).join(', ')}).`
-            : '';
-          get().confirm(
-            `Import ${result.sessions.length} workouts (${result.totalSets} sets) from this file? It will replace all current routines and workout history.${skippedNote}`,
-            'Import',
-            () => {
-              const { routines, sessions, settings } = prepareImportedData(get().settings, result.routines, result.sessions);
-              void db.routines.clear().then(() => db.routines.bulkPut(routines));
-              void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
-              void cloudSync.replaceAllRemote(routines, sessions);
-              set({ routines, sessions, settings, sheet: null });
-              get().showToast('Workouts imported');
-            },
-            true,
-          );
+          set({
+            importPreview: { routines: result.routines, sessions: result.sessions, unmatchedNames: result.unmatchedNames, isCsv: true },
+            sheet: 'importPreview',
+          });
           return;
         }
 
@@ -658,19 +665,35 @@ export const useStore = create<StoreState>((set, get) => ({
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
           return;
         }
-        get().confirm('Import this backup? It will replace all current routines and workout history.', 'Import', () => {
-          const { routines, sessions, settings } = prepareImportedData(get().settings, data.routines!, data.sessions!, data.settings);
-          void db.routines.clear().then(() => db.routines.bulkPut(routines));
-          void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
-          void cloudSync.replaceAllRemote(routines, sessions);
-          set({ routines, sessions, settings, sheet: null });
-          saveSettings(settings);
-          applyTheme(settings);
-          void cloudSync.pushSettings(settings);
-          get().showToast('Backup imported');
-        }, true);
+        set({
+          importPreview: { routines: data.routines, sessions: data.sessions, unmatchedNames: [], isCsv: false, settingsPatch: data.settings },
+          sheet: 'importPreview',
+        });
       })
       .catch(() => get().showToast('Could not read that file'));
+  },
+
+  confirmImport() {
+    const preview = get().importPreview;
+    if (!preview) return;
+    const { routines, sessions, settings } = prepareImportedData(get().settings, preview.routines, preview.sessions, preview.settingsPatch);
+    void db.routines.clear().then(() => db.routines.bulkPut(routines));
+    void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
+    void cloudSync.replaceAllRemote(routines, sessions);
+    set({ routines, sessions, settings, sheet: null, importPreview: null });
+    if (preview.settingsPatch) {
+      saveSettings(settings);
+      applyTheme(settings);
+      void cloudSync.pushSettings(settings);
+    }
+    get().showToast(preview.isCsv ? 'Workouts imported' : 'Backup imported');
+  },
+
+  cancelImportPreview() {
+    // The preview only ever gets here from Settings' "Import backup" button —
+    // back out to it rather than closing everything, same as declining to
+    // keep viewing whatever screen was open before.
+    set({ importPreview: null, sheet: 'settings' });
   },
 
   clearAllData() {
