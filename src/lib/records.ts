@@ -1,4 +1,5 @@
 import type { SessionEntry, SetEntry, WorkoutSession } from './types';
+import type { WeekStart } from './settings';
 import { exerciseById } from './exercises';
 
 const DAY = 86_400_000;
@@ -7,9 +8,13 @@ export function epley(weight: number, reps: number): number {
   return reps <= 1 ? weight : weight * (1 + reps / 30);
 }
 
-// Warm-up sets don't count toward volume, reps, or records — only working sets do.
+// Warm-up sets don't count toward volume, reps, or records — only working sets
+// do. A "done" set with 0 reps isn't a real lift either (e.g. a set marked
+// done before typing in a rep count) — without this, epley(weight, 0) still
+// returns the raw weight unchanged (same as a genuine 1-rep single), so a
+// stray 0-rep set could register as a brand-new personal record.
 export function isWorkingSet(s: SetEntry): boolean {
-  return s.done && s.kind !== 'warmup';
+  return s.done && s.kind !== 'warmup' && s.reps > 0;
 }
 
 export function volumeOf(entries: SessionEntry[]): number {
@@ -27,8 +32,18 @@ export function repsOf(entries: SessionEntry[]): number {
   return entries.reduce((a, e) => a + e.sets.filter(isWorkingSet).reduce((b, s) => b + s.reps, 0), 0);
 }
 
+function startOfDay(ts: number): number {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Counts calendar-day boundaries crossed, not raw elapsed hours — a workout
+// logged at 1am and viewed 46 hours later (only one midnight crossed) reads
+// "Yesterday", not "2 days ago"; one logged at 11pm and viewed 2 hours later
+// (already past midnight) reads "Yesterday", not "Today".
 export function relativeDate(ts: number, now = Date.now()): string {
-  const d = Math.round((now - ts) / DAY);
+  const d = Math.round((startOfDay(now) - startOfDay(ts)) / DAY);
   if (d <= 0) return 'Today';
   if (d === 1) return 'Yesterday';
   if (d < 7) return `${d} days ago`;
@@ -178,13 +193,25 @@ export function daysSinceLastWorkout(sessions: WorkoutSession[], person = 'You',
   return Math.max(0, Math.round((today.getTime() - lastDay.getTime()) / DAY));
 }
 
-export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = Date.now()): number {
+function startOfWeek(ts: number, weekStart: WeekStart): number {
+  const d = new Date(startOfDay(ts));
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diff = weekStart === 'mon' ? (day + 6) % 7 : day;
+  d.setDate(d.getDate() - diff);
+  return d.getTime();
+}
+
+// Aligned to the same calendar-week boundary the training calendar grid
+// uses (per the weekStart setting) — a rolling "any 7-day window" streak
+// would silently disagree with the week grid rendered right next to it.
+export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = Date.now(), weekStart: WeekStart = 'sun'): number {
   const mine = sessions.filter((h) => h.person === person);
+  const currentWeekStart = startOfWeek(now, weekStart);
   let streak = 0;
   for (let i = 0; ; i++) {
-    const end = now - i * 7 * DAY;
-    const start = end - 7 * DAY;
-    const hasSession = mine.some((h) => h.startedAt > start && h.startedAt <= end);
+    const start = currentWeekStart - i * 7 * DAY;
+    const end = start + 7 * DAY;
+    const hasSession = mine.some((h) => h.startedAt >= start && h.startedAt < end);
     if (!hasSession) break;
     streak += 1;
   }

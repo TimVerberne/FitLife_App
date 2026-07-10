@@ -125,6 +125,13 @@ export async function remoteCounts(): Promise<{ routines: number; sessions: numb
     supabase.from('routines').select('id', { count: 'exact', head: true }).eq('user_id', userId),
     supabase.from('sessions').select('id', { count: 'exact', head: true }).eq('user_id', userId),
   ]);
+  // A transient query error must not be silently read as "0 rows" — that's
+  // indistinguishable from a genuinely empty account and would make
+  // syncWithCloud wrongly take the "brand new account" branch for an
+  // existing account, permanently marking this device linked without ever
+  // having pulled its real history down.
+  if (routines.error) throw routines.error;
+  if (sessions.error) throw sessions.error;
   return { routines: routines.count ?? 0, sessions: sessions.count ?? 0 };
 }
 

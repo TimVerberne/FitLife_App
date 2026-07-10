@@ -139,6 +139,24 @@ function labelFor(profile: FriendProfile): string {
   return profile.displayName?.trim() || profile.email.split('@')[0];
 }
 
+// Disambiguated display labels for every accepted friend, independent of
+// whether they've logged any sessions yet — a friend with zero workouts
+// still needs a stable label to show up (e.g. with a 0-volume row) rather
+// than being invisible until their first sync. Exported so callers that
+// need "every friend's label" (not just labels attached to session rows)
+// don't have to re-derive the same disambiguation logic.
+export function labelsForFriends(friendsList: Friend[]): Map<string, string> {
+  const rawLabels = friendsList.map((f) => labelFor(f.profile));
+  const counts = new Map<string, number>();
+  rawLabels.forEach((l) => counts.set(l, (counts.get(l) ?? 0) + 1));
+  const byId = new Map<string, string>();
+  friendsList.forEach((f, i) => {
+    const raw = rawLabels[i];
+    byId.set(f.profile.id, (counts.get(raw) ?? 0) > 1 ? `${raw} (${f.profile.id.slice(0, 4)})` : raw);
+  });
+  return byId;
+}
+
 async function fetchFriendSessions(friend: Friend, label: string): Promise<WorkoutSession[]> {
   const { data, error } = await supabase.from('sessions').select('*').eq('user_id', friend.profile.id);
   if (error) throw error;
@@ -158,13 +176,9 @@ async function fetchFriendSessions(friend: Friend, label: string): Promise<Worko
 // WorkoutSession-shaped objects tagged with that friend's display label —
 // for in-memory display only, never written to Dexie or pushed anywhere.
 export async function fetchAllFriendSessions(friendsList: Friend[]): Promise<WorkoutSession[]> {
-  const rawLabels = friendsList.map((f) => labelFor(f.profile));
-  const counts = new Map<string, number>();
-  rawLabels.forEach((l) => counts.set(l, (counts.get(l) ?? 0) + 1));
-  const labels = friendsList.map((f, i) => {
-    const raw = rawLabels[i];
-    return (counts.get(raw) ?? 0) > 1 ? `${raw} (${f.profile.id.slice(0, 4)})` : raw;
-  });
-  const results = await Promise.all(friendsList.map((f, i) => fetchFriendSessions(f, labels[i]).catch(() => [] as WorkoutSession[])));
+  const labels = labelsForFriends(friendsList);
+  const results = await Promise.all(
+    friendsList.map((f) => fetchFriendSessions(f, labels.get(f.profile.id)!).catch(() => [] as WorkoutSession[])),
+  );
   return results.flat();
 }

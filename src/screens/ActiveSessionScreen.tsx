@@ -77,15 +77,31 @@ export function ActiveSessionScreen() {
     if (!nav.wakeLock) return;
     let sentinel: { release: () => Promise<void> } | null = null;
     let cancelled = false;
-    nav.wakeLock
-      .request('screen')
-      .then((s) => {
-        if (cancelled) void s.release();
-        else sentinel = s;
-      })
-      .catch(() => {});
+
+    function acquire() {
+      nav.wakeLock!
+        .request('screen')
+        .then((s) => {
+          if (cancelled) void s.release();
+          else sentinel = s;
+        })
+        .catch(() => {});
+    }
+
+    // The browser auto-releases the wake lock as soon as the tab is hidden
+    // and never reacquires it on its own — without this listener,
+    // backgrounding the app mid-workout (even briefly, e.g. to check a
+    // notification) permanently loses "keep screen awake" for the rest of
+    // that session, since this effect's own dependency never changes again.
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible' && !sentinel) acquire();
+    }
+
+    acquire();
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       void sentinel?.release();
     };
   }, [settings.keepScreenAwake]);

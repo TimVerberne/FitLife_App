@@ -177,8 +177,17 @@ export function ProfileScreen() {
               <div className="rec-sub">Best set: {formatWeight(r.maxWeight, units)} {units} × {r.maxWeightReps}</div>
             </div>
             <div className="rec-val">
-              <div className="n">{Math.round(toDisplayWeight(r.estOneRepMax, units))}</div>
-              <div className="u">est. 1RM</div>
+              {r.maxWeight > 0 ? (
+                <>
+                  <div className="n">{Math.round(toDisplayWeight(r.estOneRepMax, units))}</div>
+                  <div className="u">est. 1RM</div>
+                </>
+              ) : (
+                <>
+                  <div className="n">{r.maxWeightReps}</div>
+                  <div className="u">best reps</div>
+                </>
+              )}
             </div>
           </div>
         );

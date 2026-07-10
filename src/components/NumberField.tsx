@@ -32,11 +32,17 @@ export function NumberField({
         setFocused(false);
         const n = parseFloat(text);
         if (Number.isNaN(n)) {
-          onCommit(0);
+          if (value !== 0) onCommit(0);
           setText('0');
         } else {
           const clamped = Math.max(0, n);
-          onCommit(clamped);
+          // Skip the commit if nothing actually changed — a plain
+          // focus-then-blur with no edit (e.g. tapping the field then
+          // immediately tapping the "done" checkmark) would otherwise still
+          // round-trip the displayed value through onCommit, which in lb
+          // mode can drift the underlying stored kg value by a fraction of
+          // a kg due to the display rounding not being perfectly reversible.
+          if (clamped !== value) onCommit(clamped);
           setText(String(clamped));
         }
       }}

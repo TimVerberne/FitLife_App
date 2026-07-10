@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { useAuthState, updatePassword, signOut } from '../../lib/auth';
+import { useAuthState, updatePassword, signOut, clearRecovery } from '../../lib/auth';
 import { AuthScreen } from './AuthScreen';
 
 function RecoveryScreen() {
@@ -15,6 +15,7 @@ function RecoveryScreen() {
     const { error: err } = await updatePassword(password);
     setLoading(false);
     if (err) setError(err.message);
+    else clearRecovery();
   }
 
   return (

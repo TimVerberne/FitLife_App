@@ -147,3 +147,30 @@ end;
 $$;
 
 grant execute on function public.delete_own_account() to authenticated;
+
+-- Security fix: the "addressee updates status" policy's WITH CHECK only
+-- constrains the *new* row's addressee_id/status — it never pins
+-- requester_id to stay the same. RLS policies can't compare OLD vs NEW
+-- columns on their own (USING sees the pre-update row, WITH CHECK sees the
+-- post-update row, but neither sees both at once), so this needs a trigger.
+-- Without it, anyone who is the addressee on ANY friendship row (including
+-- one they created themselves, from a throwaway account, to themselves) can
+-- UPDATE that row's requester_id to an arbitrary victim's profile id while
+-- setting status='accepted' — instantly satisfying the "friends can read
+-- your sessions" policy and reading that victim's entire workout history,
+-- with no consent or awareness on the victim's part.
+create or replace function public.lock_friendship_requester()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.requester_id <> old.requester_id then
+    raise exception 'requester_id cannot be changed';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger friendships_lock_requester
+  before update on public.friendships
+  for each row execute procedure public.lock_friendship_requester();

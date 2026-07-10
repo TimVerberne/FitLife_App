@@ -24,7 +24,7 @@ export function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSessio
   const weekStart = useStore((s) => s.settings.weekStart);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const byDay = useMemo(() => sessionsByDay(sessions), [sessions]);
-  const streak = useMemo(() => weeklyStreak(sessions), [sessions]);
+  const streak = useMemo(() => weeklyStreak(sessions, 'You', Date.now(), weekStart), [sessions, weekStart]);
   const restDays = useMemo(() => daysSinceLastWorkout(sessions), [sessions]);
   const todayKey = useMemo(() => startOfDay(new Date()).getTime(), []);
   const weekdayLabels = weekStart === 'mon' ? WEEKDAY_LABELS_MON : WEEKDAY_LABELS_SUN;

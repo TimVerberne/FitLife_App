@@ -19,7 +19,7 @@ export function HomeScreen() {
     () => toDisplayWeight(mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), settings.units),
     [mySessions, settings.units],
   );
-  const streak = useMemo(() => weeklyStreak(sessions), [sessions]);
+  const streak = useMemo(() => weeklyStreak(sessions, 'You', Date.now(), settings.weekStart), [sessions, settings.weekStart]);
 
   const nextRoutine = useMemo(() => {
     if (routines.length === 0) return null;

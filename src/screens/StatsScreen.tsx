@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
 import { MUSCLE_AXES, MUSCLE_GROUP, epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
+import type { WeekStart } from '../lib/settings';
 import { colorForPerson } from '../lib/colors';
+import { labelsForFriends } from '../lib/friends';
 import { exerciseById } from '../lib/exercises';
 import { formatWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
@@ -10,7 +12,7 @@ import { Thumb } from '../components/Thumb';
 type Period = 'week' | 'month' | 'all';
 const PERIOD_DAYS: Record<Period, number | null> = { week: 7, month: 30, all: null };
 
-function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number | null, now: number) {
+function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number | null, now: number, weekStart: WeekStart) {
   const cutoff = periodDays ? now - periodDays * 86_400_000 : -Infinity;
   const mine = sessions.filter((h) => h.person === person && h.startedAt >= cutoff);
   return {
@@ -20,7 +22,7 @@ function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number
     sets: mine.reduce((a, h) => a + setsCountOf(h.entries), 0),
     totalMinutes: mine.reduce((a, h) => a + h.durationMin, 0),
     records: mine.reduce((a, h) => a + newRecordsInWorkout(sessions, h), 0),
-    streak: weeklyStreak(sessions, person, now),
+    streak: weeklyStreak(sessions, person, now, weekStart),
   };
 }
 
@@ -57,16 +59,22 @@ export function StatsScreen() {
   const openFriends = useStore((s) => s.openFriends);
   const sessions = useMemo(() => [...ownSessions, ...friendSessionsRaw], [ownSessions, friendSessionsRaw]);
   const units = useStore((s) => s.settings.units);
+  const weekStart = useStore((s) => s.settings.weekStart);
   const [period, setPeriod] = useState<Period>('week');
   const [selectedRival, setSelectedRival] = useState<Person | null>(null);
   const now = Date.now();
 
   const board = useMemo(() => {
-    const people: Person[] = ['You', ...new Set(friendSessionsRaw.map((s) => s.person))];
+    // Derived from the actual friend list, not from friendSessionsRaw — a
+    // friend who hasn't logged any workouts yet would otherwise have no
+    // entry in friendSessionsRaw at all and silently disappear from the
+    // leaderboard/head-to-head instead of showing up with zeroes.
+    const friendLabels = labelsForFriends(acceptedFriends);
+    const people: Person[] = ['You', ...new Set(friendLabels.values())];
     return people
-      .map((p) => statsFor(sessions, p, PERIOD_DAYS[period], now))
+      .map((p) => statsFor(sessions, p, PERIOD_DAYS[period], now, weekStart))
       .sort((a, b) => b.volume - a.volume);
-  }, [sessions, friendSessionsRaw, period, now]);
+  }, [sessions, acceptedFriends, period, now, weekStart]);
 
   const you = board.find((b) => b.person === 'You')!;
   const friends = board.filter((b) => b.person !== 'You');
@@ -74,15 +82,26 @@ export function StatsScreen() {
 
   const sharedExercises = useMemo(() => {
     if (!rival) return [];
-    const ids = new Set<string>();
+    // Intersection, not union — comparing an exercise only one of you has
+    // ever logged isn't a real head-to-head, it's just "0 vs your numbers".
+    // Also respects the period filter, same as exerciseStatsFor below —
+    // otherwise an exercise trained outside the selected window would still
+    // show up in this list, just always reading "0"/"—" once selected.
+    const cutoff = PERIOD_DAYS[period] ? now - PERIOD_DAYS[period]! * 86_400_000 : -Infinity;
+    const mineIds = new Set<string>();
+    const rivalIds = new Set<string>();
     sessions
-      .filter((h) => h.person === 'You' || h.person === rival.person)
-      .forEach((h) => h.entries.forEach((e) => ids.add(e.exerciseId)));
-    return Array.from(ids)
+      .filter((h) => h.startedAt >= cutoff)
+      .forEach((h) => {
+        if (h.person === 'You') h.entries.forEach((e) => mineIds.add(e.exerciseId));
+        else if (h.person === rival.person) h.entries.forEach((e) => rivalIds.add(e.exerciseId));
+      });
+    return Array.from(mineIds)
+      .filter((id) => rivalIds.has(id))
       .map(exerciseById)
       .filter((e): e is NonNullable<typeof e> => e !== undefined)
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [sessions, rival]);
+  }, [sessions, rival, period, now]);
 
   const muscleGroups = useMemo(() => {
     const set = new Set<string>();
@@ -226,7 +245,7 @@ export function StatsScreen() {
           <div className="section-h">Exercise head to head</div>
           {sharedExercises.length === 0 ? (
             <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 4 }}>
-              Neither of you has logged an exercise yet.
+              No shared exercises yet — log the same exercise as each other to see a head-to-head.
             </p>
           ) : (
             <>

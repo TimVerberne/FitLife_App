@@ -5,7 +5,7 @@ import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
 import * as friendsApi from '../lib/friends';
 import type { Friend, FriendRequest } from '../lib/friends';
-import { onSignedOut } from '../lib/supabase';
+import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
@@ -155,7 +155,7 @@ interface StoreState {
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
-let cloudSyncStarted = false;
+let cloudSyncUserId: string | null = null;
 
 export const useStore = create<StoreState>((set, get) => ({
   loaded: false,
@@ -390,7 +390,7 @@ export const useStore = create<StoreState>((set, get) => ({
       person: 'You',
       name: active.name || 'Workout',
       routineId: active.routineId,
-      startedAt: Date.now(),
+      startedAt: active.startedAt,
       durationMin,
       entries,
     };
@@ -596,7 +596,14 @@ export const useStore = create<StoreState>((set, get) => ({
           return;
         }
         get().confirm('Import this backup? It will replace all current routines and workout history.', 'Import', () => {
-          const { routines, sessions } = remapLegacyIdsToUuid(data.routines!, data.sessions!);
+          // A backup only ever legitimately contains your own data (exportData
+          // only ever writes person: 'You' rows) — filtering here guards
+          // against an old pre-friends-refactor backup resurrecting retired
+          // demo rows (Sanne/Joost), or a stray imported `person` string
+          // happening to collide with a real friend's current display label
+          // and silently blending into their stats.
+          const ownSessionsOnly = data.sessions!.filter((s) => s.person === 'You');
+          const { routines, sessions } = remapLegacyIdsToUuid(data.routines!, ownSessionsOnly);
           void db.routines.clear().then(() => db.routines.bulkPut(routines));
           void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
           void cloudSync.replaceAllRemote(routines, sessions);
@@ -639,11 +646,19 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   async syncWithCloud(userId) {
-    if (cloudSyncStarted) return;
-    cloudSyncStarted = true;
+    // Keyed by userId (not a plain boolean) so a fast account switch doesn't
+    // make the incoming account's sync silently no-op just because the
+    // previous account's sync was still in flight. stillCurrent() is
+    // rechecked before every write below, so if the signed-in user changes
+    // partway through, this run stops touching Dexie/state instead of
+    // possibly writing one account's data on top of another's.
+    if (cloudSyncUserId === userId) return;
+    cloudSyncUserId = userId;
     const linkedKey = `fitflow-cloud-linked-${userId}`;
+    const stillCurrent = () => getCurrentUserId() === userId;
     try {
       await cloudSync.flushPendingSync();
+      if (!stillCurrent()) return;
 
       // Settings are account-specific, not device-specific — always adopt
       // whatever this account has saved in the cloud (or, if it has none
@@ -651,6 +666,7 @@ export const useStore = create<StoreState>((set, get) => ({
       // of which branch below runs. This is what makes the theme/accent
       // switch to the signed-in account's own choice right after login.
       const remoteSettings = await cloudSync.fetchSettings();
+      if (!stillCurrent()) return;
       if (remoteSettings) {
         set({ settings: remoteSettings });
         saveSettings(remoteSettings);
@@ -658,12 +674,15 @@ export const useStore = create<StoreState>((set, get) => ({
       } else {
         await cloudSync.pushSettings(get().settings);
       }
+      if (!stillCurrent()) return;
 
       if (localStorage.getItem(linkedKey) === '1') {
         // Already linked — pull in anything created on another device, additively only.
         const { newRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
+        if (!stillCurrent()) return;
         if (newRoutines.length > 0) await db.routines.bulkPut(newRoutines);
         if (newSessions.length > 0) await db.sessions.bulkPut(newSessions);
+        if (!stillCurrent()) return;
         if (newRoutines.length > 0 || newSessions.length > 0) {
           set((s) => ({ routines: [...s.routines, ...newRoutines], sessions: [...s.sessions, ...newSessions] }));
         }
@@ -671,6 +690,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       const counts = await cloudSync.remoteCounts();
+      if (!stillCurrent()) return;
       if (counts.routines === 0 && counts.sessions === 0) {
         // Brand-new account — this device's local history becomes the account's history.
         const { routines, sessions } = remapLegacyIdsToUuid(get().routines, get().sessions);
@@ -678,23 +698,26 @@ export const useStore = create<StoreState>((set, get) => ({
         await db.routines.bulkPut(routines);
         await db.sessions.clear();
         await db.sessions.bulkPut(sessions);
+        if (!stillCurrent()) return;
         set({ routines, sessions });
         await cloudSync.uploadLocalDataOnFirstLogin(routines, sessions);
       } else {
         // Account already has data (signing in on a second device) — cloud
         // fully wins for routines and your own sessions.
         const remote = await cloudSync.fetchAllRemote();
+        if (!stillCurrent()) return;
         await db.routines.clear();
         await db.routines.bulkPut(remote.routines);
         await db.sessions.clear();
         await db.sessions.bulkPut(remote.sessions);
+        if (!stillCurrent()) return;
         set({ routines: remote.routines, sessions: remote.sessions });
       }
-      localStorage.setItem(linkedKey, '1');
+      if (stillCurrent()) localStorage.setItem(linkedKey, '1');
     } catch (err) {
       console.error('Cloud sync failed, will retry next load', err);
     } finally {
-      cloudSyncStarted = false;
+      if (cloudSyncUserId === userId) cloudSyncUserId = null;
     }
   },
 
@@ -707,12 +730,19 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   async refreshFriends() {
+    // Same staleness guard as syncWithCloud — without it, a fast sign-out
+    // then sign-in as a different account could let account A's slower,
+    // still-in-flight response land after account B's, silently overwriting
+    // B's friends list with A's.
+    const userId = getCurrentUserId();
+    if (!userId) return;
     try {
       const [friendsList, incomingRequests, outgoingRequests] = await Promise.all([
         friendsApi.fetchFriends(),
         friendsApi.fetchIncomingRequests(),
         friendsApi.fetchOutgoingRequests(),
       ]);
+      if (getCurrentUserId() !== userId) return;
       set({ friends: friendsList, incomingRequests, outgoingRequests, friendsLoaded: true });
       void get().refreshFriendSessions();
     } catch (err) {
@@ -721,8 +751,11 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   async refreshFriendSessions() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
     try {
       const friendSessions = await friendsApi.fetchAllFriendSessions(get().friends);
+      if (getCurrentUserId() !== userId) return;
       set({ friendSessions });
     } catch (err) {
       console.error('Failed to refresh friend sessions', err);
@@ -742,18 +775,34 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   async acceptFriendRequest(friendshipId) {
-    await friendsApi.acceptFriendRequest(friendshipId);
-    void get().refreshFriends();
+    try {
+      await friendsApi.acceptFriendRequest(friendshipId);
+      void get().refreshFriends();
+    } catch (err) {
+      console.error('Failed to accept friend request', err);
+      get().showToast('Could not accept — try again');
+    }
   },
 
   async declineFriendRequest(friendshipId) {
-    await friendsApi.declineFriendRequest(friendshipId);
-    void get().refreshFriends();
+    try {
+      await friendsApi.declineFriendRequest(friendshipId);
+      void get().refreshFriends();
+    } catch (err) {
+      console.error('Failed to decline friend request', err);
+      get().showToast('Could not decline — try again');
+    }
   },
 
   removeFriend(friendshipId) {
     get().confirm('Remove this friend? You\'ll both lose access to each other\'s stats.', 'Yes, remove', () => {
-      void friendsApi.removeFriend(friendshipId).then(() => get().refreshFriends());
+      void friendsApi
+        .removeFriend(friendshipId)
+        .then(() => get().refreshFriends())
+        .catch((err) => {
+          console.error('Failed to remove friend', err);
+          get().showToast('Could not remove — try again');
+        });
     }, true);
   },
 }));
