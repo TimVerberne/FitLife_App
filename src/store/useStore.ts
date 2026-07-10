@@ -7,6 +7,7 @@ import * as friendsApi from '../lib/friends';
 import type { Friend, FriendRequest } from '../lib/friends';
 import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
+import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -158,6 +159,24 @@ interface StoreState {
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let cloudSyncUserId: string | null = null;
+
+// Shared by both import paths (FitFlow JSON backup and Hevy CSV) — remaps
+// legacy/placeholder ids to real UUIDs before anything reaches Dexie or
+// Supabase, and merges in any imported settings without clobbering the rest.
+function prepareImportedData(
+  currentSettings: Settings,
+  routines: Routine[],
+  sessions: WorkoutSession[],
+  settingsPatch?: Partial<Settings>,
+) {
+  // A backup/import only ever legitimately contains your own data — filtering
+  // here guards against a stray `person` value colliding with a real friend's
+  // current display label and silently blending into their stats.
+  const ownSessionsOnly = sessions.filter((s) => s.person === 'You');
+  const remapped = remapLegacyIdsToUuid(routines, ownSessionsOnly);
+  const settings = settingsPatch ? { ...currentSettings, ...settingsPatch } : currentSettings;
+  return { ...remapped, settings };
+}
 
 export const useStore = create<StoreState>((set, get) => ({
   loaded: false,
@@ -608,24 +627,42 @@ export const useStore = create<StoreState>((set, get) => ({
     file
       .text()
       .then((text) => {
+        const isCsv = file.name.toLowerCase().endsWith('.csv') || looksLikeHevyCsv(text);
+        if (isCsv) {
+          const result = convertHevyCsv(text);
+          if (!result || result.sessions.length === 0) {
+            get().showToast('No importable workouts found in that file');
+            return;
+          }
+          const skippedNote = result.unmatchedNames.length > 0
+            ? ` ${result.unmatchedNames.length} exercise${result.unmatchedNames.length === 1 ? '' : 's'} couldn't be matched and will be skipped (e.g. ${result.unmatchedNames.slice(0, 3).join(', ')}).`
+            : '';
+          get().confirm(
+            `Import ${result.sessions.length} workouts (${result.totalSets} sets) from this file? It will replace all current routines and workout history.${skippedNote}`,
+            'Import',
+            () => {
+              const { routines, sessions, settings } = prepareImportedData(get().settings, result.routines, result.sessions);
+              void db.routines.clear().then(() => db.routines.bulkPut(routines));
+              void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
+              void cloudSync.replaceAllRemote(routines, sessions);
+              set({ routines, sessions, settings, sheet: null });
+              get().showToast('Workouts imported');
+            },
+            true,
+          );
+          return;
+        }
+
         const data = JSON.parse(text) as { routines?: Routine[]; sessions?: WorkoutSession[]; settings?: Partial<Settings> };
         if (!Array.isArray(data.routines) || !Array.isArray(data.sessions)) {
-          get().showToast('That file doesn\'t look like a FitFlow backup');
+          get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
           return;
         }
         get().confirm('Import this backup? It will replace all current routines and workout history.', 'Import', () => {
-          // A backup only ever legitimately contains your own data (exportData
-          // only ever writes person: 'You' rows) — filtering here guards
-          // against an old pre-friends-refactor backup resurrecting retired
-          // demo rows (Sanne/Joost), or a stray imported `person` string
-          // happening to collide with a real friend's current display label
-          // and silently blending into their stats.
-          const ownSessionsOnly = data.sessions!.filter((s) => s.person === 'You');
-          const { routines, sessions } = remapLegacyIdsToUuid(data.routines!, ownSessionsOnly);
+          const { routines, sessions, settings } = prepareImportedData(get().settings, data.routines!, data.sessions!, data.settings);
           void db.routines.clear().then(() => db.routines.bulkPut(routines));
           void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
           void cloudSync.replaceAllRemote(routines, sessions);
-          const settings = data.settings ? { ...get().settings, ...data.settings } : get().settings;
           set({ routines, sessions, settings, sheet: null });
           saveSettings(settings);
           applyTheme(settings);

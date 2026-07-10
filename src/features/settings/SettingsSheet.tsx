@@ -164,12 +164,12 @@ export function SettingsSheet() {
         Export backup
       </button>
       <button className="btn sec" style={{ marginTop: 8 }} onClick={() => fileRef.current?.click()}>
-        Import backup
+        Import backup or Hevy CSV
       </button>
       <input
         ref={fileRef}
         type="file"
-        accept="application/json"
+        accept="application/json,.json,.csv,text/csv"
         style={{ display: 'none' }}
         onChange={(e) => {
           const file = e.target.files?.[0];

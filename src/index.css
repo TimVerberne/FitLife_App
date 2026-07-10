@@ -1941,6 +1941,17 @@
 }
 
 /* -------- dialog (custom confirm, no native confirm()) -------- */
+/* A confirm() can be triggered while a sheet is already open (e.g. Settings'
+   "Import backup" or "Clear all data"). The sheet itself sits at z-index 50,
+   above the shared .scrim's z-index 40 — so without this override, a
+   dialog's own backdrop would render *below* the sheet instead of dimming
+   it, leaving the sheet's buttons/text fully legible (and visually
+   colliding with the dialog box on top). Keeps it under the dialog box's
+   own z-index 55. */
+.dialog-scrim {
+  z-index: 54;
+}
+
 .dialog {
   position: fixed;
   left: 50%;

@@ -7,7 +7,7 @@ export function ConfirmDialog() {
 
   return (
     <>
-      <div className={`scrim${show ? ' show' : ''}`} onClick={() => resolveDialog(false)} />
+      <div className={`scrim dialog-scrim${show ? ' show' : ''}`} onClick={() => resolveDialog(false)} />
       <div className={`dialog${show ? ' show' : ''}`}>
         {dialog && (
           <>
