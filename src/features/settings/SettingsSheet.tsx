@@ -161,15 +161,20 @@ export function SettingsSheet() {
 
       <div className="section-h">Data</div>
       <button className="btn sec" onClick={exportData}>
-        Export backup
+        Export data
       </button>
       <button className="btn sec" style={{ marginTop: 8 }} onClick={() => fileRef.current?.click()}>
-        Import backup or Hevy CSV
+        Import data
       </button>
       <input
         ref={fileRef}
         type="file"
-        accept="application/json,.json,.csv,text/csv"
+        // Extensions only, no MIME types — several OS/browser file pickers
+        // only honor the first recognized MIME type in the list (or don't
+        // recognize "text/csv" at all) and silently hide files that don't
+        // match it, even though the file itself is a plain-text .csv.
+        // Extensions are matched far more consistently across platforms.
+        accept=".json,.csv"
         style={{ display: 'none' }}
         onChange={(e) => {
           const file = e.target.files?.[0];
