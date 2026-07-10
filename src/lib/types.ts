@@ -32,7 +32,9 @@ export interface Routine {
   createdAt: number;
 }
 
-export type Person = 'You' | 'Sanne' | 'Joost';
+// 'You' is always the signed-in user; anything else is a friend's display
+// label (their own account, fetched read-only via Supabase RLS).
+export type Person = 'You' | (string & {});
 
 export interface WorkoutSession {
   id: string;

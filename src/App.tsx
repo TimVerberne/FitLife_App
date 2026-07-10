@@ -51,6 +51,10 @@ function AuthedApp() {
   }, [loaded, userId, syncWithCloud]);
 
   useEffect(() => {
+    if (loaded && userId) void useStore.getState().refreshFriends();
+  }, [loaded, userId]);
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       const { dialog, sheet, resolveDialog, closeSheet } = useStore.getState();

@@ -5,6 +5,7 @@ import { ExerciseDetailSheet } from '../features/picker/ExerciseDetailSheet';
 import { WorkoutDetailSheet } from '../features/history/WorkoutDetailSheet';
 import { RoutineActionsSheet } from '../features/routines/RoutineActionsSheet';
 import { SettingsSheet } from '../features/settings/SettingsSheet';
+import { FriendsSheet } from '../features/friends/FriendsSheet';
 
 const DISMISS_THRESHOLD = 90;
 
@@ -61,6 +62,7 @@ export function SheetContainer() {
           {sheet === 'workout' && <WorkoutDetailSheet />}
           {sheet === 'routineActions' && <RoutineActionsSheet />}
           {sheet === 'settings' && <SettingsSheet />}
+          {sheet === 'friends' && <FriendsSheet />}
         </div>
       </div>
     </>

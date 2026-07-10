@@ -26,6 +26,7 @@ export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const openSettings = useStore((s) => s.openSettings);
+  const openFriends = useStore((s) => s.openFriends);
   const units = useStore((s) => s.settings.units);
   const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
     { id: 'volume', label: 'Volume', unit: units },
@@ -61,9 +62,14 @@ export function ProfileScreen() {
           <div className="eyebrow">Profile</div>
           <div className="h1" style={{ fontSize: 30 }}>You</div>
         </div>
-        <button className="info-btn" aria-label="Settings" onClick={openSettings} style={{ width: 38, height: 38, fontSize: 17 }}>
-          ⚙
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="info-btn" aria-label="Friends" onClick={openFriends} style={{ width: 38, height: 38, fontSize: 15 }}>
+            👥
+          </button>
+          <button className="info-btn" aria-label="Settings" onClick={openSettings} style={{ width: 38, height: 38, fontSize: 17 }}>
+            ⚙
+          </button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 6 }}>

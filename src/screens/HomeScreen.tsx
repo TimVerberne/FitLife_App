@@ -6,7 +6,9 @@ import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
   const routines = useStore((s) => s.routines);
-  const sessions = useStore((s) => s.sessions);
+  const ownSessions = useStore((s) => s.sessions);
+  const friendSessionsRaw = useStore((s) => s.friendSessions);
+  const sessions = useMemo(() => [...ownSessions, ...friendSessionsRaw], [ownSessions, friendSessionsRaw]);
   const startSession = useStore((s) => s.startSession);
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const go = useStore((s) => s.go);

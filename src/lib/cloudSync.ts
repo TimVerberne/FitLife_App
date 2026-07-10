@@ -57,7 +57,7 @@ export async function deleteRoutineRemote(id: string): Promise<void> {
 }
 
 export async function pushSession(session: WorkoutSession): Promise<void> {
-  if (session.person !== 'You') return; // Sanne/Joost demo data stays local-only
+  if (session.person !== 'You') return; // never push someone else's session under your own account
   try {
     const userId = requireUserId();
     const { error } = await supabase.from('sessions').upsert(sessionRow(session, userId));

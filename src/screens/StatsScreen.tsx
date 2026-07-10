@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
 import { MUSCLE_AXES, MUSCLE_GROUP, epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
-import { AVATAR_COLORS } from '../lib/seedData';
+import { colorForPerson } from '../lib/colors';
 import { exerciseById } from '../lib/exercises';
 import { formatWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
@@ -51,18 +51,22 @@ function exerciseStatsFor(sessions: WorkoutSession[], person: Person, exerciseId
 }
 
 export function StatsScreen() {
-  const sessions = useStore((s) => s.sessions);
+  const ownSessions = useStore((s) => s.sessions);
+  const friendSessionsRaw = useStore((s) => s.friendSessions);
+  const acceptedFriends = useStore((s) => s.friends);
+  const openFriends = useStore((s) => s.openFriends);
+  const sessions = useMemo(() => [...ownSessions, ...friendSessionsRaw], [ownSessions, friendSessionsRaw]);
   const units = useStore((s) => s.settings.units);
   const [period, setPeriod] = useState<Period>('week');
   const [selectedRival, setSelectedRival] = useState<Person | null>(null);
   const now = Date.now();
 
   const board = useMemo(() => {
-    const people: Person[] = ['You', 'Sanne', 'Joost'];
+    const people: Person[] = ['You', ...new Set(friendSessionsRaw.map((s) => s.person))];
     return people
       .map((p) => statsFor(sessions, p, PERIOD_DAYS[period], now))
       .sort((a, b) => b.volume - a.volume);
-  }, [sessions, period, now]);
+  }, [sessions, friendSessionsRaw, period, now]);
 
   const you = board.find((b) => b.person === 'You')!;
   const friends = board.filter((b) => b.person !== 'You');
@@ -144,7 +148,7 @@ export function StatsScreen() {
 
       <div className="section-h" style={{ marginTop: 4 }}>Leaderboard · volume</div>
       {board.map((row, i) => {
-        const colors = AVATAR_COLORS[row.person];
+        const colors = colorForPerson(row.person);
         const isTop = i === 0;
         const displayVolume = toDisplayWeight(row.volume, units);
         return (
@@ -179,7 +183,15 @@ export function StatsScreen() {
         );
       })}
 
-      {rival && (
+      {acceptedFriends.length === 0 ? (
+        <div className="empty-state" style={{ marginTop: 18 }}>
+          <div className="h1">No friends yet</div>
+          <p>Add a friend to unlock head-to-head stats and see how you stack up.</p>
+          <button className="btn" style={{ marginTop: 10 }} onClick={openFriends}>
+            Add a friend
+          </button>
+        </div>
+      ) : rival && (
         <>
           <div className="section-h">Head to head</div>
           {friends.length > 1 && (
@@ -195,20 +207,20 @@ export function StatsScreen() {
               ))}
             </div>
           )}
-          <HeadToHeadLegend rivalName={rival.person} rivalColor={AVATAR_COLORS[rival.person].bg} />
+          <HeadToHeadLegend rivalName={rival.person} rivalColor={colorForPerson(rival.person).bg} />
           <div className="h2h-grid">
-            <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
             <HeadToHeadTile
               label="Volume"
               youVal={toDisplayWeight(you.volume, units)}
               rivalVal={toDisplayWeight(rival.volume, units)}
               format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
-              rivalColor={AVATAR_COLORS[rival.person].bg}
+              rivalColor={colorForPerson(rival.person).bg}
             />
-            <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
-            <HeadToHeadTile label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} rivalColor={AVATAR_COLORS[rival.person].bg} />
-            <HeadToHeadTile label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
-            <HeadToHeadTile label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} rivalColor={AVATAR_COLORS[rival.person].bg} />
+            <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
+            <HeadToHeadTile label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} rivalColor={colorForPerson(rival.person).bg} />
+            <HeadToHeadTile label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
+            <HeadToHeadTile label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
           </div>
 
           <div className="section-h">Exercise head to head</div>
@@ -275,28 +287,28 @@ export function StatsScreen() {
                       format={(v) => `${Math.round(v)}${units}`}
                       youDisplay={youExStats.maxWeight > 0 ? `${formatWeight(youExStats.maxWeight, units)}×${youExStats.maxWeightReps}` : '—'}
                       rivalDisplay={rivalExStats.maxWeight > 0 ? `${formatWeight(rivalExStats.maxWeight, units)}×${rivalExStats.maxWeightReps}` : '—'}
-                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                      rivalColor={colorForPerson(rival.person).bg}
                     />
                     <HeadToHeadTile
                       label="Est. 1RM"
                       youVal={toDisplayWeight(youExStats.best1RM, units)}
                       rivalVal={toDisplayWeight(rivalExStats.best1RM, units)}
                       format={(v) => (v > 0 ? `${Math.round(v)}${units}` : '—')}
-                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                      rivalColor={colorForPerson(rival.person).bg}
                     />
                     <HeadToHeadTile
                       label="Total volume"
                       youVal={toDisplayWeight(youExStats.volume, units)}
                       rivalVal={toDisplayWeight(rivalExStats.volume, units)}
                       format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
-                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                      rivalColor={colorForPerson(rival.person).bg}
                     />
                     <HeadToHeadTile
                       label="Times performed"
                       youVal={youExStats.timesPerformed}
                       rivalVal={rivalExStats.timesPerformed}
                       format={(v) => String(v)}
-                      rivalColor={AVATAR_COLORS[rival.person].bg}
+                      rivalColor={colorForPerson(rival.person).bg}
                     />
                   </div>
                 </>

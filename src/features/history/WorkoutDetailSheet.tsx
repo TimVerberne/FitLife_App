@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { exerciseById } from '../../lib/exercises';
 import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
-import { AVATAR_COLORS } from '../../lib/seedData';
+import { colorForPerson } from '../../lib/colors';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { Thumb } from '../../components/Thumb';
 import { NumberField } from '../../components/NumberField';
 
 export function WorkoutDetailSheet() {
   const viewingSessionId = useStore((s) => s.viewingSessionId);
-  const session = useStore((s) => s.sessions.find((x) => x.id === viewingSessionId));
+  const session = useStore((s) => [...s.sessions, ...s.friendSessions].find((x) => x.id === viewingSessionId));
   const copyWorkoutToRoutines = useStore((s) => s.copyWorkoutToRoutines);
   const repeatWorkout = useStore((s) => s.repeatWorkout);
   const updateHistorySet = useStore((s) => s.updateHistorySet);
@@ -17,7 +17,7 @@ export function WorkoutDetailSheet() {
   const [editing, setEditing] = useState(false);
 
   if (!session) return null;
-  const colors = AVATAR_COLORS[session.person];
+  const colors = colorForPerson(session.person);
   const initials = session.person === 'You' ? 'Y' : session.person.slice(0, 1);
   const canEdit = session.person === 'You';
 

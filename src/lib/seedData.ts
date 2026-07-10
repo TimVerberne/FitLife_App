@@ -27,23 +27,6 @@ function session(
 }
 
 export const SEED_SESSIONS: WorkoutSession[] = [
-  session('Sanne', 'Full Body', null, 1, [
-    entry('0043', [[60, 10], [60, 10]]),
-    entry('0025', [[40, 12]]),
-    entry('0007', [[45, 12]]),
-  ], 52),
-  session('Joost', 'Push Day', null, 2, [
-    entry('0025', [[80, 8], [80, 6]]),
-    entry('0091', [[50, 8], [50, 7]]),
-  ], 47),
-  session('Sanne', 'Legs', null, 4, [
-    entry('0043', [[62.5, 10], [65, 8]]),
-    entry('0300', [[26, 12]]),
-  ], 44),
-  session('Joost', 'Pull Day', null, 5, [
-    entry('0007', [[60, 10], [60, 9]]),
-    entry('0015', [[0, 10]]),
-  ], 41),
   session('You', 'Legs', 'r3', 3, [
     entry('0043', [[85, 8], [85, 8], [87.5, 6]]),
     entry('0032', [[110, 4], [110, 4]]),
@@ -101,9 +84,3 @@ export const SEED_SESSIONS: WorkoutSession[] = [
     entry('0032', [[90, 5]]),
   ], 42),
 ];
-
-export const AVATAR_COLORS: Record<string, { bg: string; ink: string }> = {
-  You: { bg: 'var(--accent)', ink: 'var(--accent-ink)' },
-  Sanne: { bg: 'var(--friend-1)', ink: 'var(--friend-1-ink)' },
-  Joost: { bg: 'var(--friend-2)', ink: 'var(--friend-2-ink)' },
-};

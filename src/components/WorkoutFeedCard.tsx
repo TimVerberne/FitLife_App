@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
 import { isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
-import { AVATAR_COLORS } from '../lib/seedData';
+import { colorForPerson } from '../lib/colors';
 import { toDisplayWeight } from '../lib/units';
 import { useStore } from '../store/useStore';
 import { Thumb } from './Thumb';
@@ -24,7 +24,7 @@ export function WorkoutFeedCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const units = useStore((s) => s.settings.units);
-  const colors = AVATAR_COLORS[session.person];
+  const colors = colorForPerson(session.person);
   const records = newRecordsInWorkout(allSessions, session);
   const shown = expanded ? session.entries : session.entries.slice(0, COLLAPSED_COUNT);
   const remaining = session.entries.length - shown.length;

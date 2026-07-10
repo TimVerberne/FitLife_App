@@ -8,11 +8,14 @@ condensed type, monospaced stats).
 **Try it live:** https://timverberne.github.io/FitLife_App/ (auto-deploys on every
 push to this branch via GitHub Actions — see `.github/workflows/deploy-pages.yml`).
 
-## Status: Phases 0–2 (browser-only, no backend yet)
+## Status: Phases 0–5
 
-Everything runs client-side. Routines and workout history persist in IndexedDB
-(via Dexie), so your data survives reloads on this device but does not sync
-anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
+Sign in with a real account (Supabase Auth) and your routines, workouts, and
+settings sync to the cloud under row-level security — IndexedDB (via Dexie)
+still caches everything locally so the app keeps working offline, but a
+signed-in account is now required to use it at all. Real friends (search by
+email, accept/decline requests) replace the old Sanne/Joost demo comparison
+data in Stats and Home.
 
 ### What works
 
@@ -46,12 +49,19 @@ anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
   week streak and days since your last workout above it. Your own past
   workouts are editable (fix a logging mistake after the fact) via the edit
   toggle in the workout detail sheet.
-- **Stats** — volume leaderboard, and a head-to-head vs. either demo training
-  partner (Sanne & Joost — seeded sample data standing in for real friends
-  until Phase 5 social/auth is built) shown as pill-bar comparison tiles.
-  Exercise-level head-to-head lets you pick a muscle group and ranks the top
-  exercises you've both logged, each with its own heaviest-set/1RM/volume/
-  frequency comparison.
+- **Friends** — add a friend by email, accept/decline requests, and unfriend,
+  all from a sheet reachable from the You page. Accepted friends' workouts
+  sync in read-only (row-level security grants exactly that) for the crew
+  feed and Stats comparisons — nothing else about their account is exposed.
+- **Stats** — volume leaderboard and a head-to-head vs. any real friend,
+  shown as pill-bar comparison tiles. Exercise-level head-to-head lets you
+  pick a muscle group and ranks the top exercises you've both logged, each
+  with its own heaviest-set/1RM/volume/frequency comparison. Add a friend
+  from the You page to unlock this.
+- **Accounts** — sign up/sign in with email + password (Supabase Auth); your
+  session persists across reloads and works offline once signed in. All your
+  data syncs to Postgres under row-level security, so it's scoped to your
+  account and follows you to a second device.
 - **Settings** — a gear icon on the You page opens units (kg/lb, applied
   everywhere weight and volume appear), week-starts-on, a default rest timer
   and default landing tab, the smart-routine-rotation and
@@ -65,8 +75,6 @@ anywhere yet — that's Phase 4+ (Supabase auth/sync) from the project plan.
 
 ### Not yet built (later phases per the project plan)
 
-- Supabase auth, sync, and row-level security (Phase 4)
-- Real friend invites / social feed (Phase 5)
 - Full 1,324-exercise dataset + hosted media (currently a curated 31-exercise
   subset bundled directly into the app, ~3 MB)
 

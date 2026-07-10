@@ -1,14 +1,16 @@
 import { create } from 'zustand';
-import { db, seedIfEmpty, remapLegacyIdsToUuid } from '../lib/db';
+import { db, seedIfEmpty, remapLegacyIdsToUuid, purgeDemoFriendRows } from '../lib/db';
 import { SEED_ROUTINES, SEED_SESSIONS } from '../lib/seedData';
 import { applyTheme, loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
+import * as friendsApi from '../lib/friends';
+import type { Friend, FriendRequest } from '../lib/friends';
 import { onSignedOut } from '../lib/supabase';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
-export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | null;
+export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | null;
 
 // Apply the persisted theme immediately on load, before the first paint.
 applyTheme(loadSettings());
@@ -83,6 +85,13 @@ interface StoreState {
   // home page — picked once per app load, not per tab visit
   quote: string;
 
+  // friends — server-derived, never cached in Dexie
+  friends: Friend[];
+  incomingRequests: FriendRequest[];
+  outgoingRequests: FriendRequest[];
+  friendsLoaded: boolean;
+  friendSessions: WorkoutSession[];
+
   // actions
   init(): Promise<void>;
   go(tab: Tab): void;
@@ -133,6 +142,14 @@ interface StoreState {
   clearAllData(): void;
 
   syncWithCloud(userId: string): Promise<void>;
+
+  openFriends(): void;
+  refreshFriends(): Promise<void>;
+  refreshFriendSessions(): Promise<void>;
+  sendFriendRequest(email: string): Promise<friendsApi.SendFriendRequestResult | { ok: false; reason: 'not-found' }>;
+  acceptFriendRequest(friendshipId: string): Promise<void>;
+  declineFriendRequest(friendshipId: string): Promise<void>;
+  removeFriend(friendshipId: string): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -162,6 +179,12 @@ export const useStore = create<StoreState>((set, get) => ({
   settings: loadSettings(),
   quote: randomQuote(),
 
+  friends: [],
+  incomingRequests: [],
+  outgoingRequests: [],
+  friendsLoaded: false,
+  friendSessions: [],
+
   async init() {
     // Reset synchronously (not just on first load) so a re-mount after switching
     // accounts can't leave syncWithCloud reading stale in-memory data from
@@ -169,6 +192,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await seedIfEmpty();
+      await purgeDemoFriendRows();
       const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
       set({ routines, sessions, loaded: true });
     } catch (err) {
@@ -459,7 +483,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   copyWorkoutToRoutines(sessionId) {
-    const session = get().sessions.find((s) => s.id === sessionId);
+    const session = [...get().sessions, ...get().friendSessions].find((s) => s.id === sessionId);
     if (!session) return;
     const exerciseIds = Array.from(new Set(session.entries.map((e) => e.exerciseId)));
     const routine: Routine = {
@@ -639,16 +663,14 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ routines, sessions });
         await cloudSync.uploadLocalDataOnFirstLogin(routines, sessions);
       } else {
-        // Account already has data (signing in on a second device) — cloud wins for
-        // routines and your own sessions; local Sanne/Joost demo rows are untouched.
+        // Account already has data (signing in on a second device) — cloud
+        // fully wins for routines and your own sessions.
         const remote = await cloudSync.fetchAllRemote();
-        const keptLocal = get().sessions.filter((s) => s.person !== 'You');
-        const sessions = [...remote.sessions, ...keptLocal];
         await db.routines.clear();
         await db.routines.bulkPut(remote.routines);
         await db.sessions.clear();
-        await db.sessions.bulkPut(sessions);
-        set({ routines: remote.routines, sessions });
+        await db.sessions.bulkPut(remote.sessions);
+        set({ routines: remote.routines, sessions: remote.sessions });
       }
       localStorage.setItem(linkedKey, '1');
     } catch (err) {
@@ -657,14 +679,75 @@ export const useStore = create<StoreState>((set, get) => ({
       cloudSyncStarted = false;
     }
   },
+
+  openFriends() {
+    set({ sheet: 'friends' });
+    if (!get().friendsLoaded) void get().refreshFriends();
+  },
+
+  async refreshFriends() {
+    try {
+      const [friendsList, incomingRequests, outgoingRequests] = await Promise.all([
+        friendsApi.fetchFriends(),
+        friendsApi.fetchIncomingRequests(),
+        friendsApi.fetchOutgoingRequests(),
+      ]);
+      set({ friends: friendsList, incomingRequests, outgoingRequests, friendsLoaded: true });
+      void get().refreshFriendSessions();
+    } catch (err) {
+      console.error('Failed to refresh friends', err);
+    }
+  },
+
+  async refreshFriendSessions() {
+    try {
+      const friendSessions = await friendsApi.fetchAllFriendSessions(get().friends);
+      set({ friendSessions });
+    } catch (err) {
+      console.error('Failed to refresh friend sessions', err);
+    }
+  },
+
+  async sendFriendRequest(email) {
+    const profile = await friendsApi.searchProfileByEmail(email);
+    if (!profile) return { ok: false, reason: 'not-found' };
+    const result = await friendsApi.sendFriendRequest(profile.id);
+    if (result.ok) void get().refreshFriends();
+    return result;
+  },
+
+  async acceptFriendRequest(friendshipId) {
+    await friendsApi.acceptFriendRequest(friendshipId);
+    void get().refreshFriends();
+  },
+
+  async declineFriendRequest(friendshipId) {
+    await friendsApi.declineFriendRequest(friendshipId);
+    void get().refreshFriends();
+  },
+
+  removeFriend(friendshipId) {
+    get().confirm('Remove this friend? You\'ll both lose access to each other\'s stats.', 'Yes, remove', () => {
+      void friendsApi.removeFriend(friendshipId).then(() => get().refreshFriends());
+    }, true);
+  },
 }));
 
-// Settings are account-specific. Reset to the base defaults on sign-out so
-// the sign-in screen always shows the plain mint theme rather than whatever
-// the previous account had chosen — syncWithCloud() re-applies the signed-in
-// account's own settings right after the next successful login.
+// Settings and friends are account-specific. Reset to defaults on sign-out
+// so the sign-in screen always shows the plain mint theme rather than
+// whatever the previous account had chosen, and so no friend/request data
+// from one account is ever visible while a different account is signed in
+// on this device — syncWithCloud()/refreshFriends() re-populate everything
+// for whoever signs in next.
 onSignedOut(() => {
-  useStore.setState({ settings: DEFAULT_SETTINGS });
+  useStore.setState({
+    settings: DEFAULT_SETTINGS,
+    friends: [],
+    incomingRequests: [],
+    outgoingRequests: [],
+    friendsLoaded: false,
+    friendSessions: [],
+  });
   saveSettings(DEFAULT_SETTINGS);
   applyTheme(DEFAULT_SETTINGS);
 });
