@@ -27,6 +27,7 @@ export function ProfileScreen() {
   const openWorkoutSheet = useStore((s) => s.openWorkoutSheet);
   const openSettings = useStore((s) => s.openSettings);
   const openFriends = useStore((s) => s.openFriends);
+  const openDetail = useStore((s) => s.openDetail);
   const units = useStore((s) => s.settings.units);
   const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
     { id: 'volume', label: 'Volume', unit: units },
@@ -170,7 +171,16 @@ export function ProfileScreen() {
         const ex = exerciseById(r.exerciseId);
         if (!ex) return null;
         return (
-          <div className="rec" key={r.exerciseId}>
+          <div
+            className="rec"
+            key={r.exerciseId}
+            role="button"
+            tabIndex={0}
+            onClick={() => openDetail(r.exerciseId)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') openDetail(r.exerciseId);
+            }}
+          >
             <Thumb className="ph" src={ex.image} alt={ex.name} />
             <div className="rec-b">
               <div className="rec-name">{ex.name}</div>

@@ -79,6 +79,83 @@ export function personalRecords(sessions: WorkoutSession[], person = 'You'): Per
   return Array.from(map.values()).sort((a, b) => b.estOneRepMax - a.estOneRepMax);
 }
 
+export interface ExercisePoint {
+  ts: number;
+  maxWeight: number;
+  maxWeightReps: number;
+  oneRM: number;
+  bestSetWeight: number;
+  bestSetReps: number;
+  bestSetVolume: number;
+}
+
+// One point per session that actually logged a working set for this
+// exercise — sessions where it was added but never logged (or only
+// warmups) are skipped so the chart doesn't show a false dip to zero.
+export function exerciseHistory(sessions: WorkoutSession[], exerciseId: string, person = 'You'): ExercisePoint[] {
+  return sessions
+    .filter((h) => h.person === person)
+    .map((h): ExercisePoint | null => {
+      const entry = h.entries.find((e) => e.exerciseId === exerciseId);
+      if (!entry) return null;
+      const working = entry.sets.filter(isWorkingSet);
+      if (working.length === 0) return null;
+      const point: ExercisePoint = {
+        ts: h.startedAt,
+        maxWeight: 0,
+        maxWeightReps: 0,
+        oneRM: 0,
+        bestSetWeight: 0,
+        bestSetReps: 0,
+        bestSetVolume: 0,
+      };
+      working.forEach((s) => {
+        if (s.weight > point.maxWeight || (s.weight === point.maxWeight && s.reps > point.maxWeightReps)) {
+          point.maxWeight = s.weight;
+          point.maxWeightReps = s.reps;
+        }
+        point.oneRM = Math.max(point.oneRM, epley(s.weight, s.reps));
+        const setVolume = s.weight * s.reps;
+        if (setVolume > point.bestSetVolume) {
+          point.bestSetVolume = setVolume;
+          point.bestSetWeight = s.weight;
+          point.bestSetReps = s.reps;
+        }
+      });
+      return point;
+    })
+    .filter((p): p is ExercisePoint => p !== null)
+    .sort((a, b) => a.ts - b.ts);
+}
+
+export interface ExercisePR {
+  maxWeight: number;
+  maxWeightReps: number;
+  oneRM: number;
+  bestSetWeight: number;
+  bestSetReps: number;
+  bestSetVolume: number;
+}
+
+export function exercisePR(history: ExercisePoint[]): ExercisePR {
+  return history.reduce<ExercisePR>(
+    (acc, p) => {
+      if (p.maxWeight > acc.maxWeight || (p.maxWeight === acc.maxWeight && p.maxWeightReps > acc.maxWeightReps)) {
+        acc.maxWeight = p.maxWeight;
+        acc.maxWeightReps = p.maxWeightReps;
+      }
+      acc.oneRM = Math.max(acc.oneRM, p.oneRM);
+      if (p.bestSetVolume > acc.bestSetVolume) {
+        acc.bestSetVolume = p.bestSetVolume;
+        acc.bestSetWeight = p.bestSetWeight;
+        acc.bestSetReps = p.bestSetReps;
+      }
+      return acc;
+    },
+    { maxWeight: 0, maxWeightReps: 0, oneRM: 0, bestSetWeight: 0, bestSetReps: 0, bestSetVolume: 0 },
+  );
+}
+
 export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {
   const priorSessions = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt);
   const priorBest = new Map(personalRecords(priorSessions, target.person).map((r) => [r.exerciseId, r.estOneRepMax]));
