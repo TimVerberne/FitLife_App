@@ -87,6 +87,7 @@ interface StoreState {
   // sheets
   sheet: SheetKind;
   detailExerciseId: string | null;
+  detailReturnToPicker: boolean;
   viewingSessionId: string | null;
   viewingRoutineId: string | null;
   pickQuery: string;
@@ -124,6 +125,7 @@ interface StoreState {
   setSetKind(entryIdx: number, setIdx: number, kind: SetKind): void;
   applyDropSet(entryIdx: number, setIdx: number, rounds: number): void;
   removeExercise(entryIdx: number): void;
+  reorderEntries(order: number[]): void;
   addExerciseToSession(exerciseId: string): void;
   addExercisesToSession(exerciseIds: string[]): void;
   setRestDuration(exerciseId: string, seconds: number | null): void;
@@ -137,6 +139,7 @@ interface StoreState {
 
   openPicker(): void;
   openDetail(id: string): void;
+  openDetailFromPicker(id: string): void;
   openWorkoutSheet(id: string): void;
   openRoutineActions(id: string): void;
   renameRoutine(id: string, name: string): void;
@@ -210,6 +213,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   sheet: null,
   detailExerciseId: null,
+  detailReturnToPicker: false,
   viewingSessionId: null,
   viewingRoutineId: null,
   pickQuery: '',
@@ -387,6 +391,18 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ active: { ...active, entries: active.entries.filter((_, ei) => ei !== entryIdx) } });
   },
 
+  // `order[i]` is the original entries-index that should end up at position
+  // i — the drag UI builds this locally as the exercise list is dragged, and
+  // commits it here once on drop rather than writing to the store on every
+  // intermediate swap. restTimers is keyed by exerciseId, not position, so
+  // it needs no adjustment when entries move around.
+  reorderEntries(order) {
+    const active = get().active;
+    if (!active || order.length !== active.entries.length) return;
+    const entries = order.map((i) => active.entries[i]);
+    set({ active: { ...active, entries } });
+  },
+
   addExerciseToSession(exerciseId) {
     const active = get().active;
     if (!active) return;
@@ -478,7 +494,11 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   openDetail(id) {
-    set({ sheet: 'detail', detailExerciseId: id });
+    set({ sheet: 'detail', detailExerciseId: id, detailReturnToPicker: false });
+  },
+
+  openDetailFromPicker(id) {
+    set({ sheet: 'detail', detailExerciseId: id, detailReturnToPicker: true });
   },
 
   openWorkoutSheet(id) {
@@ -509,9 +529,14 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   closeSheet() {
-    const { sheet, active } = get();
-    if (sheet === 'detail' && active) {
-      set({ sheet: 'picker' });
+    const { sheet, detailReturnToPicker } = get();
+    if (sheet === 'detail' && detailReturnToPicker) {
+      // Only true when detail was reached via the picker's "i" button — an
+      // explicit flag rather than inferring it from "a session happens to be
+      // active", which used to wrongly send you to the picker when opening
+      // detail from, say, Profile's Personal Records while a session was
+      // merely minimized (still active) in the background.
+      set({ sheet: 'picker', detailReturnToPicker: false });
     } else if (sheet === 'importPreview') {
       // Dismissing any way (swipe, backdrop tap, Escape) should discard the
       // pending import and land back on Settings, same as tapping Cancel —

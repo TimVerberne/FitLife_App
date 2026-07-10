@@ -61,7 +61,7 @@ export function PickerSheet() {
   const pickBodyPart = useStore((s) => s.pickBodyPart);
   const setPickQuery = useStore((s) => s.setPickQuery);
   const setPickBodyPart = useStore((s) => s.setPickBodyPart);
-  const openDetail = useStore((s) => s.openDetail);
+  const openDetailFromPicker = useStore((s) => s.openDetailFromPicker);
   const addExercisesToSession = useStore((s) => s.addExercisesToSession);
   const showToast = useStore((s) => s.showToast);
 
@@ -149,7 +149,7 @@ export function PickerSheet() {
                 aria-label={`View ${ex.name} details`}
                 onClick={(e) => {
                   e.stopPropagation();
-                  openDetail(ex.id);
+                  openDetailFromPicker(ex.id);
                 }}
               >
                 i

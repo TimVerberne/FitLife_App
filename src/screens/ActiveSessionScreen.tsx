@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../lib/records';
@@ -47,6 +47,22 @@ interface MenuState {
   dropCount: number;
 }
 
+// Reordering swaps every card to a fixed height (see .s-ex.compact) so a
+// dragged card's target slot is plain arithmetic on the pointer's Y delta,
+// instead of re-measuring variable-height cards (which is what full cards
+// are, once sets/rest-timer content is showing) after every swap.
+const COMPACT_CARD_HEIGHT = 60;
+const COMPACT_GAP = 14;
+const COMPACT_ROW_HEIGHT = COMPACT_CARD_HEIGHT + COMPACT_GAP;
+
+interface DragState {
+  order: number[]; // order[slot] = original entries-index now occupying that slot
+  draggingIndex: number; // the original entries-index being dragged
+  startSlot: number;
+  startY: number;
+  dy: number;
+}
+
 export function ActiveSessionScreen() {
   const active = useStore((s) => s.active);
   const sessions = useStore((s) => s.sessions);
@@ -59,17 +75,87 @@ export function ActiveSessionScreen() {
   const applyDropSet = useStore((s) => s.applyDropSet);
   const removeExercise = useStore((s) => s.removeExercise);
   const openPicker = useStore((s) => s.openPicker);
+  const openDetail = useStore((s) => s.openDetail);
   const minimizeSession = useStore((s) => s.minimizeSession);
   const cancelSession = useStore((s) => s.cancelSession);
   const finishSession = useStore((s) => s.finishSession);
   const confirm = useStore((s) => s.confirm);
   const setRestDuration = useStore((s) => s.setRestDuration);
+  const reorderEntries = useStore((s) => s.reorderEntries);
   const settings = useStore((s) => s.settings);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<number | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  // The authoritative live value, updated synchronously inside the native
+  // event handlers below — `drag` (React state) is a render snapshot of
+  // this, always one tick behind. Committing the reorder off of `drag`
+  // instead (e.g. reading it inside a setDrag() updater callback, which is
+  // where this lived originally) hit a real bug: calling the reorderEntries
+  // store action as a side effect of a setState updater tripped React's
+  // "setState during render" detection (updaters can be invoked more than
+  // once, e.g. under StrictMode), and the order actually committed ended up
+  // one step behind the last position the drag visually showed.
+  const dragRef = useRef<DragState | null>(null);
+
+  function startDrag(e: React.PointerEvent, originalIndex: number) {
+    if (!active) return;
+    const d: DragState = {
+      order: active.entries.map((_, i) => i),
+      draggingIndex: originalIndex,
+      startSlot: originalIndex,
+      startY: e.clientY,
+      dy: 0,
+    };
+    dragRef.current = d;
+    setDrag(d);
+  }
+
+  // Deliberately window-level rather than setPointerCapture on the handle
+  // button: capture is tied to that specific DOM node, and once the first
+  // live swap moves it to a new position in the keyed list, capture doesn't
+  // reliably survive the reorder — pointer events silently stop reaching it
+  // (confirmed: the dragged card would freeze after exactly one swap). A
+  // window listener has no such dependency on one element's identity.
+  useEffect(() => {
+    if (!drag) return;
+    function onMove(e: PointerEvent) {
+      const d = dragRef.current;
+      if (!d) return;
+      const dy = e.clientY - d.startY;
+      const rawSlot = d.startSlot + dy / COMPACT_ROW_HEIGHT;
+      const targetSlot = Math.max(0, Math.min(d.order.length - 1, Math.round(rawSlot)));
+      const currentSlot = d.order.indexOf(d.draggingIndex);
+      let next = d;
+      if (targetSlot !== currentSlot) {
+        const order = [...d.order];
+        order.splice(currentSlot, 1);
+        order.splice(targetSlot, 0, d.draggingIndex);
+        next = { ...d, order, dy };
+      } else {
+        next = { ...d, dy };
+      }
+      dragRef.current = next;
+      setDrag(next);
+    }
+    function onUp() {
+      const d = dragRef.current;
+      if (d) reorderEntries(d.order);
+      dragRef.current = null;
+      setDrag(null);
+    }
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!drag]);
 
   useEffect(() => {
     if (!settings.keepScreenAwake) return;
@@ -215,34 +301,72 @@ export function ActiveSessionScreen() {
         ▾ Minimize
       </button>
 
-      {active.entries.map((en, ei) => {
+      <div
+        className={`s-ex-list${drag ? ' reordering' : ''}`}
+        style={drag ? { height: active.entries.length * COMPACT_ROW_HEIGHT } : undefined}
+      >
+      {(drag ? drag.order : active.entries.map((_, i) => i)).map((ei, slot) => {
+        const en = active.entries[ei];
         const ex = exerciseById(en.exerciseId);
         if (!ex) return null;
         const cardio = isCardioExercise(ex);
         const rec = records.find((r) => r.exerciseId === ex.id);
         const prFlags = cardio ? [] : prFlagsFor(en.sets, rec?.estOneRepMax ?? 0);
+        const isDraggingThis = !!drag && ei === drag.draggingIndex;
+        const positionStyle: React.CSSProperties | undefined = drag
+          ? {
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: isDraggingThis ? drag.startSlot * COMPACT_ROW_HEIGHT + drag.dy : slot * COMPACT_ROW_HEIGHT,
+              transition: isDraggingThis ? 'none' : 'top 0.18s ease',
+              zIndex: isDraggingThis ? 20 : 1,
+            }
+          : undefined;
         return (
-          <div className="s-ex" key={ei}>
+          <div className={`s-ex${drag ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}`} key={en.exerciseId} style={positionStyle}>
             <div className="s-top">
-              <Thumb className="ph" src={ex.image} alt={ex.name} />
-              <div className="s-name">
-                {ex.name}
-                <span className="sub">{ex.target} · {ex.equipment}</span>
-              </div>
-              <button
-                className="s-del"
-                aria-label={`Remove ${ex.name} from workout`}
-                onClick={() => {
-                  if (settings.confirmRemoveExercise) {
-                    confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true);
-                  } else {
-                    removeExercise(ei);
-                  }
+              <div
+                className="s-info-btn"
+                role="button"
+                tabIndex={0}
+                aria-label={`View ${ex.name} details`}
+                onClick={() => openDetail(ex.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') openDetail(ex.id);
                 }}
               >
-                ✕
+                <Thumb className="ph" src={ex.image} alt={ex.name} />
+                <div className="s-name">
+                  {ex.name}
+                  {!drag && <span className="sub">{ex.target} · {ex.equipment}</span>}
+                </div>
+              </div>
+              {!drag && (
+                <button
+                  className="s-del"
+                  aria-label={`Remove ${ex.name} from workout`}
+                  onClick={() => {
+                    if (settings.confirmRemoveExercise) {
+                      confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true);
+                    } else {
+                      removeExercise(ei);
+                    }
+                  }}
+                >
+                  ✕
+                </button>
+              )}
+              <button
+                className="s-drag-handle"
+                aria-label={`Reorder ${ex.name}`}
+                onPointerDown={(e) => startDrag(e, ei)}
+              >
+                ⠿
               </button>
             </div>
+            {!drag && (
+            <>
             <div className="rest-toggle-wrap">
               <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuFor === ei ? null : ei)}>
                 ⏱ Rest timer: {active.restTimers[en.exerciseId] ? formatRest(active.restTimers[en.exerciseId]) : 'Off'}
@@ -403,9 +527,12 @@ export function ActiveSessionScreen() {
             <button className="add-set" onClick={() => addSet(ei)}>
               + Add set
             </button>
+            </>
+            )}
           </div>
         );
       })}
+      </div>
 
       <button className="add-ex" onClick={openPicker}>
         + Add exercise

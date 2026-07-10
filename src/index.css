@@ -991,6 +991,21 @@
   margin-bottom: 11px;
 }
 
+.s-info-btn {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.s-info-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 9px;
+}
+
 .s-top img,
 .s-top .ph {
   width: 44px;
@@ -1027,6 +1042,49 @@
   cursor: pointer;
   font-size: 16px;
   padding: 4px;
+}
+
+.s-drag-handle {
+  color: var(--faint);
+  background: none;
+  border: none;
+  cursor: grab;
+  font-size: 20px;
+  line-height: 1;
+  padding: 4px 6px;
+  flex: none;
+  /* Grabbing this and dragging must not also pan the page — the custom
+     reorder gesture below owns vertical pointer movement once a drag
+     starts. */
+  touch-action: none;
+}
+
+/* Reordering swaps the whole list to fixed-height absolute positioning so
+   sibling cards can be told "your slot changed" as a single `top` value and
+   animate there, instead of re-measuring variable-height cards (which is
+   what would otherwise be needed once sets/rest-timer content is showing).
+   The compact class below only controls the per-card visual — the
+   positioning itself is inline style, driven by COMPACT_ROW_HEIGHT in
+   ActiveSessionScreen.tsx. */
+.s-ex-list.reordering {
+  position: relative;
+}
+
+.s-ex.compact {
+  height: 60px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.s-ex.compact .s-top {
+  margin-bottom: 0;
+}
+
+.s-ex.dragging {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  border-color: var(--accent);
 }
 
 .rest-toggle-wrap {
