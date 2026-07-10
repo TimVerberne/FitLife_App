@@ -8,6 +8,7 @@ import { ActiveSessionScreen } from './screens/ActiveSessionScreen';
 import { FinishScreen } from './screens/FinishScreen';
 import { BottomNav } from './components/BottomNav';
 import { MiniBar } from './components/MiniBar';
+import { RestTimerWatcher } from './components/RestTimerWatcher';
 import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
@@ -78,6 +79,7 @@ function AuthedApp() {
   return (
     <div className={`app-shell${hasMiniActive ? ' has-mini-active' : ''}`}>
       <CurrentScreen />
+      <RestTimerWatcher />
       <MiniBar />
       <BottomNav />
       <SheetContainer />

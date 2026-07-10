@@ -15,6 +15,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // We register the service worker ourselves (src/lib/swUpdate.ts) instead
+      // of using the plugin's auto-injected registration script, so that a
+      // newly-activated service worker doesn't trigger an unconditional
+      // window.location.reload() — which, mid-workout, would silently discard
+      // the in-progress session (it only exists in memory until finished).
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'FitFlow',

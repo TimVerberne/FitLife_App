@@ -73,28 +73,44 @@ export function ActiveSessionScreen() {
 
   useEffect(() => {
     if (!settings.keepScreenAwake) return;
-    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    type WakeLockSentinelLike = EventTarget & { release: () => Promise<void> };
+    const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<WakeLockSentinelLike> } };
     if (!nav.wakeLock) return;
-    let sentinel: { release: () => Promise<void> } | null = null;
+    let sentinel: WakeLockSentinelLike | null = null;
     let cancelled = false;
+    let acquiring = false;
 
     function acquire() {
+      // Guards against two overlapping request() calls if visibility flaps
+      // (hidden→visible→hidden) faster than the first request resolves.
+      if (acquiring || sentinel) return;
+      acquiring = true;
       nav.wakeLock!
         .request('screen')
         .then((s) => {
-          if (cancelled) void s.release();
-          else sentinel = s;
+          acquiring = false;
+          if (cancelled) {
+            void s.release();
+            return;
+          }
+          sentinel = s;
+          // Fires both when we explicitly release it AND when the browser
+          // auto-releases it on tab-hide. Without clearing `sentinel` here,
+          // it stays a stale truthy reference forever, so the
+          // visibilitychange handler below would never detect "no lock
+          // held" and would never call acquire() again after the very
+          // first background/foreground cycle.
+          s.addEventListener('release', () => {
+            if (sentinel === s) sentinel = null;
+          });
         })
-        .catch(() => {});
+        .catch(() => {
+          acquiring = false;
+        });
     }
 
-    // The browser auto-releases the wake lock as soon as the tab is hidden
-    // and never reacquires it on its own — without this listener,
-    // backgrounding the app mid-workout (even briefly, e.g. to check a
-    // notification) permanently loses "keep screen awake" for the rest of
-    // that session, since this effect's own dependency never changes again.
     function onVisibilityChange() {
-      if (document.visibilityState === 'visible' && !sentinel) acquire();
+      if (document.visibilityState === 'visible') acquire();
     }
 
     acquire();

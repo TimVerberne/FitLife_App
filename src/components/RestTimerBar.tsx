@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { playBeep } from '../lib/beep';
 
+// The beep/auto-skip-on-expiry logic lives in RestTimerWatcher (mounted
+// unconditionally in App.tsx) instead of here, since this component only
+// exists while ActiveSessionScreen is on screen — minimizing the session
+// would otherwise silently lose the beep for as long as this was the only
+// place watching for expiry.
 export function RestTimerBar() {
   const restTimer = useStore((s) => s.restTimer);
   const adjustRestTimer = useStore((s) => s.adjustRestTimer);
   const skipRestTimer = useStore((s) => s.skipRestTimer);
-  const soundEnabled = useStore((s) => s.settings.restTimerSound);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -15,13 +18,6 @@ export function RestTimerBar() {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [restTimer]);
-
-  useEffect(() => {
-    if (restTimer && restTimer.endsAt <= now) {
-      if (soundEnabled) playBeep();
-      skipRestTimer();
-    }
-  }, [restTimer, now, soundEnabled, skipRestTimer]);
 
   if (!restTimer) return null;
 

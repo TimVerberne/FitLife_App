@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { EXERCISES, bodyParts, searchExercises } from '../../lib/exercises';
 import { Thumb } from '../../components/Thumb';
@@ -13,7 +13,11 @@ export function PickerSheet() {
   const addExercisesToSession = useStore((s) => s.addExercisesToSession);
   const showToast = useStore((s) => s.showToast);
 
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Lives in the global store (not local state) so it survives the
+  // PickerSheet → ExerciseDetailSheet → PickerSheet remount cycle when
+  // tapping the "i" info button mid-selection.
+  const selected = useStore((s) => s.pickSelected);
+  const togglePickSelected = useStore((s) => s.togglePickSelected);
 
   const list = useMemo(() => searchExercises(pickQuery, pickBodyPart), [pickQuery, pickBodyPart]);
   const bps = useMemo(() => ['all', ...bodyParts()], []);
@@ -26,12 +30,7 @@ export function PickerSheet() {
       showToast('Already in your workout');
       return;
     }
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    togglePickSelected(id);
   }
 
   return (

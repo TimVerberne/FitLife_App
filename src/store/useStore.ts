@@ -74,6 +74,7 @@ interface StoreState {
   viewingRoutineId: string | null;
   pickQuery: string;
   pickBodyPart: string;
+  pickSelected: Set<string>;
 
   // dialog + toast
   dialog: DialogState | null;
@@ -125,6 +126,7 @@ interface StoreState {
   closeSheet(): void;
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
+  togglePickSelected(id: string): void;
 
   confirm(message: string, yesLabel: string, onYes: () => void, danger?: boolean, cancelLabel?: string): void;
   resolveDialog(yes: boolean): void;
@@ -174,6 +176,7 @@ export const useStore = create<StoreState>((set, get) => ({
   viewingRoutineId: null,
   pickQuery: '',
   pickBodyPart: 'all',
+  pickSelected: new Set(),
 
   dialog: null,
   toastMsg: '',
@@ -354,6 +357,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set({
       active: { ...active, entries: [...active.entries, ...toAdd.map((exerciseId) => ({ exerciseId, sets: startingSetsFor(sessions, exerciseId) }))], restTimers },
     });
+    set({ pickSelected: new Set() });
     get().showToast(toAdd.length === 1 ? 'Added 1 exercise' : `Added ${toAdd.length} exercises`);
     get().closeSheet();
   },
@@ -416,7 +420,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   openPicker() {
-    set({ sheet: 'picker' });
+    set({ sheet: 'picker', pickQuery: '', pickBodyPart: 'all', pickSelected: new Set() });
   },
 
   openDetail(id) {
@@ -467,7 +471,21 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ pickBodyPart: bp });
   },
 
+  togglePickSelected(id) {
+    set((s) => {
+      const next = new Set(s.pickSelected);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { pickSelected: next };
+    });
+  },
+
   confirm(message, yesLabel, onYes, danger = false, cancelLabel = 'Cancel') {
+    // Guards against a second confirm() call silently discarding the first
+    // dialog's onYes (e.g. a rapid double-tap on the trigger button firing
+    // twice before the scrim's pointer-events:auto kicks in). First request
+    // wins; it must be resolved before a new one can replace it.
+    if (get().dialog) return;
     set({ dialog: { message, yesLabel, cancelLabel, danger, onYes } });
   },
 
