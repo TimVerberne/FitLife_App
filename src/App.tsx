@@ -11,6 +11,7 @@ import { MiniBar } from './components/MiniBar';
 import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
+import { AuthGate } from './features/auth/AuthGate';
 
 function CurrentScreen() {
   const mode = useStore((s) => s.mode);
@@ -25,6 +26,14 @@ function CurrentScreen() {
 }
 
 function App() {
+  return (
+    <AuthGate>
+      <AuthedApp />
+    </AuthGate>
+  );
+}
+
+function AuthedApp() {
   const init = useStore((s) => s.init);
   const loaded = useStore((s) => s.loaded);
   const active = useStore((s) => s.active);

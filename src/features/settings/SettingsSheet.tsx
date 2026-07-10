@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useStore, type Tab } from '../../store/useStore';
 import { ACCENT_PRESETS, type AccentPreset } from '../../lib/settings';
 import { REST_PRESETS, formatRest } from '../../lib/rest';
+import { useAuthState, signOut } from '../../lib/auth';
 
 const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -19,12 +20,26 @@ export function SettingsSheet() {
   const importData = useStore((s) => s.importData);
   const clearAllData = useStore((s) => s.clearAllData);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { email } = useAuthState();
 
   return (
     <div className="sheet-in">
       <div className="sheet-h">Settings</div>
 
       <div className="section-h" style={{ margin: '4px 2px 4px' }}>
+        Account
+      </div>
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-label">Signed in as</div>
+          <div className="settings-row-desc">{email}</div>
+        </div>
+      </div>
+      <button className="btn sec" onClick={() => void signOut()}>
+        Sign out
+      </button>
+
+      <div className="section-h">
         Units &amp; format
       </div>
       <div className="settings-row">
@@ -167,7 +182,7 @@ export function SettingsSheet() {
 
       <div className="section-h">About</div>
       <div style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6, padding: '0 2px 6px' }}>
-        FitFlow · local-only build
+        FitFlow · synced to your account, with an offline-friendly local cache
         <br />
         Exercise photos and instructions are © Gym Visual, used under the dataset's educational/non-commercial license.
       </div>
