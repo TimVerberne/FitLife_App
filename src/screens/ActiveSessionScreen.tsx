@@ -277,7 +277,7 @@ export function ActiveSessionScreen() {
             color: 'inherit',
             fontFamily: 'var(--font-display)',
             fontWeight: 700,
-            fontSize: 15,
+            fontSize: 16,
           }}
         />
       </div>
