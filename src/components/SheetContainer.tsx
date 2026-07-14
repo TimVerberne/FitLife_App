@@ -14,6 +14,13 @@ export function SheetContainer() {
   const sheet = useStore((s) => s.sheet);
   const closeSheet = useStore((s) => s.closeSheet);
   const show = sheet !== null;
+  // The picker's result count swings from 1000+ rows down to a single match
+  // as you type, and .sheet only caps its height (max-height) rather than
+  // fixing it — so it was shrink-wrapping to the shorter filtered list on
+  // every keystroke, which (since the sheet is bottom-anchored) visibly
+  // shifted the search bar up and down. Locking it to a fixed height keeps
+  // the search bar stationary regardless of how many results match.
+  const fixedHeight = sheet === 'picker';
 
   const drag = useRef<{ startY: number; dy: number } | null>(null);
   const [dragY, setDragY] = useState(0);
@@ -55,7 +62,7 @@ export function SheetContainer() {
     <>
       <div className={`scrim${show ? ' show' : ''}`} onClick={closeSheet} />
       <div
-        className={`sheet${show ? ' show' : ''}`}
+        className={`sheet${show ? ' show' : ''}${fixedHeight ? ' sheet-fixed' : ''}`}
         style={dragging ? { transform: `translateX(-50%) translateY(${dragY}px)`, transition: 'none' } : undefined}
       >
         <div

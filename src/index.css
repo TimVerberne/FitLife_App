@@ -1991,6 +1991,10 @@
   border-top: 1px solid var(--line);
 }
 
+.sheet.sheet-fixed {
+  height: 90dvh;
+}
+
 .sheet.show {
   transform: translateX(-50%) translateY(0);
 }
