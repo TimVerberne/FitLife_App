@@ -9,3 +9,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Injected by vite.config.ts's `define` from package.json's version field —
+// bump that on every deploy so this stays a reliable "what am I looking at".
+declare const __APP_VERSION__: string;

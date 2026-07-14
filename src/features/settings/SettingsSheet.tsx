@@ -25,7 +25,10 @@ export function SettingsSheet() {
 
   return (
     <div className="sheet-in">
-      <div className="sheet-h">Settings</div>
+      <div className="sheet-h">
+        Settings
+        <span className="sheet-version">v{__APP_VERSION__}</span>
+      </div>
 
       <div className="section-h" style={{ margin: '4px 2px 4px' }}>
         Account
