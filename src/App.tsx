@@ -55,18 +55,21 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshFriends();
   }, [loaded, userId]);
 
-  // There's no realtime subscription for friends' workouts, so without this
-  // a session someone else logs while you're just sitting on Home stays
-  // invisible until you background/reopen the app or bounce off the tab.
-  // Poll periodically, and also refresh the instant the app regains focus —
-  // mobile OSes throttle/suspend timers while backgrounded, so the interval
-  // alone could otherwise sit stale for a while after resuming.
+  // There's no realtime subscription for friends' workouts or for a routine
+  // edited on another device, so without this both stay stale while the app
+  // just sits open or gets reopened from a suspended background state (a
+  // standalone PWA resuming isn't a fresh navigation, so the one-time
+  // syncWithCloud effect above never re-fires on its own). Poll periodically,
+  // and also refresh the instant the app regains focus.
   useEffect(() => {
     if (!loaded || !userId) return;
+    const currentUserId = userId;
     const POLL_MS = 45_000;
     const id = setInterval(() => void useStore.getState().refreshFriendSessions(), POLL_MS);
     function onVisibilityChange() {
-      if (document.visibilityState === 'visible') void useStore.getState().refreshFriendSessions();
+      if (document.visibilityState !== 'visible') return;
+      void useStore.getState().refreshFriendSessions();
+      void useStore.getState().syncWithCloud(currentUserId);
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {

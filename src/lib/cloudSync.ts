@@ -181,20 +181,41 @@ export async function uploadLocalDataOnFirstLogin(routines: Routine[], sessions:
   }
 }
 
-// Additive-only reconcile for a device that's already linked to its
-// account: pulls remote rows this device doesn't have locally yet (e.g.
-// created on another device) and returns just those. Never reports a row
-// as "new" if it already exists locally, so it can't clobber a local edit
-// that just hasn't finished syncing up yet.
+function routineContentDiffers(a: Routine, b: Routine): boolean {
+  return (
+    a.name !== b.name ||
+    a.exerciseIds.length !== b.exerciseIds.length ||
+    a.exerciseIds.some((id, i) => id !== b.exerciseIds[i])
+  );
+}
+
+// Reconcile for a device that's already linked to its account. Sessions are
+// additive-only (never mutated after creation, so "new" is the only case
+// that exists). Routines can now be renamed or have their exercise list
+// edited after creation, so a routine already present locally still needs
+// to pick up remote content changes — not just brand-new rows created on
+// another device — or an edit made on one device silently never reaches an
+// already-linked second device. flushPendingSync() runs before this (see
+// syncWithCloud), so this device's own not-yet-synced edits are already
+// pushed up by the time remote is fetched here — cloud content winning for
+// an existing id isn't clobbering unsynced local work in the normal case.
 export async function reconcileNewFromCloud(
   localRoutines: Routine[],
   localSessions: WorkoutSession[],
-): Promise<{ newRoutines: Routine[]; newSessions: WorkoutSession[] }> {
+): Promise<{ newRoutines: Routine[]; updatedRoutines: Routine[]; newSessions: WorkoutSession[] }> {
   const remote = await fetchAllRemote();
-  const localRoutineIds = new Set(localRoutines.map((r) => r.id));
+  const localRoutineById = new Map(localRoutines.map((r) => [r.id, r]));
   const localSessionIds = new Set(localSessions.map((s) => s.id));
+  const newRoutines: Routine[] = [];
+  const updatedRoutines: Routine[] = [];
+  for (const remoteRoutine of remote.routines) {
+    const local = localRoutineById.get(remoteRoutine.id);
+    if (!local) newRoutines.push(remoteRoutine);
+    else if (routineContentDiffers(local, remoteRoutine)) updatedRoutines.push(remoteRoutine);
+  }
   return {
-    newRoutines: remote.routines.filter((r) => !localRoutineIds.has(r.id)),
+    newRoutines,
+    updatedRoutines,
     newSessions: remote.sessions.filter((s) => !localSessionIds.has(s.id)),
   };
 }

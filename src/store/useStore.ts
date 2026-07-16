@@ -828,14 +828,23 @@ export const useStore = create<StoreState>((set, get) => ({
       if (!stillCurrent()) return;
 
       if (localStorage.getItem(linkedKey) === '1') {
-        // Already linked — pull in anything created on another device, additively only.
-        const { newRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
+        // Already linked — pull in anything created on another device
+        // (additive), plus any routine edited on another device (cloud
+        // content wins for a routine id already present locally).
+        const { newRoutines, updatedRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
         if (!stillCurrent()) return;
         if (newRoutines.length > 0) await db.routines.bulkPut(newRoutines);
+        if (updatedRoutines.length > 0) await db.routines.bulkPut(updatedRoutines);
         if (newSessions.length > 0) await db.sessions.bulkPut(newSessions);
         if (!stillCurrent()) return;
-        if (newRoutines.length > 0 || newSessions.length > 0) {
-          set((s) => ({ routines: [...s.routines, ...newRoutines], sessions: [...s.sessions, ...newSessions] }));
+        if (newRoutines.length > 0 || updatedRoutines.length > 0 || newSessions.length > 0) {
+          set((s) => ({
+            routines: [
+              ...s.routines.map((r) => updatedRoutines.find((u) => u.id === r.id) ?? r),
+              ...newRoutines,
+            ],
+            sessions: [...s.sessions, ...newSessions],
+          }));
         }
         return;
       }
