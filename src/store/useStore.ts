@@ -31,6 +31,8 @@ export interface FinishResult {
   name: string;
   exerciseIds: string[];
   newRoutine: boolean;
+  routineId: string | null;
+  routineChanged: boolean;
 }
 
 interface DialogState {
@@ -136,6 +138,7 @@ interface StoreState {
   cancelSession(): void;
   finishSession(): void;
   saveRoutineFromFinish(name: string, exerciseIds: string[]): void;
+  updateRoutineExercises(routineId: string, exerciseIds: string[]): void;
 
   openPicker(): void;
   openDetail(id: string): void;
@@ -472,12 +475,23 @@ export const useStore = create<StoreState>((set, get) => ({
     void cloudSync.pushSession(newSession);
     const exerciseIds = Array.from(new Set(active.entries.map((e) => e.exerciseId)));
     const newRoutine = !active.routineId && exerciseIds.length > 0;
+    // Editing a routine's exercises only ever happens live, mid-session — there's
+    // no separate "edit routine" screen — so a session that started from a
+    // routine but ends with a different exercise list (added/removed/reordered)
+    // otherwise has that change silently discarded the moment you finish, with
+    // no indication it happened. Flag it so the Finish screen can offer a choice
+    // instead of quietly reverting to the original every time.
+    const sourceRoutine = active.routineId ? get().routines.find((r) => r.id === active.routineId) : null;
+    const routineChanged =
+      !!sourceRoutine &&
+      (sourceRoutine.exerciseIds.length !== exerciseIds.length ||
+        sourceRoutine.exerciseIds.some((id, i) => id !== exerciseIds[i]));
     set((s) => ({
       sessions: [newSession, ...s.sessions],
       active: null,
       mode: 'finish',
       restTimer: null,
-      finishResult: { entries, durationMin, name: active.name, exerciseIds, newRoutine },
+      finishResult: { entries, durationMin, name: active.name, exerciseIds, newRoutine, routineId: active.routineId, routineChanged },
     }));
   },
 
@@ -487,6 +501,14 @@ export const useStore = create<StoreState>((set, get) => ({
     void cloudSync.pushRoutine(routine);
     set((s) => ({ routines: [...s.routines, routine], tab: 'train', mode: 'tabs', finishResult: null }));
     get().showToast('Routine saved');
+  },
+
+  updateRoutineExercises(routineId, exerciseIds) {
+    void db.routines.update(routineId, { exerciseIds });
+    const routine = get().routines.find((r) => r.id === routineId);
+    if (routine) void cloudSync.pushRoutine({ ...routine, exerciseIds });
+    set((s) => ({ routines: s.routines.map((r) => (r.id === routineId ? { ...r, exerciseIds } : r)) }));
+    get().showToast('Routine updated');
   },
 
   openPicker() {

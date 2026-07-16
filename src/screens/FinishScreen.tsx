@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { setsCountOf, volumeOf } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
@@ -5,8 +6,11 @@ import { toDisplayWeight } from '../lib/units';
 export function FinishScreen() {
   const result = useStore((s) => s.finishResult);
   const saveRoutineFromFinish = useStore((s) => s.saveRoutineFromFinish);
+  const updateRoutineExercises = useStore((s) => s.updateRoutineExercises);
+  const routineName = useStore((s) => s.routines.find((r) => r.id === result?.routineId)?.name);
   const go = useStore((s) => s.go);
   const units = useStore((s) => s.settings.units);
+  const [routineChoiceMade, setRoutineChoiceMade] = useState(false);
 
   if (!result) return null;
   const volume = Math.round(toDisplayWeight(volumeOf(result.entries), units));
@@ -40,6 +44,26 @@ export function FinishScreen() {
         <button className="btn" style={{ marginTop: 16 }} onClick={() => saveRoutineFromFinish(result.name, result.exerciseIds)}>
           Save as routine
         </button>
+      )}
+      {result.routineChanged && result.routineId && !routineChoiceMade && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 10 }}>
+            You changed the exercises in <b style={{ color: 'var(--ink)' }}>{routineName ?? 'this routine'}</b> this time.
+            Keep the original routine as-is, or save these changes to it?
+          </div>
+          <button
+            className="btn"
+            onClick={() => {
+              updateRoutineExercises(result.routineId!, result.exerciseIds);
+              setRoutineChoiceMade(true);
+            }}
+          >
+            Save changes to routine
+          </button>
+          <button className="btn sec" style={{ marginTop: 8 }} onClick={() => setRoutineChoiceMade(true)}>
+            Keep original routine
+          </button>
+        </div>
       )}
       <button className="btn sec" style={{ marginTop: 10 }} onClick={() => go('home')}>
         Go to Home
