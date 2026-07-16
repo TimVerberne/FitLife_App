@@ -1,10 +1,20 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
+  // The date/time header otherwise only recomputes when something else
+  // triggers a re-render, so it silently goes stale while this screen just
+  // sits open. This tick has no other purpose than forcing a fresh `Date()`
+  // read every 30s.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
   const routines = useStore((s) => s.routines);
   const ownSessions = useStore((s) => s.sessions);
   const friendSessionsRaw = useStore((s) => s.friendSessions);

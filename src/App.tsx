@@ -55,6 +55,26 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshFriends();
   }, [loaded, userId]);
 
+  // There's no realtime subscription for friends' workouts, so without this
+  // a session someone else logs while you're just sitting on Home stays
+  // invisible until you background/reopen the app or bounce off the tab.
+  // Poll periodically, and also refresh the instant the app regains focus —
+  // mobile OSes throttle/suspend timers while backgrounded, so the interval
+  // alone could otherwise sit stale for a while after resuming.
+  useEffect(() => {
+    if (!loaded || !userId) return;
+    const POLL_MS = 45_000;
+    const id = setInterval(() => void useStore.getState().refreshFriendSessions(), POLL_MS);
+    function onVisibilityChange() {
+      if (document.visibilityState === 'visible') void useStore.getState().refreshFriendSessions();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [loaded, userId]);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
