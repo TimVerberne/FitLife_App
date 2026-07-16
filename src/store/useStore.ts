@@ -839,21 +839,34 @@ export const useStore = create<StoreState>((set, get) => ({
 
       if (localStorage.getItem(linkedKey) === '1') {
         // Already linked — pull in anything created on another device
-        // (additive), plus any routine edited on another device (cloud
-        // content wins for a routine id already present locally).
-        const { newRoutines, updatedRoutines, newSessions } = await cloudSync.reconcileNewFromCloud(get().routines, get().sessions);
+        // (additive), any routine edited on another device (cloud content
+        // wins for a routine id already present locally), and remove
+        // anything deleted on another device (a routine or a workout no
+        // longer present remotely).
+        const { newRoutines, updatedRoutines, goneRoutineIds, newSessions, goneSessionIds } = await cloudSync.reconcileNewFromCloud(
+          get().routines,
+          get().sessions,
+        );
         if (!stillCurrent()) return;
         if (newRoutines.length > 0) await db.routines.bulkPut(newRoutines);
         if (updatedRoutines.length > 0) await db.routines.bulkPut(updatedRoutines);
+        if (goneRoutineIds.length > 0) await db.routines.bulkDelete(goneRoutineIds);
         if (newSessions.length > 0) await db.sessions.bulkPut(newSessions);
+        if (goneSessionIds.length > 0) await db.sessions.bulkDelete(goneSessionIds);
         if (!stillCurrent()) return;
-        if (newRoutines.length > 0 || updatedRoutines.length > 0 || newSessions.length > 0) {
+        if (
+          newRoutines.length > 0 ||
+          updatedRoutines.length > 0 ||
+          goneRoutineIds.length > 0 ||
+          newSessions.length > 0 ||
+          goneSessionIds.length > 0
+        ) {
           set((s) => ({
-            routines: [
-              ...s.routines.map((r) => updatedRoutines.find((u) => u.id === r.id) ?? r),
-              ...newRoutines,
-            ],
-            sessions: [...s.sessions, ...newSessions],
+            routines: s.routines
+              .filter((r) => !goneRoutineIds.includes(r.id))
+              .map((r) => updatedRoutines.find((u) => u.id === r.id) ?? r)
+              .concat(newRoutines),
+            sessions: s.sessions.filter((sess) => !goneSessionIds.includes(sess.id)).concat(newSessions),
           }));
         }
         return;

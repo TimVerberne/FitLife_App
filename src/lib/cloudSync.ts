@@ -189,23 +189,35 @@ function routineContentDiffers(a: Routine, b: Routine): boolean {
   );
 }
 
-// Reconcile for a device that's already linked to its account. Sessions are
-// additive-only (never mutated after creation, so "new" is the only case
-// that exists). Routines can now be renamed or have their exercise list
-// edited after creation, so a routine already present locally still needs
-// to pick up remote content changes — not just brand-new rows created on
-// another device — or an edit made on one device silently never reaches an
-// already-linked second device. flushPendingSync() runs before this (see
-// syncWithCloud), so this device's own not-yet-synced edits are already
-// pushed up by the time remote is fetched here — cloud content winning for
-// an existing id isn't clobbering unsynced local work in the normal case.
+// Reconcile for a device that's already linked to its account. Routines can
+// be renamed or have their exercise list edited after creation, and both
+// routines and sessions can now be deleted after creation (delete a routine;
+// delete a workout from history) — so a device already holding a local copy
+// needs to pick up remote content changes AND remote deletions, not just
+// brand-new rows created on another device. Without the "gone" side of this,
+// deleting something on one device would never remove it from another
+// already-linked device; it'd sit there indefinitely since nothing ever
+// re-checks an id that already exists locally against whether it still
+// exists remotely. flushPendingSync() runs before this (see syncWithCloud),
+// so this device's own not-yet-synced edits/deletes are already pushed up by
+// the time remote is fetched here — cloud winning for an existing id isn't
+// clobbering unsynced local work in the normal (online) case.
 export async function reconcileNewFromCloud(
   localRoutines: Routine[],
   localSessions: WorkoutSession[],
-): Promise<{ newRoutines: Routine[]; updatedRoutines: Routine[]; newSessions: WorkoutSession[] }> {
+): Promise<{
+  newRoutines: Routine[];
+  updatedRoutines: Routine[];
+  goneRoutineIds: string[];
+  newSessions: WorkoutSession[];
+  goneSessionIds: string[];
+}> {
   const remote = await fetchAllRemote();
   const localRoutineById = new Map(localRoutines.map((r) => [r.id, r]));
   const localSessionIds = new Set(localSessions.map((s) => s.id));
+  const remoteRoutineIds = new Set(remote.routines.map((r) => r.id));
+  const remoteSessionIds = new Set(remote.sessions.map((s) => s.id));
+
   const newRoutines: Routine[] = [];
   const updatedRoutines: Routine[] = [];
   for (const remoteRoutine of remote.routines) {
@@ -213,10 +225,13 @@ export async function reconcileNewFromCloud(
     if (!local) newRoutines.push(remoteRoutine);
     else if (routineContentDiffers(local, remoteRoutine)) updatedRoutines.push(remoteRoutine);
   }
+
   return {
     newRoutines,
     updatedRoutines,
+    goneRoutineIds: localRoutines.filter((r) => !remoteRoutineIds.has(r.id)).map((r) => r.id),
     newSessions: remote.sessions.filter((s) => !localSessionIds.has(s.id)),
+    goneSessionIds: localSessions.filter((s) => !remoteSessionIds.has(s.id)).map((s) => s.id),
   };
 }
 
