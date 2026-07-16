@@ -167,7 +167,7 @@ export function FriendsSheet() {
                 <div className="settings-row-label">{req.profile.displayName ?? req.profile.email}</div>
                 <div className="settings-row-desc">Request sent — waiting for them</div>
               </div>
-              <button className="btn sec" style={{ width: 'auto', padding: '8px 12px' }} onClick={() => removeFriend(req.friendshipId)}>
+              <button className="btn sec" style={{ width: 'auto', padding: '8px 12px' }} onClick={() => removeFriend(req.friendshipId, true)}>
                 Cancel
               </button>
             </div>

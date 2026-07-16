@@ -317,7 +317,6 @@ export const MUSCLE_GROUP: Record<string, string> = {
   'lower arms': 'Arms',
   waist: 'Core',
   neck: 'Core',
-  cardio: 'Core',
 };
 
 export function primaryMuscleGroup(exerciseIds: string[]): string | null {

@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { useStore } from '../store/useStore';
+import { throttleOnFocus } from './focusThrottle';
 
 // With registerType: 'autoUpdate', a new service worker activates itself as
 // soon as it's installed. Without an onNeedReload handler, vite-plugin-pwa's
@@ -42,7 +43,7 @@ export function initServiceWorkerUpdate(): void {
         void registration!.update();
       }
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') checkForUpdate();
+        if (document.visibilityState === 'visible') throttleOnFocus('sw-update-check', 30_000, checkForUpdate);
       });
       setInterval(checkForUpdate, 60 * 60 * 1000);
     },

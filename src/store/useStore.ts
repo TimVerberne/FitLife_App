@@ -180,7 +180,7 @@ interface StoreState {
   sendFriendRequestToProfile(profileId: string): Promise<friendsApi.SendFriendRequestResult>;
   acceptFriendRequest(friendshipId: string): Promise<void>;
   declineFriendRequest(friendshipId: string): Promise<void>;
-  removeFriend(friendshipId: string): void;
+  removeFriend(friendshipId: string, pending?: boolean): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -977,16 +977,24 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  removeFriend(friendshipId) {
-    get().confirm('Remove this friend? You\'ll both lose access to each other\'s stats.', 'Yes, remove', () => {
+  removeFriend(friendshipId, pending = false) {
+    // A pending outgoing request was never accepted, so the "you'll both
+    // lose access to each other's stats" framing (written for an actual
+    // established friendship) doesn't apply — cancelling it is lower-stakes
+    // than removing a real friend, so it gets its own wording and isn't
+    // styled as a destructive/danger action.
+    const message = pending ? 'Cancel this friend request?' : 'Remove this friend? You\'ll both lose access to each other\'s stats.';
+    const yesLabel = pending ? 'Yes, cancel' : 'Yes, remove';
+    const errorMessage = pending ? 'Could not cancel — try again' : 'Could not remove — try again';
+    get().confirm(message, yesLabel, () => {
       void friendsApi
         .removeFriend(friendshipId)
         .then(() => get().refreshFriends())
         .catch((err) => {
           console.error('Failed to remove friend', err);
-          get().showToast('Could not remove — try again');
+          get().showToast(errorMessage);
         });
-    }, true);
+    }, !pending, pending ? 'Keep it' : 'Cancel');
   },
 }));
 

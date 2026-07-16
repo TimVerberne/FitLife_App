@@ -14,6 +14,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuthState } from './lib/auth';
+import { throttleOnFocus } from './lib/focusThrottle';
 
 function CurrentScreen() {
   const mode = useStore((s) => s.mode);
@@ -68,8 +69,8 @@ function AuthedApp() {
     const id = setInterval(() => void useStore.getState().refreshFriendSessions(), POLL_MS);
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return;
-      void useStore.getState().refreshFriendSessions();
-      void useStore.getState().syncWithCloud(currentUserId);
+      throttleOnFocus('friend-sessions', 30_000, () => void useStore.getState().refreshFriendSessions());
+      throttleOnFocus('cloud-sync', 30_000, () => void useStore.getState().syncWithCloud(currentUserId));
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
