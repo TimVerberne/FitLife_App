@@ -48,7 +48,7 @@ export function HomeScreen() {
     : 0;
 
   const crew = useMemo(
-    () => [...sessions].filter((h) => h.person !== 'You').sort((a, b) => b.startedAt - a.startedAt).slice(0, 4),
+    () => [...sessions].sort((a, b) => b.startedAt - a.startedAt).slice(0, 4),
     [sessions],
   );
 
