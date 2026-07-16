@@ -28,6 +28,24 @@ export function initServiceWorkerUpdate(): void {
         reloadIfSafe();
       }
     },
+    onRegisteredSW(_swUrl, registration) {
+      if (!registration) return;
+      // The browser's own "check for a new service worker" logic is tied to
+      // page navigation — which barely happens for a standalone home-screen
+      // app, since reopening the icon doesn't always count as a fresh
+      // navigation the way it reliably would in a normal browser tab. iOS in
+      // particular is known to sit on a stale cached app shell for a long
+      // time otherwise. Force a check whenever the app regains focus (i.e.
+      // every time it's actually reopened), plus a periodic backstop for
+      // sessions left open continuously.
+      function checkForUpdate() {
+        void registration!.update();
+      }
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') checkForUpdate();
+      });
+      setInterval(checkForUpdate, 60 * 60 * 1000);
+    },
   });
   useStore.subscribe(reloadIfSafe);
 }
