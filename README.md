@@ -91,6 +91,53 @@ browser at mobile width. `npm run build` produces a production build;
 
 ## Update notes
 
+**Version 1.2.0**
+- **Routine editing**: there was no way to edit an existing routine's
+  exercises at all — only rename or delete. Adding, removing, or reordering
+  exercises during a session started from a routine silently never saved
+  back to the routine template, with no indication anything was dropped.
+  Finishing a workout that changed a linked routine's exercises now shows an
+  explicit choice: save the change to the routine, or keep the original as-is.
+- Fixed routine edits not reaching an already-linked second device — the
+  cloud sync for a device that's already linked only ever pulled brand-new
+  routines/sessions across, never updates to something that already existed
+  on that device, so an edit made on one device (e.g. the browser) stayed
+  invisible on another (e.g. the installed app) indefinitely.
+- Added a confirm-gated "Delete workout" button to the workout detail sheet,
+  so a workout saved by mistake instead of discarded can actually be removed
+  from history (own workouts only; friends' workouts are unaffected).
+- **PWA installability**: a small "Install" pill in the You page header
+  triggers the native install prompt on Android/Chrome, or reveals the
+  Share → "Add to Home Screen" steps in a popover on iOS — neither Safari
+  nor Chrome for iOS can trigger install programmatically, since Apple
+  requires every iOS browser to run on WebKit regardless of which one it is.
+- Fixed the installed (standalone) app clipping its own header content under
+  the iOS status bar, and an incorrect initial zoom on first launch — both
+  were missing safe-area/viewport handling that only matters once there's no
+  browser chrome around the page.
+- The app now actively checks for a newly deployed version the moment it
+  regains focus instead of relying on the browser's own opportunistic
+  checking — installed PWAs (especially on iOS) could otherwise sit on an
+  old cached version for an extra app-open or more after a release.
+- Fixed the exercise picker's search bar visibly jumping up and down as
+  results narrowed toward a few matches — the whole sheet was shrink-wrapping
+  its height to the filtered list instead of staying a fixed size.
+- Fixed several iOS-only mobile bugs found in a full pass over the app: text
+  inputs under the 16px font-size threshold (exercise search, email fields,
+  the session name field) were auto-zooming the whole page on focus; the
+  workout-cancel "END" button had an 18px-tall tap target, the smallest in
+  the app.
+- Friends' new workouts now show up on Home without restarting the app —
+  refreshed automatically every 45s and the instant the app regains focus,
+  instead of only on first load or opening the Friends sheet.
+- Own workouts now appear in the Home page's crew feed alongside friends',
+  merged into one recency-sorted timeline instead of friends-only.
+- The Home page's date/time now ticks live instead of freezing at whatever
+  it happened to show when the screen last rendered.
+- Added a version indicator (e.g. `v1.2.0`, sourced from `package.json`) to
+  the top of the Settings sheet — bumped on every deploy from here on, so
+  it's easy to tell which build is actually running.
+
 **Full app audit & bug fixes**
 - Ran a systematic pass across the data/sync layer, UI/calculations, and
   auth/PWA code looking for real bugs. Fixed, worst first:
