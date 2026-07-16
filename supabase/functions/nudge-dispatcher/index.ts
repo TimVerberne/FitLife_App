@@ -67,8 +67,8 @@ Deno.serve(async () => {
 
     const setCount = nudge.sets_logged;
     const payload = JSON.stringify({
-      title: 'Workout still in progress \u{1F4AA}',
-      body: `${nudge.session_name}, ${setCount} set${setCount === 1 ? '' : 's'} logged. Tap to resume.`,
+      title: nudge.session_name,
+      body: `\u{1F4AA} Still going? ${setCount} set${setCount === 1 ? '' : 's'} logged — tap to resume.`,
     });
 
     for (const sub of (subs ?? []) as PushSubscriptionRow[]) {

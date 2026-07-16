@@ -48,6 +48,13 @@ interface NudgePayload {
   body?: string;
 }
 
+// lib.webworker.d.ts's NotificationOptions is missing `renotify` even though
+// it's a standard, widely-supported option — extend it locally rather than
+// casting to `any` at the call site.
+interface NotificationOptionsWithRenotify extends NotificationOptions {
+  renotify?: boolean;
+}
+
 self.addEventListener('push', (event) => {
   let payload: NudgePayload = {};
   if (event.data) {
@@ -58,14 +65,18 @@ self.addEventListener('push', (event) => {
     }
   }
   const iconUrl = new URL('icon-192.png', self.registration.scope).toString();
-  event.waitUntil(
-    self.registration.showNotification(payload.title ?? 'FitFlow', {
-      body: payload.body ?? '',
-      icon: iconUrl,
-      badge: iconUrl,
-      tag: 'workout-nudge',
-    }),
-  );
+  const options: NotificationOptionsWithRenotify = {
+    body: payload.body ?? '',
+    icon: iconUrl,
+    badge: iconUrl,
+    tag: 'workout-nudge',
+    // Without this, the 5-minute follow-up nudge silently replaces the
+    // first one in-place (same tag) instead of actually re-alerting — it'd
+    // sit there updated but the phone would never buzz or wake the lock
+    // screen for it a second time.
+    renotify: true,
+  };
+  event.waitUntil(self.registration.showNotification(payload.title ?? 'FitFlow', options));
 });
 
 // Tapping the notification focuses the already-open app (which restores the

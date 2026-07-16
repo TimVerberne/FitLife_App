@@ -102,6 +102,13 @@ this is done.
 
 ## Update notes
 
+**Version 1.3.1**
+- Polished the "workout still in progress" push nudge: the notification title
+  is now the workout name itself (e.g. "Chest & Triceps") instead of a generic
+  header, and the second nudge 5 minutes later now actually re-alerts (buzzes,
+  reappears on the lock screen) instead of silently replacing the first one
+  in place.
+
 **Version 1.3.0**
 - **"Workout still in progress" push nudge**: while a workout is active and
   the app is backgrounded/locked, a server-scheduled push notification
