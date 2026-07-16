@@ -15,6 +15,8 @@ import { Toast } from './components/Toast';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuthState } from './lib/auth';
 import { throttleOnFocus } from './lib/focusThrottle';
+import { armNudge, disarmNudge } from './lib/pushNudges';
+import { setsCountOf } from './lib/records';
 
 function CurrentScreen() {
   const mode = useStore((s) => s.mode);
@@ -77,6 +79,28 @@ function AuthedApp() {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
+  }, [loaded, userId]);
+
+  // Arms a "workout still in progress" server-push nudge the moment the app
+  // is backgrounded during an active session (only if the setting is on),
+  // and disarms it the instant the app comes back — a locked phone can't
+  // run a client-side timer reliably (iOS freezes the service worker), so
+  // the schedule has to live server-side; this just tells it when to start
+  // and stop.
+  useEffect(() => {
+    if (!loaded || !userId) return;
+    function onVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        const { active: currentActive, settings } = useStore.getState();
+        if (!settings.notifyActiveWorkout || !currentActive) return;
+        const maxNudges = settings.notifyActiveWorkoutRepeat ? 2 : 1;
+        void armNudge(currentActive.name || 'Workout', setsCountOf(currentActive.entries), maxNudges);
+      } else if (document.visibilityState === 'visible') {
+        void disarmNudge();
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [loaded, userId]);
 
   useEffect(() => {

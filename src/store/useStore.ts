@@ -9,6 +9,7 @@ import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
+import { disarmNudge } from '../lib/pushNudges';
 import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'you';
@@ -244,8 +245,20 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await purgeDemoFriendRows();
-      const [routines, sessions] = await Promise.all([db.routines.toArray(), db.sessions.toArray()]);
-      set({ routines, sessions, loaded: true });
+      const [routines, sessions, activeRecord] = await Promise.all([
+        db.routines.toArray(),
+        db.sessions.toArray(),
+        db.activeSession.get('current'),
+      ]);
+      if (activeRecord) {
+        // A workout was still in progress when this device last closed —
+        // restore it and land straight on it, instead of losing it the
+        // moment the OS (iOS especially) fully evicts a backgrounded PWA.
+        const { id: _id, ...active } = activeRecord;
+        set({ routines, sessions, loaded: true, active, mode: 'session' });
+      } else {
+        set({ routines, sessions, loaded: true });
+      }
     } catch (err) {
       // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
       // fall back to an empty in-memory session so the app still works, just without persistence.
@@ -447,6 +460,7 @@ export const useStore = create<StoreState>((set, get) => ({
   cancelSession() {
     get().confirm('Discard this workout? Your progress will be lost.', 'Yes, discard', () => {
       set({ active: null, mode: 'tabs', restTimer: null });
+      void disarmNudge();
       get().showToast('Workout discarded');
     }, true, 'Keep training');
   },
@@ -454,6 +468,7 @@ export const useStore = create<StoreState>((set, get) => ({
   finishSession() {
     const active = get().active;
     if (!active) return;
+    void disarmNudge();
     // Only keep sets you actually checked off — unfilled rows shouldn't be saved as if you did them.
     const entries = active.entries
       .map((e) => ({ ...e, sets: e.sets.filter((s) => s.done) }))
@@ -1012,7 +1027,21 @@ onSignedOut(() => {
     outgoingRequests: [],
     friendsLoaded: false,
     friendSessions: [],
+    active: null,
+    mode: 'tabs',
   });
   saveSettings(DEFAULT_SETTINGS);
   applyTheme(DEFAULT_SETTINGS);
+});
+
+// Mirrors `active` to Dexie every time it changes (including to null, which
+// deletes the record) instead of requiring every action that touches it to
+// remember to persist — a single place that can't be missed as new
+// active-session actions get added later.
+let lastPersistedActive: ActiveSession | null = null;
+useStore.subscribe((state) => {
+  if (state.active === lastPersistedActive) return;
+  lastPersistedActive = state.active;
+  if (state.active) void db.activeSession.put({ id: 'current', ...state.active });
+  else void db.activeSession.delete('current');
 });

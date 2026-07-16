@@ -174,3 +174,66 @@ $$;
 create trigger friendships_lock_requester
   before update on public.friendships
   for each row execute procedure public.lock_friendship_requester();
+
+-- Phase 6: "Workout still in progress" push nudge.
+-- Run this in the Supabase SQL editor, then follow supabase/functions/
+-- nudge-dispatcher/README.md to deploy the dispatcher and schedule it.
+
+create table public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now()
+);
+create index push_subscriptions_user_idx on public.push_subscriptions (user_id);
+
+alter table public.push_subscriptions enable row level security;
+create policy "own push subscriptions" on public.push_subscriptions for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- One row per user (primary key), upserted by the client on background and
+-- deleted by the client on foreground/finish/discard — see armNudge() /
+-- disarmNudge() in src/lib/pushNudges.ts. The dispatcher Edge Function runs
+-- with the service-role key, which bypasses RLS entirely, so it can read
+-- and update every user's row on its own schedule; no extra policy needed
+-- for it.
+create table public.active_nudges (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  session_name text not null,
+  sets_logged integer not null default 0,
+  next_fire_at timestamptz not null,
+  nudges_sent integer not null default 0,
+  max_nudges integer not null default 2,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.active_nudges enable row level security;
+create policy "own active nudges" on public.active_nudges for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Schedules the dispatcher Edge Function to run every minute (pg_cron's
+-- standard granularity — some Supabase projects support finer-grained
+-- "N seconds" schedules too, but a 1-minute tick already matches the
+-- feature's own "~30-60s" timing note, so there's no need to rely on that).
+-- Replace <project-ref> and <service-role-key> below, then run this after
+-- the Edge Function is deployed (see supabase/functions/nudge-dispatcher/README.md).
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+  'nudge-dispatcher-tick',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url := 'https://<project-ref>.supabase.co/functions/v1/nudge-dispatcher',
+    headers := jsonb_build_object('Authorization', 'Bearer <service-role-key>', 'Content-Type', 'application/json'),
+    body := '{}'::jsonb
+  );
+  $$
+);
+
+-- To change the schedule later (e.g. after confirming your project's
+-- pg_cron supports sub-minute intervals): select cron.unschedule('nudge-dispatcher-tick');
+-- then re-run cron.schedule(...) with a new interval.

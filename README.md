@@ -89,7 +89,40 @@ Open the printed local URL on your phone (same network) or in a desktop
 browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
 
+### Workout-nudge push notifications (one-time backend setup)
+
+The "remind me if I leave an active workout" setting needs backend
+infrastructure the client alone can't provide — see
+`supabase/functions/nudge-dispatcher/README.md` for the full setup (run the
+Phase 6 section of `supabase/schema.sql`, generate a VAPID keypair, set it as
+Edge Function secrets, deploy the function, add the public key as
+`VITE_VAPID_PUBLIC_KEY` alongside the existing Supabase build secrets, then
+schedule the dispatcher via `pg_cron`). The setting stays hidden/inert until
+this is done.
+
 ## Update notes
+
+**Version 1.3.0**
+- **"Workout still in progress" push nudge**: while a workout is active and
+  the app is backgrounded/locked, a server-scheduled push notification
+  reminds you to come back — a client-side timer can't do this reliably
+  (iOS freezes the service worker of a backgrounded PWA), so the schedule
+  lives in Postgres and a `pg_cron`-triggered Edge Function sends the actual
+  push via VAPID. First nudge ~1 minute after backgrounding, a second
+  ~5 minutes after that if you're still away and the workout's still active
+  (configurable off), none after that. Returning to the app, finishing, or
+  discarding the workout cancels anything pending. New "Notifications"
+  section in Settings; detects and explains when it's unavailable (a browser
+  tab on iOS can't receive push at all — only an installed home-screen app
+  can). Needs one-time backend setup — see "Running it" above.
+- **Fixed a real risk this surfaced**: the active workout only ever lived in
+  memory, never touching disk until you tapped Finish — so if the OS fully
+  evicted a backgrounded PWA (which iOS does aggressively, precisely during
+  the kind of extended background this feature is nudging you back from),
+  reopening it would show no active session at all, silently losing
+  whatever was unsaved. The in-progress session now mirrors to local storage
+  as it changes and restores itself on launch, so tapping the notification
+  reliably lands you back on the same workout instead of a fresh Home screen.
 
 **Version 1.2.0**
 - **Routine editing**: there was no way to edit an existing routine's

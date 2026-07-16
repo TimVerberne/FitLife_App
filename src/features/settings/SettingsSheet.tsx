@@ -1,8 +1,9 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useStore, type Tab } from '../../store/useStore';
 import { ACCENT_PRESETS, type AccentPreset } from '../../lib/settings';
 import { REST_PRESETS, formatRest } from '../../lib/rest';
 import { useAuthState, signOut } from '../../lib/auth';
+import { enableNudges, disableNudges, isPushCapable } from '../../lib/pushNudges';
 
 const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -22,6 +23,24 @@ export function SettingsSheet() {
   const deleteAccount = useStore((s) => s.deleteAccount);
   const fileRef = useRef<HTMLInputElement>(null);
   const { email } = useAuthState();
+  const [pushError, setPushError] = useState(false);
+
+  const pushCapable = isPushCapable();
+  const pushBlocked = pushCapable && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+
+  async function toggleNudges(next: boolean) {
+    if (!next) {
+      updateSettings({ notifyActiveWorkout: false });
+      void disableNudges();
+      return;
+    }
+    setPushError(false);
+    const result = await enableNudges();
+    if (result === 'ok') updateSettings({ notifyActiveWorkout: true });
+    else if (result === 'error') setPushError(true);
+    // 'denied' and 'unavailable' leave the toggle off — the row below already
+    // explains why (blocked permission or not an installed app).
+  }
 
   return (
     <div className="sheet-in">
@@ -125,6 +144,35 @@ export function SettingsSheet() {
         checked={settings.restTimerSound}
         onChange={(v) => updateSettings({ restTimerSound: v })}
       />
+
+      <div className="section-h">Notifications</div>
+      {!pushCapable ? (
+        <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>
+          Install FitFlow to your home screen to enable workout reminders — this only works for the installed app, not a browser tab.
+        </div>
+      ) : (
+        <>
+          <SettingsSwitchRow
+            label="Remind me if I leave an active workout"
+            desc={
+              pushBlocked
+                ? 'Notifications blocked — enable in system settings'
+                : pushError
+                  ? 'Something went wrong — try again'
+                  : undefined
+            }
+            checked={settings.notifyActiveWorkout && !pushBlocked}
+            onChange={(v) => void toggleNudges(v)}
+          />
+          {settings.notifyActiveWorkout && !pushBlocked && (
+            <SettingsSwitchRow
+              label="Remind again after 5 minutes"
+              checked={settings.notifyActiveWorkoutRepeat}
+              onChange={(v) => updateSettings({ notifyActiveWorkoutRepeat: v })}
+            />
+          )}
+        </>
+      )}
 
       <div className="section-h">Appearance</div>
       <div className="settings-row">

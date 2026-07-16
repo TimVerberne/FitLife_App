@@ -1,5 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { Routine, WorkoutSession } from './types';
+import type { ActiveSession, Routine, WorkoutSession } from './types';
 
 export interface PendingSyncEntry {
   id?: number;
@@ -8,10 +8,19 @@ export interface PendingSyncEntry {
   op: 'upsert' | 'delete';
 }
 
+// A single-row table (always keyed 'current') mirroring the store's `active`
+// field to disk as it changes, not just at finishSession() time — so an
+// in-progress workout survives the OS fully evicting a backgrounded PWA
+// (iOS does this aggressively) instead of only surviving a suspend/resume.
+export interface ActiveSessionRecord extends ActiveSession {
+  id: 'current';
+}
+
 export const db = new Dexie('fitflow') as Dexie & {
   routines: EntityTable<Routine, 'id'>;
   sessions: EntityTable<WorkoutSession, 'id'>;
   pendingSync: EntityTable<PendingSyncEntry, 'id'>;
+  activeSession: EntityTable<ActiveSessionRecord, 'id'>;
 };
 
 db.version(1).stores({
@@ -25,13 +34,20 @@ db.version(2).stores({
   pendingSync: '++id, table',
 });
 
+db.version(3).stores({
+  routines: 'id, createdAt',
+  sessions: 'id, person, startedAt',
+  pendingSync: '++id, table',
+  activeSession: 'id',
+});
+
 // The Dexie cache is per-browser, not per-account. Without this, signing out
 // of one account and into another would let the first account's local cache
 // get treated as "this device's existing history" and uploaded straight into
 // the second account's Supabase tables. Called on every SIGNED_OUT event
 // (see cloudSync.ts) so no local data survives a sign-out.
 export async function wipeLocalData(): Promise<void> {
-  await Promise.all([db.routines.clear(), db.sessions.clear(), db.pendingSync.clear()]);
+  await Promise.all([db.routines.clear(), db.sessions.clear(), db.pendingSync.clear(), db.activeSession.clear()]);
 }
 
 // One-time cleanup for installs that predate the real friends system:

@@ -17,6 +17,8 @@ export interface Settings {
   restTimerSound: boolean;
   theme: ThemeMode;
   accent: AccentPreset;
+  notifyActiveWorkout: boolean;
+  notifyActiveWorkoutRepeat: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +33,8 @@ export const DEFAULT_SETTINGS: Settings = {
   restTimerSound: true,
   theme: 'dark',
   accent: 'mint',
+  notifyActiveWorkout: false,
+  notifyActiveWorkoutRepeat: true,
 };
 
 const STORAGE_KEY = 'fitflow-settings';

@@ -19,6 +19,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Switched from the default generateSW (a fully auto-generated worker)
+      // to injectManifest so src/sw.ts can add its own push/notificationclick
+      // handlers for the workout-nudge feature, alongside the same
+      // precaching + runtime-caching rules generateSW used to configure via
+      // the `workbox` option below — those now live directly in src/sw.ts.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       // We register the service worker ourselves (src/lib/swUpdate.ts) instead
       // of using the plugin's auto-injected registration script, so that a
@@ -43,37 +51,8 @@ export default defineConfig({
           { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,svg,png}'],
-        runtimeCaching: [
-          {
-            urlPattern: /\/exercise-media\/.*\.(jpg|gif)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'exercise-media',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 90 },
-            },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'google-fonts-stylesheets' },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-webfonts',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-          {
-            // Auth/data calls must never be served stale from the service worker —
-            // failures here are expected (offline) and handled by the pendingSync queue.
-            urlPattern: /^https:\/\/[a-z0-9-]+\.supabase\.co\/.*/,
-            handler: 'NetworkOnly',
-          },
-        ],
       },
     }),
   ],
