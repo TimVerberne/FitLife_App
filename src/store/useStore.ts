@@ -160,6 +160,7 @@ interface StoreState {
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
   updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight' | 'durationSec' | 'distanceKm', value: number): void;
+  deleteSession(sessionId: string): void;
 
   openSettings(): void;
   updateSettings(patch: Partial<Settings>): void;
@@ -670,6 +671,15 @@ export const useStore = create<StoreState>((set, get) => ({
       void db.sessions.put(updated);
       void cloudSync.pushSession(updated);
     }
+  },
+
+  deleteSession(sessionId) {
+    get().confirm('Delete this workout from your history? This can\'t be undone.', 'Yes, delete', () => {
+      void db.sessions.delete(sessionId);
+      void cloudSync.deleteSessionRemote(sessionId);
+      set((s) => ({ sessions: s.sessions.filter((sess) => sess.id !== sessionId), sheet: null }));
+      get().showToast('Workout deleted');
+    }, true);
   },
 
   setRestDuration(exerciseId, seconds) {

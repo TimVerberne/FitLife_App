@@ -13,6 +13,7 @@ export function WorkoutDetailSheet() {
   const copyWorkoutToRoutines = useStore((s) => s.copyWorkoutToRoutines);
   const repeatWorkout = useStore((s) => s.repeatWorkout);
   const updateHistorySet = useStore((s) => s.updateHistorySet);
+  const deleteSession = useStore((s) => s.deleteSession);
   const units = useStore((s) => s.settings.units);
   const [editing, setEditing] = useState(false);
 
@@ -127,9 +128,14 @@ export function WorkoutDetailSheet() {
           Copy to my routines
         </button>
       ) : (
-        <button className="btn sec" style={{ marginTop: 16 }} onClick={() => repeatWorkout(session.id)}>
-          Do again
-        </button>
+        <>
+          <button className="btn sec" style={{ marginTop: 16 }} onClick={() => repeatWorkout(session.id)}>
+            Do again
+          </button>
+          <button className="btn danger" style={{ marginTop: 10 }} onClick={() => deleteSession(session.id)}>
+            Delete workout
+          </button>
+        </>
       )}
     </div>
   );
