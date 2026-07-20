@@ -1,18 +1,11 @@
 import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { bmi, bmiLabel, relativeStrength, waistToHeightRatio } from '../../lib/bodyComposition';
-import { personalRecords } from '../../lib/records';
-import { exerciseById } from '../../lib/exercises';
-import { formatWeight } from '../../lib/units';
-
-const TOP_LIFTS = 3;
+import { bmi, bmiLabel, waistToHeightRatio } from '../../lib/bodyComposition';
 
 export function BodyCompositionCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const bodyLog = useStore((s) => s.bodyLog);
-  const sessions = useStore((s) => s.sessions);
-  const units = useStore((s) => s.settings.units);
 
   const weightSeries = useMemo(() => seriesFor(bodyLog, 'weightKg'), [bodyLog]);
   const waistSeries = useMemo(() => seriesFor(bodyLog, 'waistCm'), [bodyLog]);
@@ -22,17 +15,6 @@ export function BodyCompositionCard() {
 
   const bmiValue = heightCm && latestWeightKg ? bmi(latestWeightKg, heightCm) : null;
   const waistRatio = heightCm && latestWaistCm ? waistToHeightRatio(latestWaistCm, heightCm) : null;
-
-  const topLifts = useMemo(() => {
-    if (!latestWeightKg) return [];
-    return personalRecords(sessions)
-      .slice(0, TOP_LIFTS)
-      .map((pr) => ({
-        name: exerciseById(pr.exerciseId)?.name ?? pr.exerciseId,
-        ratio: relativeStrength(pr.estOneRepMax, latestWeightKg),
-        oneRM: pr.estOneRepMax,
-      }));
-  }, [sessions, latestWeightKg]);
 
   if (!heightCm) return null;
 
@@ -72,22 +54,6 @@ export function BodyCompositionCard() {
           <p style={{ color: 'var(--faint)', fontSize: 13, margin: 0 }}>Log your waist measurement to see this.</p>
         )}
       </div>
-
-      {topLifts.length > 0 && (
-        <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 12 }}>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--faint)', marginBottom: 8 }}>Relative strength</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {topLifts.map((lift) => (
-              <div key={lift.name} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                <span>{lift.name}</span>
-                <span style={{ color: 'var(--faint)' }}>
-                  {lift.ratio.toFixed(2)}× bodyweight ({formatWeight(lift.oneRM, units)} {units})
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

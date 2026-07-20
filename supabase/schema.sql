@@ -297,3 +297,22 @@ create policy "own body_log" on public.body_log for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "own water_log" on public.water_log for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Phase 8: daily calorie total, logged the same way as water_log — a
+-- single running number per day, no meal names, no per-food macros, no
+-- food database. Still the most sensitive table in the app: same
+-- own-rows-only RLS as everything else in this feature, no friends-select
+-- policy.
+
+create table public.calorie_log (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  logged_on    date not null,
+  amount_kcal  int not null,
+  logged_at    timestamptz not null default now()
+);
+create index calorie_log_user_logged_idx on public.calorie_log (user_id, logged_on);
+
+alter table public.calorie_log enable row level security;
+create policy "own calorie_log" on public.calorie_log for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);

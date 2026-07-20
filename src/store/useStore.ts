@@ -11,7 +11,7 @@ import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
-import type { ActiveSession, BodyLogEntry, BodyProfile, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
 export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | 'importPreview' | null;
@@ -121,6 +121,7 @@ interface StoreState {
   bodyProfile: BodyProfile;
   bodyLog: BodyLogEntry[];
   waterLog: WaterLogEntry[];
+  calorieLog: CalorieLogEntry[];
   bodyLoaded: boolean;
 
   // actions
@@ -195,6 +196,7 @@ interface StoreState {
   saveBodyProfile(patch: Partial<BodyProfile>): void;
   logBodyMetrics(patch: Partial<BodyLogEntry> & { loggedOn: string }): void;
   addWater(ml: number): void;
+  addCalories(kcal: number): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -254,6 +256,7 @@ export const useStore = create<StoreState>((set, get) => ({
   bodyProfile: DEFAULT_BODY_PROFILE,
   bodyLog: [],
   waterLog: [],
+  calorieLog: [],
   bodyLoaded: false,
 
   async init() {
@@ -263,13 +266,14 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await purgeDemoFriendRows();
-      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog] = await Promise.all([
+      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog, calorieLog] = await Promise.all([
         db.routines.toArray(),
         db.sessions.toArray(),
         db.activeSession.get('current'),
         db.bodyProfile.get('current'),
         db.bodyLog.toArray(),
         db.waterLog.toArray(),
+        db.calorieLog.toArray(),
       ]);
       let bodyProfile = DEFAULT_BODY_PROFILE;
       if (bodyProfileRecord) {
@@ -282,9 +286,9 @@ export const useStore = create<StoreState>((set, get) => ({
         // restore it and land straight on it, instead of losing it the
         // moment the OS (iOS especially) fully evicts a backgrounded PWA.
         const { id: _id, ...active } = activeRecord;
-        set({ routines, sessions, loaded: true, active, mode: 'session', bodyProfile, bodyLog, waterLog });
+        set({ routines, sessions, loaded: true, active, mode: 'session', bodyProfile, bodyLog, waterLog, calorieLog });
       } else {
-        set({ routines, sessions, loaded: true, bodyProfile, bodyLog, waterLog });
+        set({ routines, sessions, loaded: true, bodyProfile, bodyLog, waterLog, calorieLog });
       }
     } catch (err) {
       // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
@@ -1054,17 +1058,19 @@ export const useStore = create<StoreState>((set, get) => ({
       // next full reload). Mirrors syncWithCloud()'s own opening line.
       await cloudSync.flushPendingSync();
       if (getCurrentUserId() !== userId) return;
-      const [profile, bodyLog, waterLog] = await Promise.all([
+      const [profile, bodyLog, waterLog, calorieLog] = await Promise.all([
         bodySync.fetchBodyProfile(),
         bodySync.fetchBodyLog(),
         bodySync.fetchWaterLog(),
+        bodySync.fetchCalorieLog(),
       ]);
       if (getCurrentUserId() !== userId) return;
       if (profile) await db.bodyProfile.put({ id: 'current', ...profile });
       await db.bodyLog.bulkPut(bodyLog);
       await db.waterLog.bulkPut(waterLog);
+      await db.calorieLog.bulkPut(calorieLog);
       if (getCurrentUserId() !== userId) return;
-      set({ bodyProfile: profile ?? get().bodyProfile, bodyLog, waterLog, bodyLoaded: true });
+      set({ bodyProfile: profile ?? get().bodyProfile, bodyLog, waterLog, calorieLog, bodyLoaded: true });
     } catch (err) {
       console.error('Failed to refresh body data', err);
     }
@@ -1115,6 +1121,18 @@ export const useStore = create<StoreState>((set, get) => ({
     void db.waterLog.put(entry);
     void bodySync.pushWaterLogEntry(entry);
   },
+
+  addCalories(kcal) {
+    const entry: CalorieLogEntry = {
+      id: crypto.randomUUID(),
+      loggedOn: new Date().toISOString().slice(0, 10),
+      amountKcal: kcal,
+      loggedAt: Date.now(),
+    };
+    set((s) => ({ calorieLog: [...s.calorieLog, entry] }));
+    void db.calorieLog.put(entry);
+    void bodySync.pushCalorieLogEntry(entry);
+  },
 }));
 
 // Settings and friends are account-specific. Reset to defaults on sign-out
@@ -1136,6 +1154,7 @@ onSignedOut(() => {
     bodyProfile: DEFAULT_BODY_PROFILE,
     bodyLog: [],
     waterLog: [],
+    calorieLog: [],
     bodyLoaded: false,
   });
   saveSettings(DEFAULT_SETTINGS);

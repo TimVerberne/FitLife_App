@@ -4,6 +4,7 @@ import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMet
 import { hydrationTarget, sweatRateMlPerHour } from '../../lib/hydration';
 import { formatVolume, fromDisplayVolume, fromDisplayWeight, toDisplayVolume } from '../../lib/units';
 import { BarChart } from '../../components/BarChart';
+import { ProgressRing } from '../../components/ProgressRing';
 import type { WeekBucket } from '../../lib/records';
 
 // Fixed canonical amounts (a "glass" and a "bottle" are roughly fixed
@@ -13,31 +14,6 @@ const QUICK_ADD_ML = [250, 500];
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-function ProgressRing({ pct }: { pct: number }) {
-  const size = 88;
-  const stroke = 8;
-  const r = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * r;
-  const clamped = Math.min(1, Math.max(0, pct));
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth={stroke}
-        strokeDasharray={circumference}
-        strokeDashoffset={circumference * (1 - clamped)}
-        strokeLinecap="round"
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-    </svg>
-  );
 }
 
 // A before/after workout weigh-in is genuinely individual — sweat rates

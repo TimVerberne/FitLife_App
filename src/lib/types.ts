@@ -112,3 +112,12 @@ export interface WaterLogEntry {
   amountMl: number;
   loggedAt: number;
 }
+
+// A single running daily total, same shape/semantics as WaterLogEntry — no
+// meal names, no per-food macros, no food database.
+export interface CalorieLogEntry {
+  id: string;
+  loggedOn: string;
+  amountKcal: number;
+  loggedAt: number;
+}

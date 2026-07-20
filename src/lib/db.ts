@@ -1,9 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { ActiveSession, BodyLogEntry, BodyProfile, Routine, WaterLogEntry, WorkoutSession } from './types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, Routine, WaterLogEntry, WorkoutSession } from './types';
 
 export interface PendingSyncEntry {
   id?: number;
-  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog';
+  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog';
   rowId: string;
   op: 'upsert' | 'delete';
 }
@@ -41,6 +41,7 @@ export const db = new Dexie('fitflow') as Dexie & {
   bodyProfile: EntityTable<BodyProfileRecord, 'id'>;
   bodyLog: EntityTable<BodyLogEntry, 'loggedOn'>;
   waterLog: EntityTable<WaterLogEntry, 'id'>;
+  calorieLog: EntityTable<CalorieLogEntry, 'id'>;
 };
 
 db.version(1).stores({
@@ -71,6 +72,17 @@ db.version(4).stores({
   waterLog: 'id, loggedOn',
 });
 
+db.version(5).stores({
+  routines: 'id, createdAt',
+  sessions: 'id, person, startedAt',
+  pendingSync: '++id, table',
+  activeSession: 'id',
+  bodyProfile: 'id',
+  bodyLog: 'loggedOn',
+  waterLog: 'id, loggedOn',
+  calorieLog: 'id, loggedOn',
+});
+
 // The Dexie cache is per-browser, not per-account. Without this, signing out
 // of one account and into another would let the first account's local cache
 // get treated as "this device's existing history" and uploaded straight into
@@ -85,6 +97,7 @@ export async function wipeLocalData(): Promise<void> {
     db.bodyProfile.clear(),
     db.bodyLog.clear(),
     db.waterLog.clear(),
+    db.calorieLog.clear(),
   ]);
 }
 

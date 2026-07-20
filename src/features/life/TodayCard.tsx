@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { calorieTarget, macros } from '../../lib/nutrition';
-import { hydrationTarget } from '../../lib/hydration';
 import { calibrate } from '../../lib/calibration';
-import { formatVolume } from '../../lib/units';
+import { ProgressRing } from '../../components/ProgressRing';
+import { BarChart } from '../../components/BarChart';
+import type { WeekBucket } from '../../lib/records';
 
 const GOAL_VERB: Record<'lose' | 'maintain' | 'gain', string> = {
   lose: 'keep losing',
@@ -12,22 +13,47 @@ const GOAL_VERB: Record<'lose' | 'maintain' | 'gain', string> = {
   gain: 'keep gaining',
 };
 
+// Reused hex values, not new ones invented for this — matches the existing
+// "orange"/"blue" ACCENT_PRESETS in src/lib/settings.ts.
+const FAT_COLOR = '#f2994a';
+const CARB_COLOR = '#5b8def';
+
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function MacroTile({ label, grams, max, color }: { label: string; grams: number; max: number; color: string }) {
+  const pct = max > 0 ? (grams / max) * 100 : 0;
+  return (
+    <div className="stat-tile" style={{ textAlign: 'left', padding: '10px 12px' }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 18 }}>
+        {Math.round(grams)}
+        <span style={{ fontSize: 12, fontWeight: 700 }}>g</span>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: 'var(--surface-2)', marginTop: 6, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2 }} />
+      </div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--faint)', marginTop: 6 }}>
+        {label}
+      </div>
+    </div>
+  );
+}
+
 // The "so what" card — everything else on this screen measures something;
 // this is the one place that turns those numbers into "here's today's
-// plan." No new data collection (still no food diary), just composing the
-// same calorieTarget()/macros()/hydrationTarget()/calibrate() every other
-// card already calls independently.
+// plan." Calories eaten is a single running daily total, logged exactly
+// like the water counter elsewhere on this screen — no meal names, no
+// per-food macros, no food database.
 export function TodayCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const bodyLog = useStore((s) => s.bodyLog);
-  const sessions = useStore((s) => s.sessions);
-  const units = useStore((s) => s.settings.units);
+  const calorieLog = useStore((s) => s.calorieLog);
+  const addCalories = useStore((s) => s.addCalories);
 
   const today = todayIso();
+  const [inputValue, setInputValue] = useState('');
+
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
   const latestBodyFatPct = latestValue(seriesFor(bodyLog, 'bodyFatPct'));
   const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
@@ -45,11 +71,33 @@ export function TodayCard() {
       bodyProfile.rateKgWeek,
     );
     const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal);
-    const hydration = hydrationTarget(latestWeightKg, bodyProfile.climate, todaysTrainingMinutes(sessions), bodyProfile.sweatRateMlH);
     const predictedRateKgWeek = bodyProfile.goal === 'lose' ? -bodyProfile.rateKgWeek : bodyProfile.goal === 'gain' ? bodyProfile.rateKgWeek : 0;
     const calibration = calibrate(bodyLog, predictedRateKgWeek, calories.target);
-    return { calories, macroResult, hydration, calibration, predictedRateKgWeek };
-  }, [latestWeightKg, latestBodyFatPct, bodyProfile, age, sessions, bodyLog]);
+    return { calories, macroResult, calibration, predictedRateKgWeek };
+  }, [latestWeightKg, latestBodyFatPct, bodyProfile, age, bodyLog]);
+
+  // Filtering calorieLog to today's date is the entire "reset" mechanism —
+  // a new day is just a loggedOn value with nothing logged against it yet,
+  // same as every other "today" check throughout this feature.
+  const todayKcal = useMemo(() => calorieLog.filter((e) => e.loggedOn === today).reduce((a, e) => a + e.amountKcal, 0), [calorieLog, today]);
+
+  const last7 = useMemo(() => {
+    const days: WeekBucket[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86_400_000);
+      const iso = d.toISOString().slice(0, 10);
+      const total = calorieLog.filter((e) => e.loggedOn === iso).reduce((a, e) => a + e.amountKcal, 0);
+      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: total });
+    }
+    return days;
+  }, [calorieLog]);
+
+  function addCustom() {
+    const parsed = Number(inputValue);
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    addCalories(Math.round(parsed));
+    setInputValue('');
+  }
 
   if (!bodyProfile.sexAtBirth) return null;
 
@@ -64,7 +112,9 @@ export function TodayCard() {
     );
   }
 
-  const { calories, macroResult, hydration, calibration, predictedRateKgWeek } = plan;
+  const { calories, macroResult, calibration, predictedRateKgWeek } = plan;
+  const pct = todayKcal / calories.target;
+  const maxMacroG = Math.max(macroResult.proteinG, macroResult.fatG, macroResult.carbsG);
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
@@ -72,19 +122,53 @@ export function TodayCard() {
         Today
       </div>
 
-      <p style={{ fontSize: 15, marginTop: 10, marginBottom: 0 }}>
-        Aim for <strong>~{Math.round(calories.target)} kcal</strong> today
-        {bodyProfile.goal !== 'maintain' ? ` to ${GOAL_VERB[bodyProfile.goal]} at ${bodyProfile.rateKgWeek.toFixed(1)} kg/week` : ' to hold steady'}.
-      </p>
-      <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 6, marginBottom: 0 }}>
-        {Math.round(macroResult.proteinG)}g protein · {Math.round(macroResult.fatG)}g fat · {Math.round(macroResult.carbsG)}g carbs
-      </p>
-      <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 4, marginBottom: 0 }}>
-        {formatVolume(hydration.totalMl, units)} water
-        {hydration.trainingBonusMl > 0 ? ' (includes today\'s training bonus)' : ''}
-      </p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12 }}>
+        <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
+          <ProgressRing pct={pct} size={96} stroke={9} />
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 21 }}>{Math.round(calories.target)}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '.08em', color: 'var(--faint)' }}>KCAL</div>
+          </div>
+        </div>
+        <div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+            {bodyProfile.goal === 'lose' ? 'Losing' : bodyProfile.goal === 'gain' ? 'Gaining' : 'Maintaining'}
+            {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/wk` : ''}
+          </div>
+          <p style={{ fontSize: 14, marginTop: 4, marginBottom: 0 }}>
+            Aim for {Math.round(calories.target)} kcal today
+            {bodyProfile.goal !== 'maintain' ? ` to ${GOAL_VERB[bodyProfile.goal]}` : ' to hold steady'}.
+          </p>
+        </div>
+      </div>
 
-      <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 16 }}>
+        <MacroTile label="Protein" grams={macroResult.proteinG} max={maxMacroG} color="var(--accent)" />
+        <MacroTile label="Fat" grams={macroResult.fatG} max={maxMacroG} color={FAT_COLOR} />
+        <MacroTile label="Carbs" grams={macroResult.carbsG} max={maxMacroG} color={CARB_COLOR} />
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        <input
+          type="number"
+          inputMode="decimal"
+          value={inputValue}
+          placeholder="kcal eaten"
+          style={{ flex: 1 }}
+          onChange={(e) => setInputValue(e.target.value)}
+        />
+        <button className="btn sec" style={{ width: 'auto', padding: '0 18px' }} onClick={addCustom}>
+          Add
+        </button>
+      </div>
+
+      {last7.some((d) => d.value > 0) && (
+        <div style={{ marginTop: 12 }}>
+          <BarChart weeks={last7} />
+        </div>
+      )}
+
+      <div style={{ borderTop: '1px solid var(--line)', marginTop: 12, paddingTop: 10 }}>
         {!calibration ? (
           <p style={{ color: 'var(--faint)', fontSize: 12, margin: 0 }}>
             Keep logging weight daily — a calibrated suggestion unlocks after 2 weeks.

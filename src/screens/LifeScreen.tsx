@@ -9,6 +9,9 @@ import { NutritionCard } from '../features/life/NutritionCard';
 import { MacrosCard } from '../features/life/MacrosCard';
 import { HydrationCard } from '../features/life/HydrationCard';
 import { WellnessCard } from '../features/life/WellnessCard';
+import { HydrationMiniCard } from '../features/life/HydrationMiniCard';
+import { WeightMiniCard } from '../features/life/WeightMiniCard';
+import { RelativeStrengthCard } from '../features/life/RelativeStrengthCard';
 import { formatHeight } from '../lib/units';
 import type { BodyProfile } from '../lib/types';
 
@@ -47,32 +50,37 @@ export function LifeScreen() {
 
       {(!complete || editing) && <BodyProfileSetup onSaved={() => setEditing(false)} />}
 
-      {complete && !editing && <TodayCard />}
-
-      {complete && !editing && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div className="section-h" style={{ margin: 0 }}>
-              Profile
-            </div>
-            <button className="btn sec" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={() => setEditing(true)}>
-              Edit
-            </button>
-          </div>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--faint)' }}>
-            <div>Height: {formatHeight(bodyProfile.heightCm!, units)}</div>
-            <div>Birth year: {bodyProfile.birthYear}</div>
-            <div>{ACTIVITY_LABEL[bodyProfile.activity]}</div>
-            <div>
-              {GOAL_LABEL[bodyProfile.goal]}
-              {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/week` : ''}
-            </div>
-          </div>
-        </div>
-      )}
-
       {complete && !editing && (
         <>
+          <TodayCard />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 16 }}>
+            <HydrationMiniCard />
+            <WeightMiniCard />
+          </div>
+
+          <RelativeStrengthCard />
+
+          <div className="card" style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div className="section-h" style={{ margin: 0 }}>
+                Profile
+              </div>
+              <button className="btn sec" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={() => setEditing(true)}>
+                Edit
+              </button>
+            </div>
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--faint)' }}>
+              <div>Height: {formatHeight(bodyProfile.heightCm!, units)}</div>
+              <div>Birth year: {bodyProfile.birthYear}</div>
+              <div>{ACTIVITY_LABEL[bodyProfile.activity]}</div>
+              <div>
+                {GOAL_LABEL[bodyProfile.goal]}
+                {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/week` : ''}
+              </div>
+            </div>
+          </div>
+
           <WeightCard />
           <MeasurementsCard />
           <BodyCompositionCard />

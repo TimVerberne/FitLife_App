@@ -102,6 +102,23 @@ this is done.
 
 ## Update notes
 
+**Version 1.6.0**
+- Redesigned the top of the Life tab into a visual dashboard, based on a
+  mockup the user liked: a calorie ring with a goal-phrased headline, three
+  macro tiles with colored share bars, a 7-day calorie history, compact
+  side-by-side hydration/weight tiles, and a "relative strength" section
+  with bars per lift. Every existing detailed card (Profile, full Weight,
+  Measurements, Body composition, Nutrition with its safety guardrails,
+  Macros with ranges/portions/fibre, full Hydration with sweat-rate
+  calibration, Wellness) is unchanged and still below it — this is additive,
+  not a replacement.
+- **Note on scope:** this required adding a simple daily calorie-eaten
+  counter (tap +, type a number, add to today's total — same shape as the
+  existing water counter). This is a deliberate, explicit reversal of this
+  feature's original "no calorie/food logging, ever" rule — flagged to and
+  confirmed by the user before building it. It's still just a running
+  number, not a food diary: no meal names, no per-food macros, no database.
+
 **Version 1.5.0**
 - New **Today** card at the top of the Life tab — the "so what do I actually
   do" synthesis of everything else on the screen: today's calorie target

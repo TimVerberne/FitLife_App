@@ -1,6 +1,6 @@
 import { supabase, getCurrentUserId } from './supabase';
 import { db, DEFAULT_BODY_PROFILE, type BodyProfileRecord } from './db';
-import type { BodyProfile, BodyLogEntry, WaterLogEntry } from './types';
+import type { BodyProfile, BodyLogEntry, CalorieLogEntry, WaterLogEntry } from './types';
 
 function requireUserId(): string {
   const userId = getCurrentUserId();
@@ -8,7 +8,7 @@ function requireUserId(): string {
   return userId;
 }
 
-async function enqueuePendingSync(table: 'bodyProfile' | 'bodyLog' | 'waterLog', rowId: string, op: 'upsert' | 'delete') {
+async function enqueuePendingSync(table: 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog', rowId: string, op: 'upsert' | 'delete') {
   await db.pendingSync.add({ table, rowId, op });
 }
 
@@ -154,6 +154,39 @@ export async function fetchWaterLog(): Promise<WaterLogEntry[]> {
   }));
 }
 
+function calorieLogRow(entry: CalorieLogEntry, userId: string) {
+  return {
+    id: entry.id,
+    user_id: userId,
+    logged_on: entry.loggedOn,
+    amount_kcal: entry.amountKcal,
+    logged_at: new Date(entry.loggedAt).toISOString(),
+  };
+}
+
+// Append-only, same shape/strategy as pushWaterLogEntry above.
+export async function pushCalorieLogEntry(entry: CalorieLogEntry): Promise<void> {
+  try {
+    const userId = requireUserId();
+    const { error } = await supabase.from('calorie_log').insert(calorieLogRow(entry, userId));
+    if (error) throw error;
+  } catch {
+    await enqueuePendingSync('calorieLog', entry.id, 'upsert');
+  }
+}
+
+export async function fetchCalorieLog(): Promise<CalorieLogEntry[]> {
+  const userId = requireUserId();
+  const { data, error } = await supabase.from('calorie_log').select('*').eq('user_id', userId).order('logged_at');
+  if (error) throw error;
+  return (data ?? []).map((r) => ({
+    id: r.id as string,
+    loggedOn: r.logged_on as string,
+    amountKcal: r.amount_kcal as number,
+    loggedAt: new Date(r.logged_at as string).getTime(),
+  }));
+}
+
 export async function flushBodyPendingSync(entry: { table: string; rowId: string; op: 'upsert' | 'delete'; id?: number }): Promise<void> {
   if (entry.op !== 'upsert') return;
   if (entry.table === 'bodyProfile') {
@@ -169,5 +202,8 @@ export async function flushBodyPendingSync(entry: { table: string; rowId: string
   } else if (entry.table === 'waterLog') {
     const waterEntry = await db.waterLog.get(entry.rowId);
     if (waterEntry) await pushWaterLogEntry(waterEntry);
+  } else if (entry.table === 'calorieLog') {
+    const calorieEntry = await db.calorieLog.get(entry.rowId);
+    if (calorieEntry) await pushCalorieLogEntry(calorieEntry);
   }
 }
