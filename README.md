@@ -102,6 +102,16 @@ this is done.
 
 ## Update notes
 
+**Version 1.5.0**
+- New **Today** card at the top of the Life tab — the "so what do I actually
+  do" synthesis of everything else on the screen: today's calorie target
+  phrased around your goal, the macro split, today's hydration target
+  (training bonus included when relevant), and the calibration read (on
+  track / a suggested adjustment / not enough data yet). No new data
+  collection — still no food diary — just pulling together numbers every
+  other card already computes. A single quiet nudge if today's weight
+  isn't logged yet; nothing shown (no checkmark, no streak) once it is.
+
 **Version 1.4.8**
 - Fixed three bugs found in a full Life tab review: height in feet/inches
   could show as e.g. "5'12"" instead of rolling over to "6'0""; the weight

@@ -1,4 +1,4 @@
-import type { BodyLogEntry } from './types';
+import type { BodyLogEntry, WorkoutSession } from './types';
 
 export interface DatedValue {
   ts: number;
@@ -53,4 +53,13 @@ export function trendDelta(series: DatedValue[], daysAgo = 7): number | null {
     if (p.ts <= target) prior = p;
   }
   return prior ? now.value - prior.value : null;
+}
+
+// Total minutes of your own logged sessions today — feeds the hydration
+// training bonus (see hydration.ts's hydrationTarget()).
+export function todaysTrainingMinutes(sessions: WorkoutSession[]): number {
+  const today = new Date().toISOString().slice(0, 10);
+  return sessions
+    .filter((s) => s.person === 'You' && new Date(s.startedAt).toISOString().slice(0, 10) === today)
+    .reduce((a, s) => a + s.durationMin, 0);
 }

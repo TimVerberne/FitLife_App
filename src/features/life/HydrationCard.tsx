@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMetrics';
 import { hydrationTarget, sweatRateMlPerHour } from '../../lib/hydration';
 import { formatVolume, fromDisplayVolume, fromDisplayWeight, toDisplayVolume } from '../../lib/units';
 import { BarChart } from '../../components/BarChart';
@@ -126,13 +126,7 @@ export function HydrationCard() {
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
   const today = todayIso();
 
-  const todaySessionMinutes = useMemo(
-    () =>
-      sessions
-        .filter((s) => s.person === 'You' && new Date(s.startedAt).toISOString().slice(0, 10) === today)
-        .reduce((a, s) => a + s.durationMin, 0),
-    [sessions, today],
-  );
+  const todaySessionMinutes = useMemo(() => todaysTrainingMinutes(sessions), [sessions]);
 
   const target = useMemo(() => {
     if (!latestWeightKg) return null;

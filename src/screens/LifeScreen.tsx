@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { BodyProfileSetup } from '../features/life/BodyProfileSetup';
+import { TodayCard } from '../features/life/TodayCard';
 import { WeightCard } from '../features/life/WeightCard';
 import { MeasurementsCard } from '../features/life/MeasurementsCard';
 import { BodyCompositionCard } from '../features/life/BodyCompositionCard';
@@ -45,6 +46,8 @@ export function LifeScreen() {
       </div>
 
       {(!complete || editing) && <BodyProfileSetup onSaved={() => setEditing(false)} />}
+
+      {complete && !editing && <TodayCard />}
 
       {complete && !editing && (
         <div className="card" style={{ marginTop: 16 }}>
