@@ -9,6 +9,7 @@ const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'train', label: 'Train' },
   { id: 'stats', label: 'Stats' },
+  { id: 'life', label: 'Life' },
   { id: 'you', label: 'You' },
 ];
 

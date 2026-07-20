@@ -3,6 +3,7 @@ import { useStore } from './store/useStore';
 import { HomeScreen } from './screens/HomeScreen';
 import { TrainScreen } from './screens/TrainScreen';
 import { StatsScreen } from './screens/StatsScreen';
+import { LifeScreen } from './screens/LifeScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import { ActiveSessionScreen } from './screens/ActiveSessionScreen';
 import { FinishScreen } from './screens/FinishScreen';
@@ -26,6 +27,7 @@ function CurrentScreen() {
   if (mode === 'finish') return <FinishScreen />;
   if (tab === 'train') return <TrainScreen />;
   if (tab === 'stats') return <StatsScreen />;
+  if (tab === 'life') return <LifeScreen />;
   if (tab === 'you') return <ProfileScreen />;
   return <HomeScreen />;
 }
@@ -56,6 +58,10 @@ function AuthedApp() {
 
   useEffect(() => {
     if (loaded && userId) void useStore.getState().refreshFriends();
+  }, [loaded, userId]);
+
+  useEffect(() => {
+    if (loaded && userId) void useStore.getState().refreshBody();
   }, [loaded, userId]);
 
   // There's no realtime subscription for friends' workouts or for a routine

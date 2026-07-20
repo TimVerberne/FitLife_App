@@ -2,6 +2,7 @@ import { supabase, getCurrentUserId, onSignedOut } from './supabase';
 import { db, wipeLocalData, type PendingSyncEntry } from './db';
 import type { Routine, WorkoutSession } from './types';
 import { loadSettings, type Settings } from './settings';
+import { flushBodyPendingSync } from './bodySync';
 
 function requireUserId(): string {
   const userId = getCurrentUserId();
@@ -251,6 +252,8 @@ export async function flushPendingSync(): Promise<void> {
         if (session) await pushSession(session);
       } else if (entry.table === 'settings') {
         await pushSettings(loadSettings());
+      } else {
+        await flushBodyPendingSync(entry);
       }
       if (entry.id !== undefined) await db.pendingSync.delete(entry.id);
     } catch {

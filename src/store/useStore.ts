@@ -1,18 +1,19 @@
 import { create } from 'zustand';
-import { db, remapLegacyIdsToUuid, purgeDemoFriendRows } from '../lib/db';
+import { db, remapLegacyIdsToUuid, purgeDemoFriendRows, DEFAULT_BODY_PROFILE } from '../lib/db';
 import { applyTheme, loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
 import * as friendsApi from '../lib/friends';
 import type { Friend, FriendRequest } from '../lib/friends';
+import * as bodySync from '../lib/bodySync';
 import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
-import type { ActiveSession, RestTimerState, Routine, SessionEntry, SetKind, WorkoutSession } from '../lib/types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
-export type Tab = 'home' | 'train' | 'stats' | 'you';
+export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
 export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | 'importPreview' | null;
 
 export interface ImportPreview {
@@ -115,6 +116,13 @@ interface StoreState {
   friendsLoaded: boolean;
   friendSessions: WorkoutSession[];
 
+  // Life tab — body measurements, nutrition, hydration. Strictly private:
+  // never shared with friends, never in the crew feed or Stats head-to-head.
+  bodyProfile: BodyProfile;
+  bodyLog: BodyLogEntry[];
+  waterLog: WaterLogEntry[];
+  bodyLoaded: boolean;
+
   // actions
   init(): Promise<void>;
   go(tab: Tab): void;
@@ -182,6 +190,11 @@ interface StoreState {
   acceptFriendRequest(friendshipId: string): Promise<void>;
   declineFriendRequest(friendshipId: string): Promise<void>;
   removeFriend(friendshipId: string, pending?: boolean): void;
+
+  refreshBody(): Promise<void>;
+  saveBodyProfile(patch: Partial<BodyProfile>): void;
+  logBodyMetrics(patch: Partial<BodyLogEntry> & { loggedOn: string }): void;
+  addWater(ml: number): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -238,6 +251,11 @@ export const useStore = create<StoreState>((set, get) => ({
   friendsLoaded: false,
   friendSessions: [],
 
+  bodyProfile: DEFAULT_BODY_PROFILE,
+  bodyLog: [],
+  waterLog: [],
+  bodyLoaded: false,
+
   async init() {
     // Reset synchronously (not just on first load) so a re-mount after switching
     // accounts can't leave syncWithCloud reading stale in-memory data from
@@ -245,19 +263,28 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await purgeDemoFriendRows();
-      const [routines, sessions, activeRecord] = await Promise.all([
+      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog] = await Promise.all([
         db.routines.toArray(),
         db.sessions.toArray(),
         db.activeSession.get('current'),
+        db.bodyProfile.get('current'),
+        db.bodyLog.toArray(),
+        db.waterLog.toArray(),
       ]);
+      let bodyProfile = DEFAULT_BODY_PROFILE;
+      if (bodyProfileRecord) {
+        const { id: _bodyProfileId, ...rest } = bodyProfileRecord;
+        void _bodyProfileId;
+        bodyProfile = rest;
+      }
       if (activeRecord) {
         // A workout was still in progress when this device last closed —
         // restore it and land straight on it, instead of losing it the
         // moment the OS (iOS especially) fully evicts a backgrounded PWA.
         const { id: _id, ...active } = activeRecord;
-        set({ routines, sessions, loaded: true, active, mode: 'session' });
+        set({ routines, sessions, loaded: true, active, mode: 'session', bodyProfile, bodyLog, waterLog });
       } else {
-        set({ routines, sessions, loaded: true });
+        set({ routines, sessions, loaded: true, bodyProfile, bodyLog, waterLog });
       }
     } catch (err) {
       // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
@@ -1011,6 +1038,75 @@ export const useStore = create<StoreState>((set, get) => ({
         });
     }, !pending, pending ? 'Keep it' : 'Cancel');
   },
+
+  async refreshBody() {
+    // Same staleness guard as refreshFriends/syncWithCloud — a fast account
+    // switch must not let a slower, still-in-flight response from the
+    // previous account land after the next account's and overwrite it.
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    try {
+      const [profile, bodyLog, waterLog] = await Promise.all([
+        bodySync.fetchBodyProfile(),
+        bodySync.fetchBodyLog(),
+        bodySync.fetchWaterLog(),
+      ]);
+      if (getCurrentUserId() !== userId) return;
+      if (profile) await db.bodyProfile.put({ id: 'current', ...profile });
+      await db.bodyLog.bulkPut(bodyLog);
+      await db.waterLog.bulkPut(waterLog);
+      if (getCurrentUserId() !== userId) return;
+      set({ bodyProfile: profile ?? get().bodyProfile, bodyLog, waterLog, bodyLoaded: true });
+    } catch (err) {
+      console.error('Failed to refresh body data', err);
+    }
+  },
+
+  saveBodyProfile(patch) {
+    const bodyProfile = { ...get().bodyProfile, ...patch, updatedAt: Date.now() };
+    set({ bodyProfile });
+    void db.bodyProfile.put({ id: 'current', ...bodyProfile });
+    void bodySync.pushBodyProfile(bodyProfile);
+  },
+
+  logBodyMetrics(patch) {
+    const existing = get().bodyLog.find((e) => e.loggedOn === patch.loggedOn);
+    const entry: BodyLogEntry = {
+      weightKg: null,
+      bodyFatPct: null,
+      waistCm: null,
+      chestCm: null,
+      armCm: null,
+      thighCm: null,
+      hipCm: null,
+      neckCm: null,
+      sleepHours: null,
+      restingHr: null,
+      energy: null,
+      note: null,
+      ...existing,
+      ...patch,
+    };
+    set((s) => ({
+      bodyLog: [...s.bodyLog.filter((e) => e.loggedOn !== entry.loggedOn), entry].sort((a, b) =>
+        a.loggedOn.localeCompare(b.loggedOn),
+      ),
+    }));
+    void db.bodyLog.put(entry);
+    void bodySync.pushBodyLogEntry(entry);
+  },
+
+  addWater(ml) {
+    const entry: WaterLogEntry = {
+      id: crypto.randomUUID(),
+      loggedOn: new Date().toISOString().slice(0, 10),
+      amountMl: ml,
+      loggedAt: Date.now(),
+    };
+    set((s) => ({ waterLog: [...s.waterLog, entry] }));
+    void db.waterLog.put(entry);
+    void bodySync.pushWaterLogEntry(entry);
+  },
 }));
 
 // Settings and friends are account-specific. Reset to defaults on sign-out
@@ -1029,6 +1125,10 @@ onSignedOut(() => {
     friendSessions: [],
     active: null,
     mode: 'tabs',
+    bodyProfile: DEFAULT_BODY_PROFILE,
+    bodyLog: [],
+    waterLog: [],
+    bodyLoaded: false,
   });
   saveSettings(DEFAULT_SETTINGS);
   applyTheme(DEFAULT_SETTINGS);

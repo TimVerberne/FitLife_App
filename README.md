@@ -102,6 +102,16 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.0**
+- New **Life** tab (between Stats and You) — the start of body measurements,
+  composition, nutrition targets, and hydration tracking, framed around
+  fuelling training rather than restriction (no streaks, no food diary, no
+  "over budget" states). This first slice adds the profile setup (height,
+  birth year, sex at birth, activity level, goal, target rate, climate) —
+  weight logging, body composition, calorie/macro targets, hydration, and
+  calibration land in follow-up updates. Strictly private: never shared with
+  friends, never in the crew feed or Stats.
+
 **Version 1.3.2**
 - The Home feed ("The crew") was hard-capped at 4 workouts with no way to see
   older ones. It now loads more automatically as you scroll near the bottom,

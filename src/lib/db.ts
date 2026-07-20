@@ -1,9 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { ActiveSession, Routine, WorkoutSession } from './types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, Routine, WaterLogEntry, WorkoutSession } from './types';
 
 export interface PendingSyncEntry {
   id?: number;
-  table: 'routines' | 'sessions' | 'settings';
+  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog';
   rowId: string;
   op: 'upsert' | 'delete';
 }
@@ -16,11 +16,31 @@ export interface ActiveSessionRecord extends ActiveSession {
   id: 'current';
 }
 
+// Single-row-per-account, same 'current' key convention as ActiveSessionRecord.
+export interface BodyProfileRecord extends BodyProfile {
+  id: 'current';
+}
+
+export const DEFAULT_BODY_PROFILE: BodyProfile = {
+  heightCm: null,
+  birthYear: null,
+  sexAtBirth: null,
+  activity: 'moderate',
+  goal: 'maintain',
+  rateKgWeek: 0.5,
+  climate: 'temperate',
+  sweatRateMlH: null,
+  updatedAt: 0,
+};
+
 export const db = new Dexie('fitflow') as Dexie & {
   routines: EntityTable<Routine, 'id'>;
   sessions: EntityTable<WorkoutSession, 'id'>;
   pendingSync: EntityTable<PendingSyncEntry, 'id'>;
   activeSession: EntityTable<ActiveSessionRecord, 'id'>;
+  bodyProfile: EntityTable<BodyProfileRecord, 'id'>;
+  bodyLog: EntityTable<BodyLogEntry, 'loggedOn'>;
+  waterLog: EntityTable<WaterLogEntry, 'id'>;
 };
 
 db.version(1).stores({
@@ -41,13 +61,31 @@ db.version(3).stores({
   activeSession: 'id',
 });
 
+db.version(4).stores({
+  routines: 'id, createdAt',
+  sessions: 'id, person, startedAt',
+  pendingSync: '++id, table',
+  activeSession: 'id',
+  bodyProfile: 'id',
+  bodyLog: 'loggedOn',
+  waterLog: 'id, loggedOn',
+});
+
 // The Dexie cache is per-browser, not per-account. Without this, signing out
 // of one account and into another would let the first account's local cache
 // get treated as "this device's existing history" and uploaded straight into
 // the second account's Supabase tables. Called on every SIGNED_OUT event
 // (see cloudSync.ts) so no local data survives a sign-out.
 export async function wipeLocalData(): Promise<void> {
-  await Promise.all([db.routines.clear(), db.sessions.clear(), db.pendingSync.clear(), db.activeSession.clear()]);
+  await Promise.all([
+    db.routines.clear(),
+    db.sessions.clear(),
+    db.pendingSync.clear(),
+    db.activeSession.clear(),
+    db.bodyProfile.clear(),
+    db.bodyLog.clear(),
+    db.waterLog.clear(),
+  ]);
 }
 
 // One-time cleanup for installs that predate the real friends system:

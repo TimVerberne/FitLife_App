@@ -237,3 +237,62 @@ select cron.schedule(
 -- To change the schedule later (e.g. after confirming your project's
 -- pg_cron supports sub-minute intervals): select cron.unschedule('nudge-dispatcher-tick');
 -- then re-run cron.schedule(...) with a new interval.
+
+-- Phase 7: "Life" tab — body measurements, composition, nutrition, hydration.
+-- This is the most sensitive data in the app: unlike `sessions`, none of
+-- these tables ever get a friends-readable SELECT policy, and nothing here
+-- is ever exposed to the crew feed or Stats head-to-head.
+
+create table public.body_profile (
+  user_id         uuid primary key references auth.users(id) on delete cascade,
+  height_cm       numeric(5,1),
+  birth_year      int,
+  sex_at_birth    text check (sex_at_birth in ('male', 'female')),
+  activity        text not null default 'moderate'
+                    check (activity in ('sedentary', 'light', 'moderate', 'very', 'extra')),
+  goal            text not null default 'maintain' check (goal in ('lose', 'maintain', 'gain')),
+  rate_kg_week    numeric(3,2) not null default 0.5,
+  climate         text not null default 'temperate' check (climate in ('temperate', 'hot')),
+  sweat_rate_ml_h numeric(6,1),
+  updated_at      timestamptz not null default now()
+);
+
+create table public.body_log (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  logged_on    date not null,
+  weight_kg    numeric(5,2),
+  body_fat_pct numeric(4,1),
+  waist_cm     numeric(5,1),
+  chest_cm     numeric(5,1),
+  arm_cm       numeric(5,1),
+  thigh_cm     numeric(5,1),
+  hip_cm       numeric(5,1),
+  neck_cm      numeric(5,1),
+  sleep_hours  numeric(3,1),
+  resting_hr   int,
+  energy       int check (energy between 1 and 5),
+  note         text,
+  unique (user_id, logged_on)
+);
+create index body_log_user_logged_idx on public.body_log (user_id, logged_on);
+
+create table public.water_log (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  logged_on  date not null,
+  amount_ml  int not null,
+  logged_at  timestamptz not null default now()
+);
+create index water_log_user_logged_idx on public.water_log (user_id, logged_on);
+
+alter table public.body_profile enable row level security;
+alter table public.body_log     enable row level security;
+alter table public.water_log    enable row level security;
+
+create policy "own body_profile" on public.body_profile for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own body_log" on public.body_log for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "own water_log" on public.water_log for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
