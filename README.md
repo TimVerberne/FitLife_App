@@ -102,6 +102,24 @@ this is done.
 
 ## Update notes
 
+**Version 1.8.2**
+- Battery drain investigation, two real findings fixed:
+  - **"Keep screen awake during a workout"** now defaults to **off**. It
+    was on by default, and a lit screen for the length of a whole workout
+    is by far the single biggest power draw the app causes — much more
+    than anything else. Still there as an opt-in in Settings → Session
+    experience for anyone who wants it; only affects fresh installs, an
+    existing device's saved choice is untouched.
+  - The friends-feed background poll (`refreshFriendSessions`, every 45s)
+    ran unconditionally even while the app was backgrounded/screen
+    locked, repeatedly waking the network radio for no one to see. It now
+    skips the request unless the app is actually visible — the existing
+    refresh-on-focus-regain already covers catching up the moment you
+    come back.
+- Everything else checked (workout timer, rest-timer countdown, update
+  check, no persistent realtime connection) was already scoped correctly
+  and isn't a meaningful contributor.
+
 **Version 1.8.1**
 - Follow-up fixes after real-device testing of 1.8.0 showed three of its
   four fixes didn't actually hold up:

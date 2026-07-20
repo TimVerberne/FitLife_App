@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultTab: 'home',
   smartRoutineRotation: true,
   confirmRemoveExercise: true,
-  keepScreenAwake: true,
+  keepScreenAwake: false,
   hapticsOnSetComplete: true,
   restTimerSound: true,
   theme: 'dark',

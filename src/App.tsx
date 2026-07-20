@@ -74,7 +74,14 @@ function AuthedApp() {
     if (!loaded || !userId) return;
     const currentUserId = userId;
     const POLL_MS = 45_000;
-    const id = setInterval(() => void useStore.getState().refreshFriendSessions(), POLL_MS);
+    // Skips the network request while backgrounded — the interval itself
+    // still ticks (negligible cost either way), but there's no need to keep
+    // waking the radio for a screen nobody's looking at every 45s on top of
+    // the focus-regain refresh below, which already catches it up the
+    // moment the app comes back to the foreground.
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void useStore.getState().refreshFriendSessions();
+    }, POLL_MS);
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return;
       throttleOnFocus('friend-sessions', 30_000, () => void useStore.getState().refreshFriendSessions());
