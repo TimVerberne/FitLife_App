@@ -208,6 +208,60 @@ export function weeklyMetric(
   return weeks;
 }
 
+// Bucket granularity follows the selected period, same convention as most
+// fitness apps: a week of daily bars, a month/3-months of weekly bars, all
+// time of monthly bars (capped at 24 so a multi-year history doesn't render
+// an unreadably wide chart). Without this, the bar chart always showed a
+// fixed 12-week window no matter which period was selected.
+export function barBucketsForPeriod(
+  sessions: WorkoutSession[],
+  period: StatPeriod,
+  metric: WeeklyMetric,
+  person = 'You',
+  now = Date.now(),
+): WeekBucket[] {
+  if (period === 'week') {
+    const mine = sessions.filter((h) => h.person === person);
+    const metricOf = (list: WorkoutSession[]) => {
+      if (metric === 'volume') return list.reduce((a, h) => a + volumeOf(h.entries), 0);
+      if (metric === 'duration') return list.reduce((a, h) => a + h.durationMin, 0);
+      return list.reduce((a, h) => a + repsOf(h.entries), 0);
+    };
+    const buckets: WeekBucket[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const end = now - i * DAY;
+      const start = end - DAY;
+      const inBucket = mine.filter((h) => h.startedAt > start && h.startedAt <= end);
+      buckets.push({ value: metricOf(inBucket), label: new Date(end).toLocaleDateString('en-US', { weekday: 'short' }) });
+    }
+    return buckets;
+  }
+
+  if (period === 'month') return weeklyMetric(sessions, 5, metric, person, now);
+  if (period === '3months') return weeklyMetric(sessions, 13, metric, person, now);
+
+  // 'all' — one bucket per calendar month, from the oldest session through now.
+  const mine = sessions.filter((h) => h.person === person);
+  const metricOf = (list: WorkoutSession[]) => {
+    if (metric === 'volume') return list.reduce((a, h) => a + volumeOf(h.entries), 0);
+    if (metric === 'duration') return list.reduce((a, h) => a + h.durationMin, 0);
+    return list.reduce((a, h) => a + repsOf(h.entries), 0);
+  };
+  const nowDate = new Date(now);
+  const oldest = mine.length > 0 ? Math.min(...mine.map((h) => h.startedAt)) : now;
+  const oldestDate = new Date(oldest);
+  const monthSpan = (nowDate.getFullYear() - oldestDate.getFullYear()) * 12 + (nowDate.getMonth() - oldestDate.getMonth()) + 1;
+  const months = Math.min(Math.max(monthSpan, 1), 24);
+  const buckets: WeekBucket[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const bucketStart = new Date(nowDate.getFullYear(), nowDate.getMonth() - i, 1).getTime();
+    const bucketEnd = new Date(nowDate.getFullYear(), nowDate.getMonth() - i + 1, 1).getTime();
+    const inBucket = mine.filter((h) => h.startedAt >= bucketStart && h.startedAt < bucketEnd);
+    buckets.push({ value: metricOf(inBucket), label: new Date(bucketStart).toLocaleDateString('en-US', { month: 'short' }) });
+  }
+  return buckets;
+}
+
 export type StatPeriod = 'week' | 'month' | '3months' | 'all';
 
 export const STAT_PERIOD_DAYS: Record<StatPeriod, number | null> = {

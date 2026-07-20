@@ -102,6 +102,15 @@ this is done.
 
 ## Update notes
 
+**Version 1.7.2**
+- Fixed a bug on the **You** page: switching the top volume/duration/reps
+  chart's period (This week / This month / Past 3 months / All time) only
+  updated the big number, the % change, and the muscle split radar chart
+  below it — the bar chart itself always kept showing a fixed 12-week
+  window no matter which period was selected. It now re-buckets to match:
+  daily bars for a week, weekly bars for a month or 3 months, monthly bars
+  for all time.
+
 **Version 1.7.1**
 - The Profile and Body composition detail sheets were just re-showing the
   same numbers already visible on the compact card — not useful. Fixed:

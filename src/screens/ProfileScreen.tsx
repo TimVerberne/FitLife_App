@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
 import {
+  barBucketsForPeriod,
   MUSCLE_AXES,
   muscleSplit,
   periodCutoff,
@@ -11,7 +12,6 @@ import {
   setsCountOf,
   STAT_PERIOD_LABEL,
   volumeOf,
-  weeklyMetric,
   type StatPeriod,
   type WeeklyMetric,
 } from '../lib/records';
@@ -43,7 +43,7 @@ export function ProfileScreen() {
   const mySessions = useMemo(() => sessions.filter((s) => s.person === 'You').sort((a, b) => b.startedAt - a.startedAt), [sessions]);
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
   const records = useMemo(() => personalRecords(sessions), [sessions]);
-  const weeks = useMemo(() => weeklyMetric(sessions, 12, metric), [sessions, metric]);
+  const weeks = useMemo(() => barBucketsForPeriod(sessions, chartPeriod, metric), [sessions, chartPeriod, metric]);
   const chartSince = useMemo(() => periodCutoff(chartPeriod), [chartPeriod]);
   const radarValues = useMemo(() => muscleSplit(sessions, 'You', chartSince), [sessions, chartSince]);
 
