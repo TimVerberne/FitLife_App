@@ -102,6 +102,13 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.2**
+- Life tab: body composition card — BMI with a neutral label (never the
+  clinical under/normal/overweight/obese wording) and an inline caveat that
+  it misclassifies muscular people, waist-to-height ratio flagged against
+  the 0.5 guideline, and relative strength (best 1RM ÷ bodyweight) for your
+  top lifts.
+
 **Version 1.4.1**
 - Life tab: weight logging with a trend chart (7-day rolling average
   overlaid on the raw daily line, so one heavy day doesn't read as a real

@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { BodyProfileSetup } from '../features/life/BodyProfileSetup';
 import { WeightCard } from '../features/life/WeightCard';
 import { MeasurementsCard } from '../features/life/MeasurementsCard';
+import { BodyCompositionCard } from '../features/life/BodyCompositionCard';
 import { formatHeight } from '../lib/units';
 import type { BodyProfile } from '../lib/types';
 
@@ -67,8 +68,9 @@ export function LifeScreen() {
         <>
           <WeightCard />
           <MeasurementsCard />
+          <BodyCompositionCard />
           <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 20, textAlign: 'center' }}>
-            Body composition, nutrition targets, and hydration are coming here next.
+            Nutrition targets and hydration are coming here next.
           </p>
         </>
       )}
