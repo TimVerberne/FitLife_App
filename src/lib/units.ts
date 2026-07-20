@@ -49,6 +49,13 @@ export function fromDisplayHeightFtIn(feet: number, inches: number): number {
   return fromDisplayLength(feet * 12 + inches, 'lb');
 }
 
+// For circumference measurements (waist, chest, etc.) — unlike height, these
+// read naturally as a single imperial number (inches), no feet/inches split needed.
+export function formatLength(cm: number, units: Units): string {
+  const v = toDisplayLength(cm, units);
+  return `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })} ${units === 'lb' ? 'in' : 'cm'}`;
+}
+
 // All volume is stored canonically in ml; convert only at the display/input boundary.
 export function toDisplayVolume(ml: number, units: Units): number {
   if (units !== 'lb') return ml;

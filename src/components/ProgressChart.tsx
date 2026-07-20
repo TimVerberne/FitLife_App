@@ -31,10 +31,15 @@ export function ProgressChart({
   points,
   formatValue,
   formatDate,
+  avgPoints,
 }: {
   points: ChartPoint[];
   formatValue: (v: number) => string;
   formatDate: (ts: number) => string;
+  // Optional second series (e.g. a 7-day rolling average) drawn as a dashed,
+  // lower-contrast overlay using the same coordinate mapping as the primary
+  // line — not a second independent chart, so it never desyncs in scale.
+  avgPoints?: ChartPoint[];
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -48,7 +53,8 @@ export function ProgressChart({
   const minTs = points[0].ts;
   const maxTs = points[points.length - 1].ts;
   const tsSpan = Math.max(1, maxTs - minTs);
-  const maxVal = niceCeiling(Math.max(...points.map((p) => p.value)));
+  const allValues = avgPoints ? [...points, ...avgPoints].map((p) => p.value) : points.map((p) => p.value);
+  const maxVal = niceCeiling(Math.max(...allValues));
 
   const plotW = WIDTH - PAD_LEFT - PAD_RIGHT;
   const plotH = HEIGHT - PAD_TOP - PAD_BOTTOM;
@@ -58,6 +64,10 @@ export function ProgressChart({
 
   const coords = points.map((p) => ({ x: xFor(p.ts), y: yFor(p.value), p }));
   const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+  const avgPath = avgPoints
+    ?.map((p) => ({ x: xFor(p.ts), y: yFor(p.value) }))
+    .map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`)
+    .join(' ');
 
   function nearestIndex(clientX: number) {
     const svg = svgRef.current;
@@ -115,6 +125,8 @@ export function ProgressChart({
             </g>
           );
         })}
+
+        {avgPath && <path d={avgPath} className="chart-avg-line" fill="none" />}
 
         <path d={linePath} className="chart-line" fill="none" />
 

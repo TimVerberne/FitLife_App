@@ -102,6 +102,12 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.1**
+- Life tab: weight logging with a trend chart (7-day rolling average
+  overlaid on the raw daily line, so one heavy day doesn't read as a real
+  swing), plus collapsible measurement rows (waist/chest/arm/thigh/hip/neck)
+  with their own mini trend charts.
+
 **Version 1.4.0**
 - New **Life** tab (between Stats and You) — the start of body measurements,
   composition, nutrition targets, and hydration tracking, framed around
