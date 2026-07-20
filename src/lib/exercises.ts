@@ -13,14 +13,26 @@ export function isCardioExercise(ex: Exercise): boolean {
   return ex.body_part === 'cardio';
 }
 
+// "upper arms" lumps biceps and triceps into one filter chip, which makes
+// them hard to find — split it into its two `target` values instead. Every
+// other body_part stays a single chip.
 export function bodyParts(): string[] {
-  return Array.from(new Set(EXERCISES.map((e) => e.body_part))).sort();
+  const parts = new Set(EXERCISES.map((e) => e.body_part));
+  parts.delete('upper arms');
+  parts.add('biceps');
+  parts.add('triceps');
+  return Array.from(parts).sort();
 }
 
 export function searchExercises(query: string, bodyPart: string): Exercise[] {
   const q = query.trim().toLowerCase();
   return EXERCISES.filter((e) => {
-    const matchesBp = bodyPart === 'all' || e.body_part === bodyPart;
+    const matchesBp =
+      bodyPart === 'all'
+        ? true
+        : bodyPart === 'biceps' || bodyPart === 'triceps'
+          ? e.body_part === 'upper arms' && e.target === bodyPart
+          : e.body_part === bodyPart;
     const matchesQ = !q || e.name.toLowerCase().includes(q);
     return matchesBp && matchesQ;
   });

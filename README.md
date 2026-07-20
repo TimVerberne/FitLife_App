@@ -102,6 +102,12 @@ this is done.
 
 ## Update notes
 
+**Version 1.7.3**
+- Split the exercise picker's "upper arms" filter chip into separate
+  **Biceps** and **Triceps** chips (using each exercise's existing `target`
+  field — 151 biceps, 141 triceps) so they're easier to find while
+  searching for an exercise. Every other muscle-group chip is unchanged.
+
 **Version 1.7.2**
 - Fixed a bug on the **You** page: switching the top volume/duration/reps
   chart's period (This week / This month / Past 3 months / All time) only
