@@ -187,8 +187,21 @@ export async function fetchCalorieLog(): Promise<CalorieLogEntry[]> {
   }));
 }
 
+export async function deleteCalorieLogEntryRemote(id: string): Promise<void> {
+  try {
+    requireUserId();
+    const { error } = await supabase.from('calorie_log').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await enqueuePendingSync('calorieLog', id, 'delete');
+  }
+}
+
 export async function flushBodyPendingSync(entry: { table: string; rowId: string; op: 'upsert' | 'delete'; id?: number }): Promise<void> {
-  if (entry.op !== 'upsert') return;
+  if (entry.op === 'delete') {
+    if (entry.table === 'calorieLog') await deleteCalorieLogEntryRemote(entry.rowId);
+    return;
+  }
   if (entry.table === 'bodyProfile') {
     const record = await db.bodyProfile.get('current');
     if (record) {

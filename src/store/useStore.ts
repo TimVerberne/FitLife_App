@@ -197,6 +197,7 @@ interface StoreState {
   logBodyMetrics(patch: Partial<BodyLogEntry> & { loggedOn: string }): void;
   addWater(ml: number): void;
   addCalories(kcal: number): void;
+  clearCaloriesToday(): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -1132,6 +1133,15 @@ export const useStore = create<StoreState>((set, get) => ({
     set((s) => ({ calorieLog: [...s.calorieLog, entry] }));
     void db.calorieLog.put(entry);
     void bodySync.pushCalorieLogEntry(entry);
+  },
+
+  clearCaloriesToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayIds = get().calorieLog.filter((e) => e.loggedOn === today).map((e) => e.id);
+    if (todayIds.length === 0) return;
+    set((s) => ({ calorieLog: s.calorieLog.filter((e) => e.loggedOn !== today) }));
+    void db.calorieLog.bulkDelete(todayIds);
+    todayIds.forEach((id) => void bodySync.deleteCalorieLogEntryRemote(id));
   },
 }));
 

@@ -50,6 +50,8 @@ export function TodayCard() {
   const bodyLog = useStore((s) => s.bodyLog);
   const calorieLog = useStore((s) => s.calorieLog);
   const addCalories = useStore((s) => s.addCalories);
+  const clearCaloriesToday = useStore((s) => s.clearCaloriesToday);
+  const confirm = useStore((s) => s.confirm);
 
   const today = todayIso();
   const [inputValue, setInputValue] = useState('');
@@ -97,6 +99,10 @@ export function TodayCard() {
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     addCalories(Math.round(parsed));
     setInputValue('');
+  }
+
+  function clearToday() {
+    confirm("Clear today's logged calories?", 'Yes, clear', () => clearCaloriesToday(), true);
   }
 
   if (!bodyProfile.sexAtBirth) return null;
@@ -161,6 +167,15 @@ export function TodayCard() {
           Add
         </button>
       </div>
+
+      {todayKcal > 0 && (
+        <button
+          onClick={clearToday}
+          style={{ background: 'transparent', border: 'none', color: 'var(--faint)', fontSize: 12, padding: 0, marginTop: 8, cursor: 'pointer' }}
+        >
+          Clear today's kcal
+        </button>
+      )}
 
       {last7.some((d) => d.value > 0) && (
         <div style={{ marginTop: 12 }}>

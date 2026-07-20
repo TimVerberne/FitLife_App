@@ -102,6 +102,11 @@ this is done.
 
 ## Update notes
 
+**Version 1.6.1**
+- Added a "Clear today's kcal" option next to the calorie quick-add (with a
+  confirm step) — the calorie log was previously add-only, so a mis-typed
+  entry could only be fixed by logging more, not by resetting.
+
 **Version 1.6.0**
 - Redesigned the top of the Life tab into a visual dashboard, based on a
   mockup the user liked: a calorie ring with a goal-phrased headline, three

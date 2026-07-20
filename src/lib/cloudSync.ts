@@ -244,6 +244,7 @@ export async function flushPendingSync(): Promise<void> {
       if (entry.op === 'delete') {
         if (entry.table === 'routines') await deleteRoutineRemote(entry.rowId);
         else if (entry.table === 'sessions') await deleteSessionRemote(entry.rowId);
+        else await flushBodyPendingSync(entry);
       } else if (entry.table === 'routines') {
         const routine = await db.routines.get(entry.rowId);
         if (routine) await pushRoutine(routine);
