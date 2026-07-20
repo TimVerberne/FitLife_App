@@ -42,6 +42,14 @@ export interface CalorieTargetResult {
   rateWarning: boolean;
 }
 
+// Inverse of calorieTarget()'s rate→kcal math — lets the Nutrition card
+// accept a direct daily kcal target and convert it back to the single
+// rateKgWeek representation everything else (macros, calibration) already
+// runs on, rather than adding a second parallel goal-setting code path.
+export function rateKgWeekFromKcalDelta(deltaKcal: number): number {
+  return Math.min(1, Math.max(0.1, (Math.abs(deltaKcal) * 7) / KCAL_PER_KG_FAT));
+}
+
 export function calorieTarget(
   weightKg: number,
   heightCm: number,
@@ -115,13 +123,26 @@ export interface MacroResult {
 // Order matters: protein and fat anchor to bodyweight/lean-mass first,
 // carbs absorb whatever calories are left — so a calorie-target change only
 // ever has to re-run this to get carbs to move, protein/fat stay pinned.
-export function macros(weightKg: number, bodyFatPct: number | null, targetKcal: number, goal: NutritionGoal): MacroResult {
+export function macros(
+  weightKg: number,
+  bodyFatPct: number | null,
+  targetKcal: number,
+  goal: NutritionGoal,
+  rateKgWeek = 1,
+): MacroResult {
   const leanBasis = bodyFatPct != null;
   const proteinMassKg = leanBasis ? weightKg * (1 - bodyFatPct / 100) : weightKg;
   const proteinRange = leanBasis ? PROTEIN_G_PER_KG_LEAN : PROTEIN_G_PER_KG;
+  const midpoint = (proteinRange.min + proteinRange.max) / 2;
   // In a deficit, protein needs rise (protects muscle while calories drop) —
-  // push toward the top of whichever range is active.
-  const proteinPerKg = goal === 'lose' ? proteinRange.max : (proteinRange.min + proteinRange.max) / 2;
+  // scaled by how aggressive the deficit actually is, from the midpoint at
+  // the mildest allowed rate (0.1 kg/week) up to the top of the range at the
+  // most aggressive one (1.0 kg/week), rather than jumping straight to the
+  // range's ceiling for any "lose" goal regardless of how slow it is —
+  // that used to hand a very mild cut the same maxed-out target as an
+  // aggressive one.
+  const deficitIntensity = Math.min(1, Math.max(0, (rateKgWeek - 0.1) / 0.9));
+  const proteinPerKg = goal === 'lose' ? midpoint + (proteinRange.max - midpoint) * deficitIntensity : midpoint;
   const proteinCapG = weightKg * PROTEIN_CAP_G_PER_KG;
   const proteinG = Math.min(proteinMassKg * proteinPerKg, proteinCapG);
   const proteinRangeG: [number, number] = [proteinMassKg * proteinRange.min, Math.min(proteinMassKg * proteinRange.max, proteinCapG)];

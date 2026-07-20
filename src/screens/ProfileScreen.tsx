@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
 import {
   barBucketsForPeriod,
+  formatDuration,
   MUSCLE_AXES,
   muscleSplit,
   periodCutoff,
@@ -234,7 +235,7 @@ export function ProfileScreen() {
           <div className="hist-b">
             <div className="hist-name">{h.name}</div>
             <div className="hist-date">
-              {relativeDate(h.startedAt)} · {h.durationMin} min · {setsCountOf(h.entries)} sets
+              {relativeDate(h.startedAt)} · {formatDuration(h.durationMin)} · {setsCountOf(h.entries)} sets
             </div>
           </div>
           <div className="hist-vol">{Math.round(toDisplayWeight(volumeOf(h.entries), units))} {units}</div>

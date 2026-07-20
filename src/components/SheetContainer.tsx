@@ -16,6 +16,18 @@ import { ProfileDetailSheet } from '../features/life/ProfileDetailSheet';
 import { BodyCompositionDetailSheet } from '../features/life/BodyCompositionDetailSheet';
 
 const DISMISS_THRESHOLD = 90;
+// A quick flick doesn't always travel far enough to cross DISMISS_THRESHOLD
+// before the finger lifts — this catches that case by speed instead of
+// distance, matching how native bottom sheets respond to a fast swipe.
+const FLICK_MIN_DISTANCE = 30;
+const FLICK_MIN_VELOCITY = 0.5; // px/ms
+
+interface DragTrack {
+  startY: number;
+  startTime: number;
+  dy: number;
+  active: boolean;
+}
 
 export function SheetContainer() {
   const sheet = useStore((s) => s.sheet);
@@ -29,7 +41,6 @@ export function SheetContainer() {
   // the search bar stationary regardless of how many results match.
   const fixedHeight = sheet === 'picker';
 
-  const drag = useRef<{ startY: number; dy: number } | null>(null);
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -43,26 +54,69 @@ export function SheetContainer() {
     scrollRef.current?.scrollTo(0, 0);
   }, [sheet]);
 
-  function onPointerDown(e: React.PointerEvent) {
+  function finishDrag(track: DragTrack) {
+    setDragging(false);
+    setDragY(0);
+    const elapsedMs = Math.max(1, performance.now() - track.startTime);
+    const velocity = track.dy / elapsedMs;
+    const isFlick = track.dy > FLICK_MIN_DISTANCE && velocity > FLICK_MIN_VELOCITY;
+    if (track.dy > DISMISS_THRESHOLD || isFlick) closeSheet();
+  }
+
+  // The small grab handle is always draggable regardless of scroll
+  // position — this is the simple, unconditional case.
+  const handleDrag = useRef<DragTrack | null>(null);
+
+  function onHandlePointerDown(e: React.PointerEvent) {
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    drag.current = { startY: e.clientY, dy: 0 };
+    handleDrag.current = { startY: e.clientY, startTime: performance.now(), dy: 0, active: true };
     setDragging(true);
   }
 
-  function onPointerMove(e: React.PointerEvent) {
-    if (!drag.current) return;
-    const dy = Math.max(0, e.clientY - drag.current.startY);
-    drag.current.dy = dy;
+  function onHandlePointerMove(e: React.PointerEvent) {
+    if (!handleDrag.current) return;
+    const dy = Math.max(0, e.clientY - handleDrag.current.startY);
+    handleDrag.current.dy = dy;
     setDragY(dy);
   }
 
-  function endDrag() {
-    if (!drag.current) return;
-    const dy = drag.current.dy;
-    drag.current = null;
-    setDragging(false);
-    setDragY(0);
-    if (dy > DISMISS_THRESHOLD) closeSheet();
+  function onHandlePointerUp() {
+    const track = handleDrag.current;
+    handleDrag.current = null;
+    if (track) finishDrag(track);
+  }
+
+  // The rest of the sheet (header, content) is also draggable, but only
+  // once it's scrolled all the way to the top — otherwise a downward swipe
+  // there is an ordinary scroll gesture. This is what a swipe starting
+  // anywhere near the top of a sheet (not just the tiny handle bar) used to
+  // fall through to the scrollable content and either scroll it instead of
+  // dismissing, or need several attempts to land exactly on the handle.
+  const contentDrag = useRef<DragTrack | null>(null);
+
+  function onContentPointerDown(e: React.PointerEvent) {
+    contentDrag.current = { startY: e.clientY, startTime: performance.now(), dy: 0, active: false };
+  }
+
+  function onContentPointerMove(e: React.PointerEvent) {
+    const track = contentDrag.current;
+    if (!track) return;
+    const dy = e.clientY - track.startY;
+    if (!track.active) {
+      if ((scrollRef.current?.scrollTop ?? 0) > 0 || dy <= 6) return;
+      track.active = true;
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+      setDragging(true);
+    }
+    const clamped = Math.max(0, dy);
+    track.dy = clamped;
+    setDragY(clamped);
+  }
+
+  function onContentPointerUp() {
+    const track = contentDrag.current;
+    contentDrag.current = null;
+    if (track?.active) finishDrag(track);
   }
 
   return (
@@ -74,14 +128,21 @@ export function SheetContainer() {
       >
         <div
           className="grab-zone"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
+          onPointerDown={onHandlePointerDown}
+          onPointerMove={onHandlePointerMove}
+          onPointerUp={onHandlePointerUp}
+          onPointerCancel={onHandlePointerUp}
         >
           <div className="grab" />
         </div>
-        <div className="sheet-scroll" ref={scrollRef}>
+        <div
+          className="sheet-scroll"
+          ref={scrollRef}
+          onPointerDown={onContentPointerDown}
+          onPointerMove={onContentPointerMove}
+          onPointerUp={onContentPointerUp}
+          onPointerCancel={onContentPointerUp}
+        >
           {sheet === 'picker' && <PickerSheet />}
           {sheet === 'detail' && <ExerciseDetailSheet />}
           {sheet === 'workout' && <WorkoutDetailSheet />}

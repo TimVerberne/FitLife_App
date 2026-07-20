@@ -102,6 +102,41 @@ this is done.
 
 ## Update notes
 
+**Version 1.8.0**
+- Fixes and features from the first real training session with the app:
+  - **Active session header** now hides while scrolling down (so more of
+    the exercise list is visible) and slides back the instant you scroll
+    up even slightly, instead of needing to scroll all the way back to the
+    top to see the clock or hit Minimize.
+  - **History editing** now goes beyond weight/reps: add or remove sets on
+    an existing exercise, and add or remove whole exercises from a past
+    workout (reuses the same exercise picker used for an in-progress
+    session). Editing mode now survives adding an exercise instead of
+    silently dropping back to read-only.
+  - **Routines** on the Train screen can now be drag-reordered, same
+    press-and-drag handle as reordering exercises mid-workout.
+  - **Nutrition goal** can now be set either as a kg/week rate (as before)
+    or directly as a kcal/day target — typing a number converts to the
+    equivalent rate under the hood, so macros and calibration keep working
+    off the same value either way.
+  - Workout durations (home feed, history list) now read "1 hour and 10
+    mins" instead of "70 minutes."
+  - Fixed the protein target formula: a "lose" goal always jumped straight
+    to the top of the recommended range regardless of how mild the rate
+    was, so even a slow 0.1 kg/week cut got the same near-maximum protein
+    number as an aggressive 1.0 kg/week one. It now scales between the
+    two, matching how aggressive the actual deficit is.
+  - Rest timers now vibrate (short-short-long pattern) when they end, in
+    addition to the existing sound — noticeable in a pocket. Gated by the
+    same haptics setting as the set-complete tap.
+  - Fixed the sheet swipe-to-dismiss gesture: it only ever worked from the
+    small handle bar at the very top, so a swipe starting anywhere in a
+    sheet's header (which is what it looks like you should be able to grab)
+    fell through to scrolling the content instead, or took several tries.
+    The whole sheet is now draggable-to-dismiss once scrolled to the top
+    (like a native bottom sheet), and a quick flick dismisses even without
+    crossing the old distance threshold.
+
 **Version 1.7.3**
 - Split the exercise picker's "upper arms" filter chip into separate
   **Biceps** and **Triceps** chips (using each exercise's existing `target`

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { exerciseById, isCardioExercise } from '../../lib/exercises';
 import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
@@ -13,9 +12,18 @@ export function WorkoutDetailSheet() {
   const copyWorkoutToRoutines = useStore((s) => s.copyWorkoutToRoutines);
   const repeatWorkout = useStore((s) => s.repeatWorkout);
   const updateHistorySet = useStore((s) => s.updateHistorySet);
+  const addHistorySet = useStore((s) => s.addHistorySet);
+  const removeHistorySet = useStore((s) => s.removeHistorySet);
+  const removeHistoryExercise = useStore((s) => s.removeHistoryExercise);
+  const openPickerForHistory = useStore((s) => s.openPickerForHistory);
   const deleteSession = useStore((s) => s.deleteSession);
+  const confirm = useStore((s) => s.confirm);
   const units = useStore((s) => s.settings.units);
-  const [editing, setEditing] = useState(false);
+  // In the store, not local state — adding an exercise mid-edit replaces
+  // this sheet with the picker and back (only one sheet renders at a
+  // time), which would otherwise silently reset editing to false on remount.
+  const editing = useStore((s) => s.historyEditing);
+  const setEditing = useStore((s) => s.setHistoryEditing);
 
   if (!session) return null;
   const colors = colorForPerson(session.person);
@@ -40,7 +48,7 @@ export function WorkoutDetailSheet() {
           <button
             className="info-btn"
             aria-label={editing ? 'Done editing' : 'Edit logged sets'}
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => setEditing(!editing)}
           >
             {editing ? '✓' : '✎'}
           </button>
@@ -68,7 +76,18 @@ export function WorkoutDetailSheet() {
           <div className="s-ex" key={i}>
             <div className="s-top">
               <Thumb className="ph" src={ex.image} alt={ex.name} />
-              <div className="s-name" style={{ fontWeight: 700 }}>{ex.name}</div>
+              <div className="s-name" style={{ fontWeight: 700, flex: 1 }}>{ex.name}</div>
+              {editing && (
+                <button
+                  className="s-del"
+                  aria-label={`Remove ${ex.name} from this workout`}
+                  onClick={() =>
+                    confirm(`Remove ${ex.name} and all its logged sets from this workout?`, 'Remove', () => removeHistoryExercise(session.id, i), true)
+                  }
+                >
+                  ✕
+                </button>
+              )}
             </div>
             {editing ? (
               <div>
@@ -91,6 +110,9 @@ export function WorkoutDetailSheet() {
                         />
                       </div>
                       <span className="hist-edit-x">km</span>
+                      <button className="s-del" aria-label={`Remove set ${si + 1}`} onClick={() => removeHistorySet(session.id, i, si)}>
+                        ✕
+                      </button>
                     </div>
                   ) : (
                     <div className="hist-edit-row" key={si}>
@@ -105,9 +127,15 @@ export function WorkoutDetailSheet() {
                       <div className="set-fld">
                         <NumberField value={s.reps} inputMode="numeric" onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)} />
                       </div>
+                      <button className="s-del" aria-label={`Remove set ${si + 1}`} onClick={() => removeHistorySet(session.id, i, si)}>
+                        ✕
+                      </button>
                     </div>
                   ),
                 )}
+                <button className="add-set" onClick={() => addHistorySet(session.id, i)}>
+                  + Add set
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -123,6 +151,11 @@ export function WorkoutDetailSheet() {
           </div>
         );
       })}
+      {editing && (
+        <button className="add-ex" onClick={() => openPickerForHistory(session.id)}>
+          + Add exercise
+        </button>
+      )}
       {session.person !== 'You' ? (
         <button className="btn" style={{ marginTop: 16 }} onClick={() => copyWorkoutToRoutines(session.id)}>
           Copy to my routines

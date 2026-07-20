@@ -89,6 +89,33 @@ export function ActiveSessionScreen() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<number | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const lastScrollTop = useRef(0);
+
+  // Hides the sticky mint header while scrolling down (so more of the
+  // exercise list is visible) and slides it back the instant scroll
+  // direction reverses, even by a few pixels — no need to scroll all the
+  // way back to the top just to see the clock or hit Minimize.
+  //
+  // Listens on window, not this screen's own onScroll: .screen's
+  // min-height: 100dvh ancestor (.app-shell) is a floor, not a ceiling, so
+  // once the exercise list is taller than one screen the whole page grows
+  // and the browser scrolls the window/document — .screen's own scrollTop
+  // never moves. This is also exactly why plain position: sticky on
+  // .sess-bar still works correctly without any extra wiring: sticky
+  // positioning already tracks whatever the real scrolling ancestor is.
+  useEffect(() => {
+    function onWindowScroll() {
+      const top = window.scrollY;
+      const delta = top - lastScrollTop.current;
+      if (top <= 0) setHeaderHidden(false);
+      else if (delta > 4) setHeaderHidden(true);
+      else if (delta < -4) setHeaderHidden(false);
+      lastScrollTop.current = top;
+    }
+    window.addEventListener('scroll', onWindowScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onWindowScroll);
+  }, []);
   // The authoritative live value, updated synchronously inside the native
   // event handlers below — `drag` (React state) is a render snapshot of
   // this, always one tick behind. Committing the reorder off of `drag`
@@ -248,7 +275,7 @@ export function ActiveSessionScreen() {
 
   return (
     <div className="screen" style={{ padding: '0 18px 24px' }}>
-      <div className="sess-bar">
+      <div className={`sess-bar${headerHidden ? ' hidden' : ''}`}>
         <div className="sess-top">
           <span className="sess-live">Recording · live</span>
           <button className="sess-end" onClick={cancelSession}>

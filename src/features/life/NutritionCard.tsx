@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget } from '../../lib/nutrition';
+import { calorieTarget, rateKgWeekFromKcalDelta } from '../../lib/nutrition';
 import { calibrate } from '../../lib/calibration';
 import type { NutritionGoal } from '../../lib/types';
 import { chipStyle } from './chipStyle';
@@ -12,10 +12,52 @@ const GOAL_OPTIONS: { id: NutritionGoal; label: string }[] = [
   { id: 'gain', label: 'Gain' },
 ];
 
+// A kcal number this close to maintenance just counts as "maintain" — no
+// point forcing a 1% deficit/surplus distinction the estimate can't
+// actually resolve.
+const MAINTENANCE_TOLERANCE_KCAL = 50;
+
+// Commits only on blur/Enter, unlike NumberField's per-keystroke commit —
+// typing "1800" digit by digit would otherwise flip the goal between
+// lose/maintain/gain several times before the number is even finished.
+function KcalTargetInput({ currentTarget, onCommit }: { currentTarget: number; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(Math.round(currentTarget)));
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) setText(String(Math.round(currentTarget)));
+  }, [currentTarget, focused]);
+
+  function commit() {
+    const n = parseFloat(text);
+    if (Number.isFinite(n) && n > 0) onCommit(Math.round(n));
+    else setText(String(Math.round(currentTarget)));
+  }
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      value={text}
+      onFocus={() => setFocused(true)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false);
+        commit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+      }}
+      style={{ width: 90 }}
+    />
+  );
+}
+
 export function NutritionCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const bodyLog = useStore((s) => s.bodyLog);
   const saveBodyProfile = useStore((s) => s.saveBodyProfile);
+  const [inputMode, setInputMode] = useState<'rate' | 'kcal'>('rate');
 
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
   const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
@@ -38,6 +80,13 @@ export function NutritionCard() {
     if (!result) return null;
     return calibrate(bodyLog, predictedRateKgWeek, result.target);
   }, [bodyLog, predictedRateKgWeek, result]);
+
+  function commitKcalTarget(n: number) {
+    if (!result) return;
+    const delta = n - result.tdee;
+    if (Math.abs(delta) < MAINTENANCE_TOLERANCE_KCAL) saveBodyProfile({ goal: 'maintain' });
+    else saveBodyProfile({ goal: delta > 0 ? 'gain' : 'lose', rateKgWeek: rateKgWeekFromKcalDelta(delta) });
+  }
 
   if (!bodyProfile.sexAtBirth) return null;
 
@@ -103,21 +152,44 @@ export function NutritionCard() {
             ))}
           </div>
           {bodyProfile.goal !== 'maintain' && (
-            <div className="settings-row">
-              <div>
-                <div className="settings-row-label">Target rate</div>
-                <div className="settings-row-desc">{bodyProfile.rateKgWeek.toFixed(1)} kg/week</div>
+            <>
+              <div className="settings-row">
+                <div className="settings-row-label">Set goal by</div>
+                <div className="seg" style={{ width: 140 }}>
+                  <button className={inputMode === 'rate' ? 'on' : ''} onClick={() => setInputMode('rate')}>
+                    Rate
+                  </button>
+                  <button className={inputMode === 'kcal' ? 'on' : ''} onClick={() => setInputMode('kcal')}>
+                    Kcal/day
+                  </button>
+                </div>
               </div>
-              <input
-                type="range"
-                min={0.1}
-                max={1}
-                step={0.1}
-                value={bodyProfile.rateKgWeek}
-                onChange={(e) => saveBodyProfile({ rateKgWeek: Number(e.target.value) })}
-                style={{ width: 110 }}
-              />
-            </div>
+              {inputMode === 'rate' ? (
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-row-label">Target rate</div>
+                    <div className="settings-row-desc">{bodyProfile.rateKgWeek.toFixed(1)} kg/week</div>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.1}
+                    max={1}
+                    step={0.1}
+                    value={bodyProfile.rateKgWeek}
+                    onChange={(e) => saveBodyProfile({ rateKgWeek: Number(e.target.value) })}
+                    style={{ width: 110 }}
+                  />
+                </div>
+              ) : (
+                <div className="settings-row">
+                  <div>
+                    <div className="settings-row-label">Target calories</div>
+                    <div className="settings-row-desc">≈ {bodyProfile.rateKgWeek.toFixed(1)} kg/week at this rate</div>
+                  </div>
+                  <KcalTargetInput currentTarget={result.target} onCommit={commitKcalTarget} />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

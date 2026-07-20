@@ -36,6 +36,10 @@ export interface Routine {
   name: string;
   exerciseIds: string[];
   createdAt: number;
+  // Drives the Train screen's display order (drag-to-reorder writes this).
+  // Optional so routines synced before this field existed still sort
+  // sensibly — falls back to createdAt wherever it's missing.
+  sortOrder?: number;
 }
 
 // 'You' is always the signed-in user; anything else is a friend's display

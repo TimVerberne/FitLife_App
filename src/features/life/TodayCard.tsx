@@ -76,7 +76,7 @@ export function TodayCard() {
       bodyProfile.goal,
       bodyProfile.rateKgWeek,
     );
-    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal);
+    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal, bodyProfile.rateKgWeek);
     const predictedRateKgWeek = bodyProfile.goal === 'lose' ? -bodyProfile.rateKgWeek : bodyProfile.goal === 'gain' ? bodyProfile.rateKgWeek : 0;
     const calibration = calibrate(bodyLog, predictedRateKgWeek, calories.target);
     return { calories, macroResult, calibration, predictedRateKgWeek };

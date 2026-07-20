@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
+import { formatDuration, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { toDisplayWeight } from '../../lib/units';
 
 const COLLAPSED_COUNT = 5;
@@ -84,7 +84,7 @@ export function ImportPreviewSheet() {
           <div className="hist-b">
             <div className="hist-name">{s.name}</div>
             <div className="hist-date">
-              {relativeDate(s.startedAt)} · {s.durationMin} min · {setsCountOf(s.entries)} sets
+              {relativeDate(s.startedAt)} · {formatDuration(s.durationMin)} · {setsCountOf(s.entries)} sets
             </div>
           </div>
           <div className="hist-vol">

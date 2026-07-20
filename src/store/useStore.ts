@@ -11,6 +11,7 @@ import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
+import { sortRoutines } from '../lib/records';
 import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
@@ -109,10 +110,19 @@ interface StoreState {
   detailReturnToPicker: boolean;
   viewingSessionId: string | null;
   viewingRoutineId: string | null;
+  // Lives in the store rather than local component state — adding an
+  // exercise while editing a past workout replaces WorkoutDetailSheet with
+  // the picker sheet (only one sheet renders at a time) and back again,
+  // which would otherwise silently drop back to read-only on remount.
+  historyEditing: boolean;
   pickQuery: string;
   pickBodyPart: string;
   importPreview: ImportPreview | null;
   pickSelected: Set<string>;
+  // Non-null while the picker was opened from a past workout being edited
+  // (openPickerForHistory) rather than from an in-progress session — tells
+  // addExercisesToSession() which one to add the selection to.
+  pickerTargetSessionId: string | null;
 
   // dialog + toast
   dialog: DialogState | null;
@@ -172,6 +182,7 @@ interface StoreState {
   openRoutineActions(id: string): void;
   renameRoutine(id: string, name: string): void;
   deleteRoutine(id: string): void;
+  reorderRoutines(order: number[]): void;
   closeSheet(): void;
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
@@ -184,7 +195,12 @@ interface StoreState {
 
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
+  setHistoryEditing(v: boolean): void;
   updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight' | 'durationSec' | 'distanceKm', value: number): void;
+  addHistorySet(sessionId: string, entryIdx: number): void;
+  removeHistorySet(sessionId: string, entryIdx: number, setIdx: number): void;
+  openPickerForHistory(sessionId: string): void;
+  removeHistoryExercise(sessionId: string, entryIdx: number): void;
   deleteSession(sessionId: string): void;
 
   openSettings(): void;
@@ -260,9 +276,11 @@ export const useStore = create<StoreState>((set, get) => ({
   detailReturnToPicker: false,
   viewingSessionId: null,
   viewingRoutineId: null,
+  historyEditing: false,
   pickQuery: '',
   pickBodyPart: 'all',
   pickSelected: new Set(),
+  pickerTargetSessionId: null,
   importPreview: null,
 
   dialog: null,
@@ -489,8 +507,35 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   addExercisesToSession(exerciseIds) {
+    if (exerciseIds.length === 0) return;
+    const targetSessionId = get().pickerTargetSessionId;
+    if (targetSessionId) {
+      const sessions = get().sessions.map((sess) => {
+        if (sess.id !== targetSessionId) return sess;
+        const existing = new Set(sess.entries.map((e) => e.exerciseId));
+        const toAdd = exerciseIds.filter((id) => !existing.has(id));
+        const newEntries = toAdd.map((exerciseId) => {
+          const ex = exerciseById(exerciseId);
+          const cardio = !!ex && isCardioExercise(ex);
+          const firstSet = cardio
+            ? { reps: 0, weight: 0, durationSec: 0, distanceKm: 0, done: true, kind: 'normal' as SetKind }
+            : { reps: 10, weight: 20, durationSec: undefined, distanceKm: undefined, done: true, kind: 'normal' as SetKind };
+          return { exerciseId, sets: [firstSet] };
+        });
+        return { ...sess, entries: [...sess.entries, ...newEntries] };
+      });
+      set({ sessions, pickSelected: new Set(), pickerTargetSessionId: null, sheet: 'workout', viewingSessionId: targetSessionId });
+      const updated = sessions.find((s) => s.id === targetSessionId);
+      if (updated) {
+        void db.sessions.put(updated);
+        void cloudSync.pushSession(updated);
+      }
+      get().showToast(exerciseIds.length === 1 ? 'Added 1 exercise' : `Added ${exerciseIds.length} exercises`);
+      return;
+    }
+
     const active = get().active;
-    if (!active || exerciseIds.length === 0) return;
+    if (!active) return;
     const existing = new Set(active.entries.map((e) => e.exerciseId));
     const toAdd = exerciseIds.filter((id) => !existing.has(id));
     if (toAdd.length === 0) return;
@@ -583,7 +628,11 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   openPicker() {
-    set({ sheet: 'picker', pickQuery: '', pickBodyPart: 'all', pickSelected: new Set() });
+    set({ sheet: 'picker', pickQuery: '', pickBodyPart: 'all', pickSelected: new Set(), pickerTargetSessionId: null });
+  },
+
+  openPickerForHistory(sessionId) {
+    set({ sheet: 'picker', pickQuery: '', pickBodyPart: 'all', pickSelected: new Set(), pickerTargetSessionId: sessionId });
   },
 
   openDetail(id) {
@@ -595,7 +644,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   openWorkoutSheet(id) {
-    set({ sheet: 'workout', viewingSessionId: id });
+    set({ sheet: 'workout', viewingSessionId: id, historyEditing: false });
   },
 
   openRoutineActions(id) {
@@ -621,8 +670,26 @@ export const useStore = create<StoreState>((set, get) => ({
     }, true);
   },
 
+  // `order[i]` is the displayed-list index (per sortRoutines, same ordering
+  // TrainScreen renders) that should end up at position i — mirrors
+  // reorderEntries's contract. Every routine gets a fresh sortOrder here
+  // rather than just the ones that moved, so the whole list stays a clean,
+  // gap-free sequence after each drag.
+  reorderRoutines(order) {
+    const sorted = sortRoutines(get().routines);
+    if (order.length !== sorted.length) return;
+    const reordered = order.map((i, position) => ({ ...sorted[i], sortOrder: position }));
+    set((s) => ({
+      routines: s.routines.map((r) => reordered.find((u) => u.id === r.id) ?? r),
+    }));
+    reordered.forEach((r) => {
+      void db.routines.update(r.id, { sortOrder: r.sortOrder });
+      void cloudSync.pushRoutine(r);
+    });
+  },
+
   closeSheet() {
-    const { sheet, detailReturnToPicker } = get();
+    const { sheet, detailReturnToPicker, pickerTargetSessionId } = get();
     if (sheet === 'detail' && detailReturnToPicker) {
       // Only true when detail was reached via the picker's "i" button — an
       // explicit flag rather than inferring it from "a session happens to be
@@ -630,6 +697,12 @@ export const useStore = create<StoreState>((set, get) => ({
       // detail from, say, Profile's Personal Records while a session was
       // merely minimized (still active) in the background.
       set({ sheet: 'picker', detailReturnToPicker: false });
+    } else if (sheet === 'picker' && pickerTargetSessionId) {
+      // The picker replaced the workout-detail sheet (only one sheet renders
+      // at a time), so backing out without adding anything — swipe, scrim
+      // tap, Escape — needs to return there explicitly, not just close
+      // everything the way it would for the in-progress-session picker.
+      set({ sheet: 'workout', pickerTargetSessionId: null });
     } else if (sheet === 'importPreview') {
       // Dismissing any way (swipe, backdrop tap, Escape) should discard the
       // pending import and land back on Settings, same as tapping Cancel —
@@ -725,6 +798,10 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  setHistoryEditing(v) {
+    set({ historyEditing: v });
+  },
+
   updateHistorySet(sessionId, entryIdx, setIdx, field, value) {
     const sessions = get().sessions.map((sess) => {
       if (sess.id !== sessionId) return sess;
@@ -734,6 +811,65 @@ export const useStore = create<StoreState>((set, get) => ({
         return { ...e, sets };
       });
       return { ...sess, entries };
+    });
+    set({ sessions });
+    const updated = sessions.find((s) => s.id === sessionId);
+    if (updated) {
+      void db.sessions.put(updated);
+      void cloudSync.pushSession(updated);
+    }
+  },
+
+  // A finished workout's sets are already `done` by the time they're saved,
+  // so a set added while editing history defaults to done: true too — unlike
+  // addSet() for an in-progress session, where a fresh set is meant to be
+  // checked off as it's actually performed.
+  addHistorySet(sessionId, entryIdx) {
+    const sessions = get().sessions.map((sess) => {
+      if (sess.id !== sessionId) return sess;
+      const entries = sess.entries.map((e, ei) => {
+        if (ei !== entryIdx) return e;
+        const ex = exerciseById(e.exerciseId);
+        const fallback = ex && isCardioExercise(ex)
+          ? { reps: 0, weight: 0, durationSec: 0, distanceKm: 0 }
+          : { reps: 10, weight: 20, durationSec: undefined, distanceKm: undefined };
+        const last = e.sets[e.sets.length - 1] ?? fallback;
+        return {
+          ...e,
+          sets: [
+            ...e.sets,
+            { reps: last.reps, weight: last.weight, durationSec: last.durationSec, distanceKm: last.distanceKm, done: true, kind: 'normal' as SetKind },
+          ],
+        };
+      });
+      return { ...sess, entries };
+    });
+    set({ sessions });
+    const updated = sessions.find((s) => s.id === sessionId);
+    if (updated) {
+      void db.sessions.put(updated);
+      void cloudSync.pushSession(updated);
+    }
+  },
+
+  removeHistorySet(sessionId, entryIdx, setIdx) {
+    const sessions = get().sessions.map((sess) => {
+      if (sess.id !== sessionId) return sess;
+      const entries = sess.entries.map((e, ei) => (ei !== entryIdx ? e : { ...e, sets: e.sets.filter((_, si) => si !== setIdx) }));
+      return { ...sess, entries };
+    });
+    set({ sessions });
+    const updated = sessions.find((s) => s.id === sessionId);
+    if (updated) {
+      void db.sessions.put(updated);
+      void cloudSync.pushSession(updated);
+    }
+  },
+
+  removeHistoryExercise(sessionId, entryIdx) {
+    const sessions = get().sessions.map((sess) => {
+      if (sess.id !== sessionId) return sess;
+      return { ...sess, entries: sess.entries.filter((_, ei) => ei !== entryIdx) };
     });
     set({ sessions });
     const updated = sessions.find((s) => s.id === sessionId);

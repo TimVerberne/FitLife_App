@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
-import { isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
+import { formatDuration, isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
 import { colorForPerson } from '../lib/colors';
 import { toDisplayWeight } from '../lib/units';
 import { useStore } from '../store/useStore';
@@ -46,7 +46,7 @@ export function WorkoutFeedCard({
       <div className="feed-stats-row">
         <div className="feed-stat">
           <div className="l">Time</div>
-          <div className="v">{session.durationMin}min</div>
+          <div className="v">{formatDuration(session.durationMin)}</div>
         </div>
         <div className="feed-stat">
           <div className="l">Volume</div>

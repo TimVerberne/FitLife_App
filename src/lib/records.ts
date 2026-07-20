@@ -1,6 +1,14 @@
-import type { SessionEntry, SetEntry, WorkoutSession } from './types';
+import type { Routine, SessionEntry, SetEntry, WorkoutSession } from './types';
 import type { WeekStart } from './settings';
 import { exerciseById } from './exercises';
+
+// Shared by TrainScreen (to render) and the store's reorderRoutines action
+// (to build the index array a drag commits) — both need the exact same
+// ordering or a drag would silently reorder the wrong pair of routines.
+// Falls back to createdAt for any routine never manually reordered yet.
+export function sortRoutines(routines: Routine[]): Routine[] {
+  return [...routines].sort((a, b) => (a.sortOrder ?? a.createdAt) - (b.sortOrder ?? b.createdAt));
+}
 
 const DAY = 86_400_000;
 
@@ -58,6 +66,18 @@ export function relativeDate(ts: number, now = Date.now()): string {
   if (d === 1) return 'Yesterday';
   if (d < 7) return `${d} days ago`;
   return new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+}
+
+// "70 min" reads worse than "1 hour and 10 mins" once a workout (or a
+// summed total) crosses an hour — used anywhere a duration in minutes is
+// shown to the user.
+export function formatDuration(totalMinutes: number): string {
+  const m = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(m / 60);
+  const mins = m % 60;
+  if (hours === 0) return `${mins} min${mins === 1 ? '' : 's'}`;
+  const hourPart = `${hours} hour${hours === 1 ? '' : 's'}`;
+  return mins === 0 ? hourPart : `${hourPart} and ${mins} min${mins === 1 ? '' : 's'}`;
 }
 
 export interface PersonalRecord {

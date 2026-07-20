@@ -15,12 +15,17 @@ export function RestTimerWatcher() {
   const restTimer = useStore((s) => s.restTimer);
   const skipRestTimer = useStore((s) => s.skipRestTimer);
   const soundEnabled = useStore((s) => s.settings.restTimerSound);
+  const hapticsEnabled = useStore((s) => s.settings.hapticsOnSetComplete);
 
   useEffect(() => {
     if (!restTimer) return;
     const msLeft = restTimer.endsAt - Date.now();
     const fire = () => {
       if (soundEnabled) playBeep();
+      // A short-short-long pattern is noticeably different from the single
+      // 15ms tap on checking off a set — meant to be felt through a pocket,
+      // not just glanced at.
+      if (hapticsEnabled && 'vibrate' in navigator) navigator.vibrate([120, 80, 120, 80, 240]);
       skipRestTimer();
     };
     if (msLeft <= 0) {
@@ -29,7 +34,7 @@ export function RestTimerWatcher() {
     }
     const id = setTimeout(fire, msLeft);
     return () => clearTimeout(id);
-  }, [restTimer, soundEnabled, skipRestTimer]);
+  }, [restTimer, soundEnabled, hapticsEnabled, skipRestTimer]);
 
   return null;
 }

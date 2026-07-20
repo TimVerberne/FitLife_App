@@ -26,7 +26,7 @@ export function MacrosCard() {
       bodyProfile.goal,
       bodyProfile.rateKgWeek,
     );
-    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal);
+    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal, bodyProfile.rateKgWeek);
     return { calories, macroResult };
   }, [latestWeightKg, latestBodyFatPct, bodyProfile, age]);
 

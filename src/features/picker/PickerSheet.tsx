@@ -57,6 +57,13 @@ function useVirtualRange(count: number, listRef: React.RefObject<HTMLDivElement 
 
 export function PickerSheet() {
   const active = useStore((s) => s.active);
+  // Non-null when this picker was opened to add exercises to a past workout
+  // being edited (WorkoutDetailSheet's "+ Add exercise") rather than to the
+  // in-progress session — the picker itself doesn't otherwise know or care
+  // which target addExercisesToSession() will route the selection to.
+  const pickerTargetSessionId = useStore((s) => s.pickerTargetSessionId);
+  const sessions = useStore((s) => s.sessions);
+  const historySession = pickerTargetSessionId ? sessions.find((sess) => sess.id === pickerTargetSessionId) : undefined;
   const pickQuery = useStore((s) => s.pickQuery);
   const pickBodyPart = useStore((s) => s.pickBodyPart);
   const setPickQuery = useStore((s) => s.setPickQuery);
@@ -85,12 +92,13 @@ export function PickerSheet() {
     scrollEl?.scrollTo(0, 0);
   }, [pickQuery, pickBodyPart]);
 
-  if (!active) return null;
-  const alreadyIn = new Set(active.entries.map((e) => e.exerciseId));
+  if (!active && !pickerTargetSessionId) return null;
+  const entriesInTarget = pickerTargetSessionId ? (historySession?.entries ?? []) : (active?.entries ?? []);
+  const alreadyIn = new Set(entriesInTarget.map((e) => e.exerciseId));
 
   function toggle(id: string) {
     if (alreadyIn.has(id)) {
-      showToast('Already in your workout');
+      showToast(pickerTargetSessionId ? 'Already in this workout' : 'Already in your workout');
       return;
     }
     togglePickSelected(id);

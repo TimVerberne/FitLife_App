@@ -335,6 +335,30 @@
   flex-wrap: wrap;
 }
 
+/* Reordering swaps the whole list to fixed-height absolute positioning,
+   same technique (and same reasoning) as .s-ex-list.reordering above. */
+.routine-list.reordering {
+  position: relative;
+}
+
+.routine-card.compact {
+  height: 60px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.routine-card.compact .routine-top {
+  width: 100%;
+  align-items: center;
+}
+
+.routine-card.dragging {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  border-color: var(--accent);
+}
+
 .new-routine-card {
   border: 1px dashed var(--line-dash);
   border-radius: var(--r-lg);
@@ -926,6 +950,16 @@
   color: var(--accent-ink);
   padding: 16px 18px 14px;
   margin: 0 -18px;
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  transition: transform 0.22s ease;
+}
+
+/* Hidden while scrolling down, slid back in the instant scroll direction
+   reverses — see the onScroll handler in ActiveSessionScreen.tsx. */
+.sess-bar.hidden {
+  transform: translateY(-100%);
 }
 
 .sess-top {

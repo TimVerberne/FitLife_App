@@ -316,3 +316,8 @@ create index calorie_log_user_logged_idx on public.calorie_log (user_id, logged_
 alter table public.calorie_log enable row level security;
 create policy "own calorie_log" on public.calorie_log for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Phase 9: drag-to-reorder routines on the Train screen. Nullable — existing
+-- rows fall back to created_at ordering client-side until they're next
+-- reordered, no backfill needed.
+alter table public.routines add column sort_order bigint;

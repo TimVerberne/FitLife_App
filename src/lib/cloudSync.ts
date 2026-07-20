@@ -17,6 +17,7 @@ function routineRow(routine: Routine, userId: string) {
     name: routine.name,
     exercise_ids: routine.exerciseIds,
     created_at: routine.createdAt,
+    sort_order: routine.sortOrder ?? null,
   };
 }
 
@@ -156,6 +157,7 @@ export async function fetchAllRemote(): Promise<{ routines: Routine[]; sessions:
     name: r.name,
     exerciseIds: r.exercise_ids,
     createdAt: r.created_at,
+    sortOrder: r.sort_order ?? undefined,
   }));
   const sessions: WorkoutSession[] = (sessionsRes.data ?? []).map((s) => ({
     id: s.id,
