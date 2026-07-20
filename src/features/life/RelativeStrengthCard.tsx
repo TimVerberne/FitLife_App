@@ -4,6 +4,7 @@ import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { relativeStrength } from '../../lib/bodyComposition';
 import { personalRecords } from '../../lib/records';
 import { exerciseById } from '../../lib/exercises';
+import { formatWeight } from '../../lib/units';
 import { TapIcon } from '../../components/TapIcon';
 
 const TOP_LIFTS = 3;
@@ -17,10 +18,21 @@ const TOP_LIFTS = 3;
 // them — explicitly `null`, not omitted, since an omitted/undefined prop
 // would just fall back to the default below). `onOpen`, when given, makes
 // the whole card tappable to open that detail sheet — the sheet's own
-// instance omits it so it isn't tappable again inside itself.
-export function RelativeStrengthCard({ limit = TOP_LIFTS, onOpen }: { limit?: number | null; onOpen?: () => void }) {
+// instance omits it so it isn't tappable again inside itself. `showOneRepMax`
+// adds the estimated 1RM weight under each bar — real derived numbers the
+// dashboard's compact ratio-only view doesn't have room for.
+export function RelativeStrengthCard({
+  limit = TOP_LIFTS,
+  onOpen,
+  showOneRepMax = false,
+}: {
+  limit?: number | null;
+  onOpen?: () => void;
+  showOneRepMax?: boolean;
+}) {
   const bodyLog = useStore((s) => s.bodyLog);
   const sessions = useStore((s) => s.sessions);
+  const units = useStore((s) => s.settings.units);
 
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
 
@@ -30,6 +42,7 @@ export function RelativeStrengthCard({ limit = TOP_LIFTS, onOpen }: { limit?: nu
     return (limit != null ? all.slice(0, limit) : all).map((pr) => ({
       name: exerciseById(pr.exerciseId)?.name ?? pr.exerciseId,
       ratio: relativeStrength(pr.estOneRepMax, latestWeightKg),
+      oneRepMaxKg: pr.estOneRepMax,
     }));
   }, [sessions, latestWeightKg, limit]);
 
@@ -58,6 +71,11 @@ export function RelativeStrengthCard({ limit = TOP_LIFTS, onOpen }: { limit?: nu
             <div style={{ height: 6, borderRadius: 3, background: 'var(--surface-2)', overflow: 'hidden' }}>
               <div style={{ height: '100%', width: `${(lift.ratio / maxRatio) * 100}%`, background: 'var(--accent)', borderRadius: 3 }} />
             </div>
+            {showOneRepMax && (
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
+                est. 1RM {formatWeight(lift.oneRepMaxKg, units)} {units}
+              </div>
+            )}
           </div>
         ))}
       </div>

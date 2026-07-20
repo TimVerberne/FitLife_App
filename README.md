@@ -102,6 +102,21 @@ this is done.
 
 ## Update notes
 
+**Version 1.7.1**
+- The Profile and Body composition detail sheets were just re-showing the
+  same numbers already visible on the compact card — not useful. Fixed:
+  - **Profile** now opens the actual editable form (pre-filled), not a
+    read-only repeat of the same four lines.
+  - **Body composition** now also shows a BMI trend and a waist-to-height
+    trend line (from your logged history), below the existing BMI/waist
+    numbers.
+  - **Relative strength**'s detail sheet now shows each lift's estimated
+    1RM weight next to its ratio (the dashboard stays ratio-only to keep
+    it compact).
+- Fixed a visibility bug: the Profile card's tap-to-expand icon sat right
+  on top of its "Edit" button. Removed the icon there specifically — the
+  Edit button already signals the card has actions.
+
 **Version 1.7.0**
 - Every compartment on the Life dashboard (Today, each macro tile, Hydration,
   Weight, Relative strength, Profile, Body composition) is now tappable — a

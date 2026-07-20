@@ -4,7 +4,7 @@ export function StrengthDetailSheet() {
   return (
     <div className="sheet-in">
       <div className="sheet-h">Relative strength</div>
-      <RelativeStrengthCard limit={null} />
+      <RelativeStrengthCard limit={null} showOneRepMax />
     </div>
   );
 }

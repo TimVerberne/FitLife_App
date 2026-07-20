@@ -9,7 +9,6 @@ import { HydrationMiniCard } from '../features/life/HydrationMiniCard';
 import { WeightMiniCard } from '../features/life/WeightMiniCard';
 import { RelativeStrengthCard } from '../features/life/RelativeStrengthCard';
 import { ProfileSummaryRows } from '../features/life/ProfileSummaryRows';
-import { TapIcon } from '../components/TapIcon';
 import type { BodyProfile } from '../lib/types';
 
 function isProfileComplete(profile: BodyProfile): boolean {
@@ -46,8 +45,9 @@ export function LifeScreen() {
 
           <RelativeStrengthCard onOpen={openStrengthDetail} />
 
-          <div className="card" style={{ marginTop: 16, position: 'relative', cursor: 'pointer' }} onClick={openProfileDetail}>
-            <TapIcon />
+          {/* No TapIcon here — the "Edit" button already sits in this card's
+              top-right corner and would visually collide with it. */}
+          <div className="card" style={{ marginTop: 16, cursor: 'pointer' }} onClick={openProfileDetail}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="section-h" style={{ margin: 0 }}>
                 Profile
