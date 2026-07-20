@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import type { Activity, Climate, NutritionGoal, SexAtBirth } from '../../lib/types';
 import { formatHeight, fromDisplayHeightFtIn, toDisplayLength } from '../../lib/units';
+import { chipStyle } from './chipStyle';
 
 const ACTIVITY_OPTIONS: { id: Activity; label: string; desc: string }[] = [
   { id: 'sedentary', label: 'Sedentary', desc: 'Desk job, no training' },
@@ -16,20 +17,6 @@ const GOAL_OPTIONS: { id: NutritionGoal; label: string }[] = [
   { id: 'maintain', label: 'Maintain' },
   { id: 'gain', label: 'Gain' },
 ];
-
-function chipStyle(on: boolean): React.CSSProperties {
-  return {
-    padding: '8px 12px',
-    borderRadius: 9,
-    border: `1px solid ${on ? 'var(--accent)' : 'var(--line)'}`,
-    background: on ? 'var(--accent)' : 'var(--surface-2)',
-    color: on ? 'var(--accent-ink)' : 'var(--text)',
-    fontFamily: 'var(--font-display)',
-    fontWeight: 700,
-    fontSize: 13,
-    cursor: 'pointer',
-  };
-}
 
 // Shown whenever height/birth year/sex are missing — every calorie/macro
 // estimate downstream is skipped entirely rather than guessed until this is

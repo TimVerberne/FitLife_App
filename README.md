@@ -102,6 +102,14 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.3**
+- Life tab: calorie target card — maintenance (TDEE, Mifflin-St Jeor) and a
+  goal-adjusted target with every safety guardrail enforced in code, not
+  just copy: a hard floor (1,500 kcal male / 1,200 female) that clamps and
+  explains rather than silently going lower, a suppressed loss target when
+  BMI is already under 18.5, and a flag on rates above 0.75 kg/week. Goal
+  (lose/maintain/gain) and target rate are editable right on the card.
+
 **Version 1.4.2**
 - Life tab: body composition card — BMI with a neutral label (never the
   clinical under/normal/overweight/obese wording) and an inline caveat that

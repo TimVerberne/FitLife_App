@@ -4,6 +4,7 @@ import { BodyProfileSetup } from '../features/life/BodyProfileSetup';
 import { WeightCard } from '../features/life/WeightCard';
 import { MeasurementsCard } from '../features/life/MeasurementsCard';
 import { BodyCompositionCard } from '../features/life/BodyCompositionCard';
+import { NutritionCard } from '../features/life/NutritionCard';
 import { formatHeight } from '../lib/units';
 import type { BodyProfile } from '../lib/types';
 
@@ -69,8 +70,9 @@ export function LifeScreen() {
           <WeightCard />
           <MeasurementsCard />
           <BodyCompositionCard />
+          <NutritionCard />
           <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 20, textAlign: 'center' }}>
-            Nutrition targets and hydration are coming here next.
+            Full macro targets and hydration are coming here next.
           </p>
         </>
       )}
