@@ -102,6 +102,13 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.5**
+- Life tab: hydration — a progress ring against today's target (bodyweight
+  baseline + a hot-climate bonus + a training bonus that scales
+  automatically with today's logged workout duration), quick-add buttons
+  plus a custom amount, and a 7-day history. No nagging notifications, no
+  "chug water to hit your goal" framing.
+
 **Version 1.4.4**
 - Life tab: full macro split — protein and fat anchor to bodyweight (or lean
   mass, if body fat % is logged, with the card stating which basis is
