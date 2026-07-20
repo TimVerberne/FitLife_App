@@ -102,6 +102,36 @@ this is done.
 
 ## Update notes
 
+**Version 1.8.1**
+- Follow-up fixes after real-device testing of 1.8.0 showed three of its
+  four fixes didn't actually hold up:
+  - **Active session header** — switched to a capture-phase window
+    listener so it catches whichever element actually scrolls (this
+    varies by how a given browser resolves the `.app-shell` flex layout,
+    not something reliably the same everywhere `window`-only listening
+    assumed). Also fixes it appearing to "stay stuck" at the top.
+  - **Nutrition kcal/day goal** — the previous version was a one-time,
+    lossy conversion into the kg/week rate (using local component state
+    for the toggle), so reopening the card reset to "Rate" mode and
+    showed whatever the clamped rate happened to be — reads like "changes
+    my goal back to 1kg/week." It's now a real persisted alternative:
+    `goalMode`/`manualKcalTarget` on the profile itself, so the exact kcal
+    number and mode survive closing and reopening, and the Life screen's
+    Today card reflects it immediately.
+  - **Sheet swipe-to-dismiss** — found the actual bug: React always
+    attaches touch-derived pointer listeners as passive, so the previous
+    version's `preventDefault()` was a silent no-op, leaving the browser's
+    native scroll free to win the race half the time. Rewired to real
+    non-passive `touchmove` listeners so intercepting the gesture (once
+    scrolled to the top and pulling down) actually works, instead of
+    racing against native scroll.
+- Still investigating: rest-timer vibration reportedly does nothing on a
+  real device. If you're on an iPhone, this may not be fixable — Safari
+  (including installed PWAs) doesn't implement the Vibration API at all,
+  by Apple's own design; Android has different but real restrictions
+  around vibrating from a backgrounded tab. Let us know which platform
+  you're on so this can be narrowed down properly.
+
 **Version 1.8.0**
 - Fixes and features from the first real training session with the app:
   - **Active session header** now hides while scrolling down (so more of

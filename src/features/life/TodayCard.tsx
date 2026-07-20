@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget, macros } from '../../lib/nutrition';
+import { calorieTarget, calorieTargetFromKcal, macros } from '../../lib/nutrition';
 import { calibrate } from '../../lib/calibration';
 import { ProgressRing } from '../../components/ProgressRing';
 import { BarChart } from '../../components/BarChart';
@@ -67,17 +67,13 @@ export function TodayCard() {
 
   const plan = useMemo(() => {
     if (!latestWeightKg || !bodyProfile.heightCm || !age || !bodyProfile.sexAtBirth) return null;
-    const calories = calorieTarget(
-      latestWeightKg,
-      bodyProfile.heightCm,
-      age,
-      bodyProfile.sexAtBirth,
-      bodyProfile.activity,
-      bodyProfile.goal,
-      bodyProfile.rateKgWeek,
-    );
-    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, bodyProfile.goal, bodyProfile.rateKgWeek);
-    const predictedRateKgWeek = bodyProfile.goal === 'lose' ? -bodyProfile.rateKgWeek : bodyProfile.goal === 'gain' ? bodyProfile.rateKgWeek : 0;
+    const calories =
+      bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null
+        ? calorieTargetFromKcal(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.manualKcalTarget)
+        : calorieTarget(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.goal, bodyProfile.rateKgWeek);
+    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, calories.effectiveGoal, calories.effectiveRateKgWeek);
+    const predictedRateKgWeek =
+      calories.effectiveGoal === 'lose' ? -calories.effectiveRateKgWeek : calories.effectiveGoal === 'gain' ? calories.effectiveRateKgWeek : 0;
     const calibration = calibrate(bodyLog, predictedRateKgWeek, calories.target);
     return { calories, macroResult, calibration, predictedRateKgWeek };
   }, [latestWeightKg, latestBodyFatPct, bodyProfile, age, bodyLog]);
@@ -146,12 +142,12 @@ export function TodayCard() {
         </div>
         <div>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>
-            {bodyProfile.goal === 'lose' ? 'Losing' : bodyProfile.goal === 'gain' ? 'Gaining' : 'Maintaining'}
-            {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/wk` : ''}
+            {calories.effectiveGoal === 'lose' ? 'Losing' : calories.effectiveGoal === 'gain' ? 'Gaining' : 'Maintaining'}
+            {calories.effectiveGoal !== 'maintain' ? ` · ${calories.effectiveRateKgWeek.toFixed(1)} kg/wk` : ''}
           </div>
           <p style={{ fontSize: 14, marginTop: 4, marginBottom: 0 }}>
             Aim for {Math.round(calories.target)} kcal today
-            {bodyProfile.goal !== 'maintain' ? ` to ${GOAL_VERB[bodyProfile.goal]}` : ' to hold steady'}.
+            {calories.effectiveGoal !== 'maintain' ? ` to ${GOAL_VERB[calories.effectiveGoal]}` : ' to hold steady'}.
           </p>
         </div>
       </div>

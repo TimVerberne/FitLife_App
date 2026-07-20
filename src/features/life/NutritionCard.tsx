@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget, rateKgWeekFromKcalDelta } from '../../lib/nutrition';
+import { calorieTarget, calorieTargetFromKcal } from '../../lib/nutrition';
 import { calibrate } from '../../lib/calibration';
 import type { NutritionGoal } from '../../lib/types';
 import { chipStyle } from './chipStyle';
@@ -11,11 +11,6 @@ const GOAL_OPTIONS: { id: NutritionGoal; label: string }[] = [
   { id: 'maintain', label: 'Maintain' },
   { id: 'gain', label: 'Gain' },
 ];
-
-// A kcal number this close to maintenance just counts as "maintain" — no
-// point forcing a 1% deficit/surplus distinction the estimate can't
-// actually resolve.
-const MAINTENANCE_TOLERANCE_KCAL = 50;
 
 // Commits only on blur/Enter, unlike NumberField's per-keystroke commit —
 // typing "1800" digit by digit would otherwise flip the goal between
@@ -57,36 +52,34 @@ export function NutritionCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const bodyLog = useStore((s) => s.bodyLog);
   const saveBodyProfile = useStore((s) => s.saveBodyProfile);
-  const [inputMode, setInputMode] = useState<'rate' | 'kcal'>('rate');
 
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
   const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
 
+  // goalMode/manualKcalTarget live on the profile itself (not local state) —
+  // otherwise reopening this card (a sheet, which remounts) would forget
+  // which mode you were in and silently show "Rate" again with whatever
+  // rateKgWeek happened to be clamped to, which is exactly what used to
+  // read as "changes my goal back to 1kg per week."
   const result = useMemo(() => {
     if (!latestWeightKg || !bodyProfile.heightCm || !age || !bodyProfile.sexAtBirth) return null;
-    return calorieTarget(
-      latestWeightKg,
-      bodyProfile.heightCm,
-      age,
-      bodyProfile.sexAtBirth,
-      bodyProfile.activity,
-      bodyProfile.goal,
-      bodyProfile.rateKgWeek,
-    );
+    if (bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null) {
+      return calorieTargetFromKcal(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.manualKcalTarget);
+    }
+    return calorieTarget(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.goal, bodyProfile.rateKgWeek);
   }, [latestWeightKg, bodyProfile, age]);
 
-  const predictedRateKgWeek = bodyProfile.goal === 'lose' ? -bodyProfile.rateKgWeek : bodyProfile.goal === 'gain' ? bodyProfile.rateKgWeek : 0;
+  const predictedRateKgWeek = result
+    ? result.effectiveGoal === 'lose'
+      ? -result.effectiveRateKgWeek
+      : result.effectiveGoal === 'gain'
+        ? result.effectiveRateKgWeek
+        : 0
+    : 0;
   const calibration = useMemo(() => {
     if (!result) return null;
     return calibrate(bodyLog, predictedRateKgWeek, result.target);
   }, [bodyLog, predictedRateKgWeek, result]);
-
-  function commitKcalTarget(n: number) {
-    if (!result) return;
-    const delta = n - result.tdee;
-    if (Math.abs(delta) < MAINTENANCE_TOLERANCE_KCAL) saveBodyProfile({ goal: 'maintain' });
-    else saveBodyProfile({ goal: delta > 0 ? 'gain' : 'lose', rateKgWeek: rateKgWeekFromKcalDelta(delta) });
-  }
 
   if (!bodyProfile.sexAtBirth) return null;
 
@@ -126,7 +119,7 @@ export function NutritionCard() {
           )}
           {result.rateWarning && !result.maintenanceOnly && (
             <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 8 }}>
-              Fairly aggressive rate — {bodyProfile.rateKgWeek.toFixed(1)} kg/week.
+              Fairly aggressive rate — {result.effectiveRateKgWeek.toFixed(1)} kg/week.
             </p>
           )}
 
@@ -144,27 +137,34 @@ export function NutritionCard() {
             very muscular or very heavy individuals) — a starting point, never a verdict.
           </p>
 
-          <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
-            {GOAL_OPTIONS.map((opt) => (
-              <button key={opt.id} onClick={() => saveBodyProfile({ goal: opt.id })} style={{ ...chipStyle(bodyProfile.goal === opt.id), flex: 1 }}>
-                {opt.label}
+          <div className="settings-row" style={{ marginTop: 14 }}>
+            <div className="settings-row-label">Set goal by</div>
+            <div className="seg" style={{ width: 140 }}>
+              <button
+                className={bodyProfile.goalMode === 'rate' ? 'on' : ''}
+                onClick={() => saveBodyProfile({ goalMode: 'rate' })}
+              >
+                Rate
               </button>
-            ))}
+              <button
+                className={bodyProfile.goalMode === 'kcal' ? 'on' : ''}
+                onClick={() => saveBodyProfile({ goalMode: 'kcal', manualKcalTarget: bodyProfile.manualKcalTarget ?? Math.round(result.target) })}
+              >
+                Kcal/day
+              </button>
+            </div>
           </div>
-          {bodyProfile.goal !== 'maintain' && (
+
+          {bodyProfile.goalMode === 'rate' ? (
             <>
-              <div className="settings-row">
-                <div className="settings-row-label">Set goal by</div>
-                <div className="seg" style={{ width: 140 }}>
-                  <button className={inputMode === 'rate' ? 'on' : ''} onClick={() => setInputMode('rate')}>
-                    Rate
+              <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+                {GOAL_OPTIONS.map((opt) => (
+                  <button key={opt.id} onClick={() => saveBodyProfile({ goal: opt.id })} style={{ ...chipStyle(bodyProfile.goal === opt.id), flex: 1 }}>
+                    {opt.label}
                   </button>
-                  <button className={inputMode === 'kcal' ? 'on' : ''} onClick={() => setInputMode('kcal')}>
-                    Kcal/day
-                  </button>
-                </div>
+                ))}
               </div>
-              {inputMode === 'rate' ? (
+              {bodyProfile.goal !== 'maintain' && (
                 <div className="settings-row">
                   <div>
                     <div className="settings-row-label">Target rate</div>
@@ -180,16 +180,23 @@ export function NutritionCard() {
                     style={{ width: 110 }}
                   />
                 </div>
-              ) : (
-                <div className="settings-row">
-                  <div>
-                    <div className="settings-row-label">Target calories</div>
-                    <div className="settings-row-desc">≈ {bodyProfile.rateKgWeek.toFixed(1)} kg/week at this rate</div>
-                  </div>
-                  <KcalTargetInput currentTarget={result.target} onCommit={commitKcalTarget} />
-                </div>
               )}
             </>
+          ) : (
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Target calories</div>
+                <div className="settings-row-desc">
+                  {result.effectiveGoal === 'maintain'
+                    ? 'Maintaining'
+                    : `${result.effectiveGoal === 'lose' ? 'Losing' : 'Gaining'} · ${result.effectiveRateKgWeek.toFixed(1)} kg/week`}
+                </div>
+              </div>
+              <KcalTargetInput
+                currentTarget={bodyProfile.manualKcalTarget ?? result.target}
+                onCommit={(n) => saveBodyProfile({ manualKcalTarget: n })}
+              />
+            </div>
           )}
         </div>
       )}

@@ -97,24 +97,27 @@ export function ActiveSessionScreen() {
   // direction reverses, even by a few pixels — no need to scroll all the
   // way back to the top just to see the clock or hit Minimize.
   //
-  // Listens on window, not this screen's own onScroll: .screen's
-  // min-height: 100dvh ancestor (.app-shell) is a floor, not a ceiling, so
-  // once the exercise list is taller than one screen the whole page grows
-  // and the browser scrolls the window/document — .screen's own scrollTop
-  // never moves. This is also exactly why plain position: sticky on
-  // .sess-bar still works correctly without any extra wiring: sticky
-  // positioning already tracks whatever the real scrolling ancestor is.
+  // 'scroll' events don't bubble, so a listener on window only fires for
+  // the window/document itself — it stays silent if some other element
+  // ends up being the one that actually scrolls (which depends on how a
+  // given browser resolves .app-shell's min-height: 100dvh flex column,
+  // and isn't the same in every environment). Using the capture phase
+  // instead catches a 'scroll' fired by *any* descendant, not just window,
+  // so this keeps working regardless of which element is the real
+  // scrolling container. e.target is that element (or the Document, for a
+  // window-level scroll).
   useEffect(() => {
-    function onWindowScroll() {
-      const top = window.scrollY;
+    function onAnyScroll(e: Event) {
+      const el = e.target as Document | HTMLElement;
+      const top = el instanceof Document ? window.scrollY : el.scrollTop;
       const delta = top - lastScrollTop.current;
       if (top <= 0) setHeaderHidden(false);
       else if (delta > 4) setHeaderHidden(true);
       else if (delta < -4) setHeaderHidden(false);
       lastScrollTop.current = top;
     }
-    window.addEventListener('scroll', onWindowScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onWindowScroll);
+    window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
+    return () => window.removeEventListener('scroll', onAnyScroll, true);
   }, []);
   // The authoritative live value, updated synchronously inside the native
   // event handlers below — `drag` (React state) is a render snapshot of

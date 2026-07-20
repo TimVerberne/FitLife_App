@@ -40,15 +40,19 @@ export interface CalorieTargetResult {
   // Rate is above 0.75 kg/week — still allowed (hard cap is 1.0), but the UI
   // should call out that it's fairly aggressive.
   rateWarning: boolean;
+  // Always populated regardless of which mode produced this target (a
+  // kg/week rate, or a direct kcal number) — the single thing downstream
+  // code (macros(), calibrate()) reads, so neither has to know or care
+  // which input mode the user is in.
+  effectiveGoal: NutritionGoal;
+  effectiveRateKgWeek: number;
 }
 
-// Inverse of calorieTarget()'s rate→kcal math — lets the Nutrition card
-// accept a direct daily kcal target and convert it back to the single
-// rateKgWeek representation everything else (macros, calibration) already
-// runs on, rather than adding a second parallel goal-setting code path.
-export function rateKgWeekFromKcalDelta(deltaKcal: number): number {
-  return Math.min(1, Math.max(0.1, (Math.abs(deltaKcal) * 7) / KCAL_PER_KG_FAT));
-}
+// A kcal number this close to maintenance just counts as "maintain" — no
+// point forcing a 1% deficit/surplus distinction the estimate can't
+// actually resolve. Shared between calorieTargetFromKcal() and the
+// Nutrition card's own maintain-vs-not check.
+export const MAINTENANCE_TOLERANCE_KCAL = 50;
 
 export function calorieTarget(
   weightKg: number,
@@ -65,11 +69,17 @@ export function calorieTarget(
   const rateWarning = clampedRate > 0.75;
 
   if (goal === 'lose' && bmi(weightKg, heightCm) < 18.5) {
-    return { tdee: tdeeValue, target: tdeeValue, floor, maintenanceOnly: true, clampedToFloor: false, rateWarning: false };
+    return {
+      tdee: tdeeValue, target: tdeeValue, floor, maintenanceOnly: true, clampedToFloor: false, rateWarning: false,
+      effectiveGoal: 'maintain', effectiveRateKgWeek: clampedRate,
+    };
   }
 
   if (goal === 'maintain') {
-    return { tdee: tdeeValue, target: tdeeValue, floor, maintenanceOnly: false, clampedToFloor: false, rateWarning: false };
+    return {
+      tdee: tdeeValue, target: tdeeValue, floor, maintenanceOnly: false, clampedToFloor: false, rateWarning: false,
+      effectiveGoal: 'maintain', effectiveRateKgWeek: clampedRate,
+    };
   }
 
   const dailyAdjustment = (clampedRate * KCAL_PER_KG_FAT) / 7;
@@ -83,6 +93,48 @@ export function calorieTarget(
     maintenanceOnly: false,
     clampedToFloor: goal === 'lose' && rawTarget < floor,
     rateWarning,
+    effectiveGoal: goal,
+    effectiveRateKgWeek: clampedRate,
+  };
+}
+
+// A direct kcal/day target, as an alternative to specifying a kg/week rate
+// — goal and rate are derived from comparing the target to TDEE rather
+// than stored as separate user input, so there's exactly one number
+// (manualKcalTarget) driving everything, no lossy round-trip through
+// rateKgWeek that could drift from what was actually typed.
+export function calorieTargetFromKcal(
+  weightKg: number,
+  heightCm: number,
+  age: number,
+  sex: SexAtBirth,
+  activity: Activity,
+  manualKcalTarget: number,
+): CalorieTargetResult {
+  const tdeeValue = tdee(bmr(weightKg, heightCm, age, sex), activity);
+  const floor = CALORIE_FLOOR[sex];
+  const isLosing = manualKcalTarget < tdeeValue - MAINTENANCE_TOLERANCE_KCAL;
+  const isGaining = manualKcalTarget > tdeeValue + MAINTENANCE_TOLERANCE_KCAL;
+
+  if (isLosing && bmi(weightKg, heightCm) < 18.5) {
+    return {
+      tdee: tdeeValue, target: tdeeValue, floor, maintenanceOnly: true, clampedToFloor: false, rateWarning: false,
+      effectiveGoal: 'maintain', effectiveRateKgWeek: 0.5,
+    };
+  }
+
+  const target = isLosing ? Math.max(manualKcalTarget, floor) : manualKcalTarget;
+  const impliedRateKgWeek = Math.min(1, Math.max(0.1, (Math.abs(tdeeValue - target) * 7) / KCAL_PER_KG_FAT));
+
+  return {
+    tdee: tdeeValue,
+    target,
+    floor,
+    maintenanceOnly: false,
+    clampedToFloor: isLosing && manualKcalTarget < floor,
+    rateWarning: impliedRateKgWeek > 0.75,
+    effectiveGoal: isLosing ? 'lose' : isGaining ? 'gain' : 'maintain',
+    effectiveRateKgWeek: impliedRateKgWeek,
   };
 }
 

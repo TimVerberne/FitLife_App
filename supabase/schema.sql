@@ -321,3 +321,10 @@ create policy "own calorie_log" on public.calorie_log for all
 -- rows fall back to created_at ordering client-side until they're next
 -- reordered, no backfill needed.
 alter table public.routines add column sort_order bigint;
+
+-- Phase 10: nutrition goal settable directly as a kcal/day target, as a
+-- persisted alternative to the kg/week rate — not just a one-time
+-- conversion into rate_kg_week, which loses precision and doesn't survive
+-- reopening the app.
+alter table public.body_profile add column goal_mode text not null default 'rate' check (goal_mode in ('rate', 'kcal'));
+alter table public.body_profile add column manual_kcal_target int;

@@ -74,6 +74,11 @@ export type Activity = 'sedentary' | 'light' | 'moderate' | 'very' | 'extra';
 export type NutritionGoal = 'lose' | 'maintain' | 'gain';
 export type Climate = 'temperate' | 'hot';
 export type SexAtBirth = 'male' | 'female';
+// 'rate' — target is derived from goal + rateKgWeek (the original model).
+// 'kcal' — target is manualKcalTarget directly; goal/rateKgWeek still exist
+// but are ignored for the target itself, only used as the last known rate
+// if the user switches back to 'rate' mode.
+export type GoalMode = 'rate' | 'kcal';
 
 // One row per user. Every field is optional except the ones with defaults —
 // calorie/macro estimates are skipped entirely (not guessed) until
@@ -85,6 +90,8 @@ export interface BodyProfile {
   activity: Activity;
   goal: NutritionGoal;
   rateKgWeek: number;
+  goalMode: GoalMode;
+  manualKcalTarget: number | null;
   climate: Climate;
   sweatRateMlH: number | null;
   updatedAt: number;

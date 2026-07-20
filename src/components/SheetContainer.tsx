@@ -86,38 +86,64 @@ export function SheetContainer() {
     if (track) finishDrag(track);
   }
 
-  // The rest of the sheet (header, content) is also draggable, but only
-  // once it's scrolled all the way to the top — otherwise a downward swipe
-  // there is an ordinary scroll gesture. This is what a swipe starting
-  // anywhere near the top of a sheet (not just the tiny handle bar) used to
-  // fall through to the scrollable content and either scroll it instead of
-  // dismissing, or need several attempts to land exactly on the handle.
+  // The rest of the sheet (header, content) is also draggable once
+  // scrolled all the way to the top, same as a native bottom sheet.
+  //
+  // This has to be a *native*, non-passive touchmove listener, not React's
+  // onPointerDown/Move/Up (the previous approach) — React always attaches
+  // touch-derived listeners as passive, so calling preventDefault() inside
+  // one is a silent no-op. Without a real preventDefault, the browser's own
+  // touch-scroll handling was free to win the race against this JS the
+  // whole time, which is exactly why it "scrolled the page behind it" or
+  // needed several attempts: whichever one the browser noticed first.
   const contentDrag = useRef<DragTrack | null>(null);
 
-  function onContentPointerDown(e: React.PointerEvent) {
-    contentDrag.current = { startY: e.clientY, startTime: performance.now(), dy: 0, active: false };
-  }
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
 
-  function onContentPointerMove(e: React.PointerEvent) {
-    const track = contentDrag.current;
-    if (!track) return;
-    const dy = e.clientY - track.startY;
-    if (!track.active) {
-      if ((scrollRef.current?.scrollTop ?? 0) > 0 || dy <= 6) return;
-      track.active = true;
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      setDragging(true);
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) return;
+      contentDrag.current = { startY: e.touches[0].clientY, startTime: performance.now(), dy: 0, active: false };
     }
-    const clamped = Math.max(0, dy);
-    track.dy = clamped;
-    setDragY(clamped);
-  }
 
-  function onContentPointerUp() {
-    const track = contentDrag.current;
-    contentDrag.current = null;
-    if (track?.active) finishDrag(track);
-  }
+    function onTouchMove(e: TouchEvent) {
+      const track = contentDrag.current;
+      if (!track || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - track.startY;
+      if (!track.active) {
+        if ((el!.scrollTop ?? 0) > 0 || dy <= 6) return;
+        track.active = true;
+        setDragging(true);
+      }
+      // Only now, having committed to a dismiss-drag, do we take over the
+      // gesture from the browser's native scroll.
+      e.preventDefault();
+      const clamped = Math.max(0, dy);
+      track.dy = clamped;
+      setDragY(clamped);
+    }
+
+    function onTouchEnd() {
+      const track = contentDrag.current;
+      contentDrag.current = null;
+      if (track?.active) finishDrag(track);
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+    };
+    // scrollRef is one persistent DOM node reused across every sheet type
+    // (see the effect above), so this only needs to attach once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -135,14 +161,7 @@ export function SheetContainer() {
         >
           <div className="grab" />
         </div>
-        <div
-          className="sheet-scroll"
-          ref={scrollRef}
-          onPointerDown={onContentPointerDown}
-          onPointerMove={onContentPointerMove}
-          onPointerUp={onContentPointerUp}
-          onPointerCancel={onContentPointerUp}
-        >
+        <div className="sheet-scroll" ref={scrollRef}>
           {sheet === 'picker' && <PickerSheet />}
           {sheet === 'detail' && <ExerciseDetailSheet />}
           {sheet === 'workout' && <WorkoutDetailSheet />}

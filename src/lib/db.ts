@@ -28,6 +28,8 @@ export const DEFAULT_BODY_PROFILE: BodyProfile = {
   activity: 'moderate',
   goal: 'maintain',
   rateKgWeek: 0.5,
+  goalMode: 'rate',
+  manualKcalTarget: null,
   climate: 'temperate',
   sweatRateMlH: null,
   updatedAt: 0,
