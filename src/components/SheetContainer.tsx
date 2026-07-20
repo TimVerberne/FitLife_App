@@ -7,6 +7,13 @@ import { RoutineActionsSheet } from '../features/routines/RoutineActionsSheet';
 import { SettingsSheet } from '../features/settings/SettingsSheet';
 import { FriendsSheet } from '../features/friends/FriendsSheet';
 import { ImportPreviewSheet } from '../features/settings/ImportPreviewSheet';
+import { WeightDetailSheet } from '../features/life/WeightDetailSheet';
+import { HydrationDetailSheet } from '../features/life/HydrationDetailSheet';
+import { NutritionDetailSheet } from '../features/life/NutritionDetailSheet';
+import { MacrosDetailSheet } from '../features/life/MacrosDetailSheet';
+import { StrengthDetailSheet } from '../features/life/StrengthDetailSheet';
+import { ProfileDetailSheet } from '../features/life/ProfileDetailSheet';
+import { BodyCompositionDetailSheet } from '../features/life/BodyCompositionDetailSheet';
 
 const DISMISS_THRESHOLD = 90;
 
@@ -82,6 +89,13 @@ export function SheetContainer() {
           {sheet === 'settings' && <SettingsSheet />}
           {sheet === 'friends' && <FriendsSheet />}
           {sheet === 'importPreview' && <ImportPreviewSheet />}
+          {sheet === 'weightDetail' && <WeightDetailSheet />}
+          {sheet === 'hydrationDetail' && <HydrationDetailSheet />}
+          {sheet === 'nutritionDetail' && <NutritionDetailSheet />}
+          {sheet === 'macrosDetail' && <MacrosDetailSheet />}
+          {sheet === 'strengthDetail' && <StrengthDetailSheet />}
+          {sheet === 'profileDetail' && <ProfileDetailSheet />}
+          {sheet === 'bodyCompositionDetail' && <BodyCompositionDetailSheet />}
         </div>
       </div>
     </>

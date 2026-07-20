@@ -96,6 +96,8 @@ export function HydrationCard() {
   const waterLog = useStore((s) => s.waterLog);
   const sessions = useStore((s) => s.sessions);
   const addWater = useStore((s) => s.addWater);
+  const clearWaterToday = useStore((s) => s.clearWaterToday);
+  const confirm = useStore((s) => s.confirm);
   const units = useStore((s) => s.settings.units);
   const [customValue, setCustomValue] = useState('');
 
@@ -127,6 +129,10 @@ export function HydrationCard() {
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     addWater(fromDisplayVolume(parsed, units));
     setCustomValue('');
+  }
+
+  function clearToday() {
+    confirm("Clear today's logged water?", 'Yes, clear', () => clearWaterToday(), true);
   }
 
   if (!target) {
@@ -188,6 +194,15 @@ export function HydrationCard() {
       <p style={{ color: 'var(--faint)', fontSize: 11, marginTop: 10, marginBottom: 0 }}>
         A starting point, not a race — thirst and pale-straw urine colour are good real-world guides too.
       </p>
+
+      {todayTotalMl > 0 && (
+        <button
+          onClick={clearToday}
+          style={{ background: 'transparent', border: 'none', color: 'var(--faint)', fontSize: 12, padding: 0, marginTop: 8, cursor: 'pointer' }}
+        >
+          Clear today's water
+        </button>
+      )}
 
       <div style={{ marginTop: 14 }}>
         <BarChart weeks={last7} />

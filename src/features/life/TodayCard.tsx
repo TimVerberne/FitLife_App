@@ -5,6 +5,7 @@ import { calorieTarget, macros } from '../../lib/nutrition';
 import { calibrate } from '../../lib/calibration';
 import { ProgressRing } from '../../components/ProgressRing';
 import { BarChart } from '../../components/BarChart';
+import { TapIcon } from '../../components/TapIcon';
 import type { WeekBucket } from '../../lib/records';
 
 const GOAL_VERB: Record<'lose' | 'maintain' | 'gain', string> = {
@@ -22,10 +23,11 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-function MacroTile({ label, grams, max, color }: { label: string; grams: number; max: number; color: string }) {
+function MacroTile({ label, grams, max, color, onOpen }: { label: string; grams: number; max: number; color: string; onOpen: () => void }) {
   const pct = max > 0 ? (grams / max) * 100 : 0;
   return (
-    <div className="stat-tile" style={{ textAlign: 'left', padding: '10px 12px' }}>
+    <div className="stat-tile" style={{ textAlign: 'left', padding: '10px 12px', position: 'relative', cursor: 'pointer' }} onClick={onOpen}>
+      <TapIcon size={10} style={{ top: 6, right: 6 }} />
       <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 18 }}>
         {Math.round(grams)}
         <span style={{ fontSize: 12, fontWeight: 700 }}>g</span>
@@ -52,6 +54,8 @@ export function TodayCard() {
   const addCalories = useStore((s) => s.addCalories);
   const clearCaloriesToday = useStore((s) => s.clearCaloriesToday);
   const confirm = useStore((s) => s.confirm);
+  const openNutritionDetail = useStore((s) => s.openNutritionDetail);
+  const openMacrosDetail = useStore((s) => s.openMacrosDetail);
 
   const today = todayIso();
   const [inputValue, setInputValue] = useState('');
@@ -128,7 +132,11 @@ export function TodayCard() {
         Today
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12 }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, position: 'relative', cursor: 'pointer' }}
+        onClick={openNutritionDetail}
+      >
+        <TapIcon />
         <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
           <ProgressRing pct={pct} size={96} stroke={9} />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -149,9 +157,9 @@ export function TodayCard() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginTop: 16 }}>
-        <MacroTile label="Protein" grams={macroResult.proteinG} max={maxMacroG} color="var(--accent)" />
-        <MacroTile label="Fat" grams={macroResult.fatG} max={maxMacroG} color={FAT_COLOR} />
-        <MacroTile label="Carbs" grams={macroResult.carbsG} max={maxMacroG} color={CARB_COLOR} />
+        <MacroTile label="Protein" grams={macroResult.proteinG} max={maxMacroG} color="var(--accent)" onOpen={openMacrosDetail} />
+        <MacroTile label="Fat" grams={macroResult.fatG} max={maxMacroG} color={FAT_COLOR} onOpen={openMacrosDetail} />
+        <MacroTile label="Carbs" grams={macroResult.carbsG} max={maxMacroG} color={CARB_COLOR} onOpen={openMacrosDetail} />
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>

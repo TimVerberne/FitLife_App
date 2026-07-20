@@ -102,6 +102,20 @@ this is done.
 
 ## Update notes
 
+**Version 1.7.0**
+- Every compartment on the Life dashboard (Today, each macro tile, Hydration,
+  Weight, Relative strength, Profile, Body composition) is now tappable — a
+  small expand icon in the top-right corner marks it — opening the same
+  underlying full card as a focused detail sheet instead of duplicating that
+  content further down the page. Weight, Nutrition, Macros, and Hydration's
+  full cards moved out of the main scroll entirely (sheet-only now); Profile
+  and Body composition stay visible inline too and are tappable in place.
+  Quick actions on the compact tiles (hydration's +250/+500, weight's "Log
+  today", profile's "Edit") still work without opening the sheet.
+- Added a "Clear today's water" option inside the Hydration detail sheet,
+  mirroring the existing "Clear today's kcal" — water logging was previously
+  add-only.
+
 **Version 1.6.1**
 - Added a "Clear today's kcal" option next to the calorie quick-add (with a
   confirm step) — the calorie log was previously add-only, so a mis-typed

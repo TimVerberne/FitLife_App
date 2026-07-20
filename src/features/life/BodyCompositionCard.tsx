@@ -2,8 +2,12 @@ import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { bmi, bmiLabel, waistToHeightRatio } from '../../lib/bodyComposition';
+import { TapIcon } from '../../components/TapIcon';
 
-export function BodyCompositionCard() {
+// `onOpen`, when given, makes the whole card tappable to open a bigger
+// detail sheet showing this same content — the sheet's own instance omits
+// it so it isn't tappable again inside itself.
+export function BodyCompositionCard({ onOpen }: { onOpen?: () => void } = {}) {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const bodyLog = useStore((s) => s.bodyLog);
 
@@ -19,7 +23,12 @@ export function BodyCompositionCard() {
   if (!heightCm) return null;
 
   return (
-    <div className="card" style={{ marginTop: 16 }}>
+    <div
+      className="card"
+      style={{ marginTop: 16, position: 'relative', cursor: onOpen ? 'pointer' : undefined }}
+      onClick={onOpen}
+    >
+      {onOpen && <TapIcon />}
       <div className="section-h" style={{ margin: 0 }}>
         Body composition
       </div>

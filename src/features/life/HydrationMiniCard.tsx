@@ -4,6 +4,7 @@ import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMet
 import { hydrationTarget } from '../../lib/hydration';
 import { formatVolume } from '../../lib/units';
 import { ProgressRing } from '../../components/ProgressRing';
+import { TapIcon } from '../../components/TapIcon';
 
 const QUICK_ADD_ML = [250, 500];
 
@@ -22,6 +23,7 @@ export function HydrationMiniCard() {
   const sessions = useStore((s) => s.sessions);
   const addWater = useStore((s) => s.addWater);
   const units = useStore((s) => s.settings.units);
+  const openHydrationDetail = useStore((s) => s.openHydrationDetail);
 
   const today = todayIso();
   const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
@@ -35,7 +37,8 @@ export function HydrationMiniCard() {
   const todayTotalMl = useMemo(() => waterLog.filter((w) => w.loggedOn === today).reduce((a, w) => a + w.amountMl, 0), [waterLog, today]);
 
   return (
-    <div className="card">
+    <div className="card" style={{ position: 'relative', cursor: 'pointer' }} onClick={openHydrationDetail}>
+      <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>
         Hydration
       </div>
@@ -49,7 +52,7 @@ export function HydrationMiniCard() {
           <div style={{ textAlign: 'center', marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--faint)' }}>
             {formatVolume(todayTotalMl, units)} / {formatVolume(target.totalMl, units)}
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
             {QUICK_ADD_ML.map((ml) => (
               <button key={ml} className="btn sec" style={{ width: 'auto', flex: 1, padding: '6px 4px', fontSize: 11 }} onClick={() => addWater(ml)}>
                 +{ml}

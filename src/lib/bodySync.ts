@@ -142,6 +142,16 @@ export async function pushWaterLogEntry(entry: WaterLogEntry): Promise<void> {
   }
 }
 
+export async function deleteWaterLogEntryRemote(id: string): Promise<void> {
+  try {
+    requireUserId();
+    const { error } = await supabase.from('water_log').delete().eq('id', id);
+    if (error) throw error;
+  } catch {
+    await enqueuePendingSync('waterLog', id, 'delete');
+  }
+}
+
 export async function fetchWaterLog(): Promise<WaterLogEntry[]> {
   const userId = requireUserId();
   const { data, error } = await supabase.from('water_log').select('*').eq('user_id', userId).order('logged_at');
@@ -200,6 +210,7 @@ export async function deleteCalorieLogEntryRemote(id: string): Promise<void> {
 export async function flushBodyPendingSync(entry: { table: string; rowId: string; op: 'upsert' | 'delete'; id?: number }): Promise<void> {
   if (entry.op === 'delete') {
     if (entry.table === 'calorieLog') await deleteCalorieLogEntryRemote(entry.rowId);
+    else if (entry.table === 'waterLog') await deleteWaterLogEntryRemote(entry.rowId);
     return;
   }
   if (entry.table === 'bodyProfile') {

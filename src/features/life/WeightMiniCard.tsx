@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { latestValue, rollingAverage, seriesFor } from '../../lib/bodyMetrics';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { MiniSparkline } from '../../components/MiniSparkline';
+import { TapIcon } from '../../components/TapIcon';
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -16,6 +17,7 @@ export function WeightMiniCard() {
   const bodyLog = useStore((s) => s.bodyLog);
   const units = useStore((s) => s.settings.units);
   const logBodyMetrics = useStore((s) => s.logBodyMetrics);
+  const openWeightDetail = useStore((s) => s.openWeightDetail);
   const [logging, setLogging] = useState(false);
   const [inputValue, setInputValue] = useState('');
 
@@ -42,7 +44,8 @@ export function WeightMiniCard() {
   }
 
   return (
-    <div className="card">
+    <div className="card" style={{ position: 'relative', cursor: 'pointer' }} onClick={openWeightDetail}>
+      <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>
         Weight
       </div>
@@ -63,26 +66,28 @@ export function WeightMiniCard() {
         <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 8 }}>No entries yet</p>
       )}
 
-      {logging ? (
-        <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-          <input
-            type="number"
-            inputMode="decimal"
-            autoFocus
-            value={inputValue}
-            placeholder={units}
-            style={{ flex: 1, minWidth: 0 }}
-            onChange={(e) => setInputValue(e.target.value)}
-          />
-          <button className="btn" style={{ width: 'auto', padding: '0 12px' }} onClick={save}>
-            Save
+      <div onClick={(e) => e.stopPropagation()}>
+        {logging ? (
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
+            <input
+              type="number"
+              inputMode="decimal"
+              autoFocus
+              value={inputValue}
+              placeholder={units}
+              style={{ flex: 1, minWidth: 0 }}
+              onChange={(e) => setInputValue(e.target.value)}
+            />
+            <button className="btn" style={{ width: 'auto', padding: '0 12px' }} onClick={save}>
+              Save
+            </button>
+          </div>
+        ) : (
+          <button className="btn" style={{ marginTop: 10 }} onClick={toggleLogging}>
+            Log today
           </button>
-        </div>
-      ) : (
-        <button className="btn" style={{ marginTop: 10 }} onClick={toggleLogging}>
-          Log today
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

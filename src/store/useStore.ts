@@ -14,7 +14,22 @@ import { disarmNudge } from '../lib/pushNudges';
 import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
-export type SheetKind = 'picker' | 'detail' | 'workout' | 'routineActions' | 'settings' | 'friends' | 'importPreview' | null;
+export type SheetKind =
+  | 'picker'
+  | 'detail'
+  | 'workout'
+  | 'routineActions'
+  | 'settings'
+  | 'friends'
+  | 'importPreview'
+  | 'weightDetail'
+  | 'hydrationDetail'
+  | 'nutritionDetail'
+  | 'macrosDetail'
+  | 'strengthDetail'
+  | 'profileDetail'
+  | 'bodyCompositionDetail'
+  | null;
 
 export interface ImportPreview {
   routines: Routine[];
@@ -173,6 +188,13 @@ interface StoreState {
   deleteSession(sessionId: string): void;
 
   openSettings(): void;
+  openWeightDetail(): void;
+  openHydrationDetail(): void;
+  openNutritionDetail(): void;
+  openMacrosDetail(): void;
+  openStrengthDetail(): void;
+  openProfileDetail(): void;
+  openBodyCompositionDetail(): void;
   updateSettings(patch: Partial<Settings>): void;
   exportData(): void;
   importData(file: File): void;
@@ -196,6 +218,7 @@ interface StoreState {
   saveBodyProfile(patch: Partial<BodyProfile>): void;
   logBodyMetrics(patch: Partial<BodyLogEntry> & { loggedOn: string }): void;
   addWater(ml: number): void;
+  clearWaterToday(): void;
   addCalories(kcal: number): void;
   clearCaloriesToday(): void;
 }
@@ -752,6 +775,34 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ sheet: 'settings' });
   },
 
+  openWeightDetail() {
+    set({ sheet: 'weightDetail' });
+  },
+
+  openHydrationDetail() {
+    set({ sheet: 'hydrationDetail' });
+  },
+
+  openNutritionDetail() {
+    set({ sheet: 'nutritionDetail' });
+  },
+
+  openMacrosDetail() {
+    set({ sheet: 'macrosDetail' });
+  },
+
+  openStrengthDetail() {
+    set({ sheet: 'strengthDetail' });
+  },
+
+  openProfileDetail() {
+    set({ sheet: 'profileDetail' });
+  },
+
+  openBodyCompositionDetail() {
+    set({ sheet: 'bodyCompositionDetail' });
+  },
+
   updateSettings(patch) {
     const settings = { ...get().settings, ...patch };
     set({ settings });
@@ -1121,6 +1172,15 @@ export const useStore = create<StoreState>((set, get) => ({
     set((s) => ({ waterLog: [...s.waterLog, entry] }));
     void db.waterLog.put(entry);
     void bodySync.pushWaterLogEntry(entry);
+  },
+
+  clearWaterToday() {
+    const today = new Date().toISOString().slice(0, 10);
+    const todayIds = get().waterLog.filter((e) => e.loggedOn === today).map((e) => e.id);
+    if (todayIds.length === 0) return;
+    set((s) => ({ waterLog: s.waterLog.filter((e) => e.loggedOn !== today) }));
+    void db.waterLog.bulkDelete(todayIds);
+    todayIds.forEach((id) => void bodySync.deleteWaterLogEntryRemote(id));
   },
 
   addCalories(kcal) {
