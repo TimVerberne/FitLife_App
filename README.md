@@ -102,6 +102,14 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.4**
+- Life tab: full macro split — protein and fat anchor to bodyweight (or lean
+  mass, if body fat % is logged, with the card stating which basis is
+  active) and are shown as ranges plus a portions estimate, not bare grams;
+  carbs absorb whatever's left of the calorie target, with a warning if
+  that lands unusually low (a sign the deficit is too aggressive, not a
+  deliberate low-carb plan); fibre target included.
+
 **Version 1.4.3**
 - Life tab: calorie target card — maintenance (TDEE, Mifflin-St Jeor) and a
   goal-adjusted target with every safety guardrail enforced in code, not

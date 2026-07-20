@@ -77,3 +77,79 @@ export function calorieTarget(
     rateWarning,
   };
 }
+
+const PROTEIN_G_PER_KG = { min: 1.6, max: 2.2 };
+// Lean-mass basis when body fat % is known — higher per-kg since it's a
+// smaller mass being targeted (matters most for heavier users, where a
+// bodyweight-based number would overshoot).
+const PROTEIN_G_PER_KG_LEAN = { min: 2.3, max: 3.1 };
+// More shows no added benefit for healthy adults and just displaces other
+// macros — always relative to actual bodyweight regardless of basis.
+const PROTEIN_CAP_G_PER_KG = 2.5;
+
+const FAT_G_PER_KG = { min: 0.6, max: 1.0 };
+// Fat is essential for hormone production and absorption of fat-soluble
+// vitamins (A, D, E, K) — never generate a plan below this.
+const FAT_FLOOR_G_PER_KG = 0.5;
+
+// A remainder below this is a sign the deficit itself is too aggressive,
+// not a real "low-carb plan" — flagged so it isn't silently prescribed.
+const CARB_CRASH_G_PER_KG = 1.5;
+
+const PROTEIN_KCAL_PER_G = 4;
+const FAT_KCAL_PER_G = 9;
+const CARB_KCAL_PER_G = 4;
+
+export interface MacroResult {
+  proteinBasis: 'bodyweight' | 'lean-mass';
+  proteinG: number;
+  proteinRangeG: [number, number];
+  proteinPortions: number;
+  fatG: number;
+  fatRangeG: [number, number];
+  carbsG: number;
+  carbCrashWarning: boolean;
+  fibreG: number;
+}
+
+// Order matters: protein and fat anchor to bodyweight/lean-mass first,
+// carbs absorb whatever calories are left — so a calorie-target change only
+// ever has to re-run this to get carbs to move, protein/fat stay pinned.
+export function macros(weightKg: number, bodyFatPct: number | null, targetKcal: number, goal: NutritionGoal): MacroResult {
+  const leanBasis = bodyFatPct != null;
+  const proteinMassKg = leanBasis ? weightKg * (1 - bodyFatPct / 100) : weightKg;
+  const proteinRange = leanBasis ? PROTEIN_G_PER_KG_LEAN : PROTEIN_G_PER_KG;
+  // In a deficit, protein needs rise (protects muscle while calories drop) —
+  // push toward the top of whichever range is active.
+  const proteinPerKg = goal === 'lose' ? proteinRange.max : (proteinRange.min + proteinRange.max) / 2;
+  const proteinCapG = weightKg * PROTEIN_CAP_G_PER_KG;
+  const proteinG = Math.min(proteinMassKg * proteinPerKg, proteinCapG);
+  const proteinRangeG: [number, number] = [proteinMassKg * proteinRange.min, Math.min(proteinMassKg * proteinRange.max, proteinCapG)];
+
+  const fatPerKg = (FAT_G_PER_KG.min + FAT_G_PER_KG.max) / 2;
+  const fatFloorG = weightKg * FAT_FLOOR_G_PER_KG;
+  const fatG = Math.max(weightKg * fatPerKg, fatFloorG);
+  const fatRangeG: [number, number] = [Math.max(weightKg * FAT_G_PER_KG.min, fatFloorG), weightKg * FAT_G_PER_KG.max];
+
+  const carbsG = Math.max(0, (targetKcal - proteinG * PROTEIN_KCAL_PER_G - fatG * FAT_KCAL_PER_G) / CARB_KCAL_PER_G);
+
+  return {
+    proteinBasis: leanBasis ? 'lean-mass' : 'bodyweight',
+    proteinG,
+    proteinRangeG,
+    // ~25 g of protein per palm-sized portion — a common rule-of-thumb
+    // translation from an abstract gram figure to something actionable
+    // without needing a food database.
+    proteinPortions: Math.round(proteinG / 25),
+    fatG,
+    fatRangeG,
+    carbsG,
+    carbCrashWarning: carbsG / weightKg < CARB_CRASH_G_PER_KG,
+    fibreG: fibreTarget(targetKcal),
+  };
+}
+
+// ~14 g per 1,000 kcal (standard dietary-guideline basis) — ~28-35 g for most.
+export function fibreTarget(targetKcal: number): number {
+  return (targetKcal / 1000) * 14;
+}
