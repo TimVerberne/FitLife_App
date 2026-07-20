@@ -102,6 +102,11 @@ this is done.
 
 ## Update notes
 
+**Version 1.3.2**
+- The Home feed ("The crew") was hard-capped at 4 workouts with no way to see
+  older ones. It now loads more automatically as you scroll near the bottom,
+  4 at a time, instead of hiding your history.
+
 **Version 1.3.1**
 - Polished the "workout still in progress" push nudge: the notification title
   is now the workout name itself (e.g. "Chest & Triceps") instead of a generic

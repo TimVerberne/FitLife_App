@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
@@ -57,10 +57,29 @@ export function HomeScreen() {
       })()
     : 0;
 
-  const crew = useMemo(
-    () => [...sessions].sort((a, b) => b.startedAt - a.startedAt).slice(0, 4),
-    [sessions],
-  );
+  const CREW_PAGE_SIZE = 4;
+  const crewAll = useMemo(() => [...sessions].sort((a, b) => b.startedAt - a.startedAt), [sessions]);
+  const [crewVisibleCount, setCrewVisibleCount] = useState(CREW_PAGE_SIZE);
+  const crew = useMemo(() => crewAll.slice(0, crewVisibleCount), [crewAll, crewVisibleCount]);
+  const hasMoreCrew = crewVisibleCount < crewAll.length;
+
+  // Loads more of the feed as you scroll near the bottom, instead of
+  // hard-capping it at 4 — the sentinel sits right after the rendered list,
+  // so it only enters view once you've nearly scrolled past what's shown.
+  const crewSentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!hasMoreCrew) return;
+    const sentinel = crewSentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) setCrewVisibleCount((n) => n + CREW_PAGE_SIZE);
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreCrew]);
 
   const quote = useStore((s) => s.quote);
   const quoteWords = quote.split(' ');
@@ -145,6 +164,7 @@ export function HomeScreen() {
       {crew.map((h) => (
         <WorkoutFeedCard key={h.id} session={h} allSessions={sessions} onOpen={() => openWorkoutSheet(h.id)} />
       ))}
+      {hasMoreCrew && <div ref={crewSentinelRef} style={{ height: 1 }} />}
     </div>
   );
 }
