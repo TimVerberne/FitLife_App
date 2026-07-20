@@ -102,6 +102,14 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.8**
+- Fixed three bugs found in a full Life tab review: height in feet/inches
+  could show as e.g. "5'12"" instead of rolling over to "6'0""; the weight
+  card's "Log today" prefill could go stale if your data arrived from the
+  cloud after the card had already rendered; and a cloud refresh could race
+  a not-yet-synced local edit and briefly clobber it. No data loss occurred
+  from any of these — worst case was a wrong number in the input box.
+
 **Version 1.4.7**
 - Life tab: the last pieces — an optional, light-touch Wellness card (sleep,
   resting heart rate, energy 1-5, each with its own trend chart, no

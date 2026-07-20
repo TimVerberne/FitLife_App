@@ -1046,6 +1046,14 @@ export const useStore = create<StoreState>((set, get) => ({
     const userId = getCurrentUserId();
     if (!userId) return;
     try {
+      // Push anything queued locally (e.g. a profile/weight edit made while
+      // offline) before fetching — otherwise this can race flushPendingSync
+      // and overwrite the not-yet-pushed edit with the stale remote value,
+      // or drop an unsynced bodyLog/waterLog entry from the in-memory store
+      // (still safe on disk, but confusingly missing from the UI until the
+      // next full reload). Mirrors syncWithCloud()'s own opening line.
+      await cloudSync.flushPendingSync();
+      if (getCurrentUserId() !== userId) return;
       const [profile, bodyLog, waterLog] = await Promise.all([
         bodySync.fetchBodyProfile(),
         bodySync.fetchBodyLog(),

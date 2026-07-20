@@ -128,9 +128,10 @@ create policy "friends can read your sessions" on public.sessions for select
   );
 
 -- Self-service account deletion. Deletes the auth.users row for the calling
--- user, which cascades to profiles, routines, sessions, settings, and
--- friendships (every one of those tables references auth.users or profiles
--- with "on delete cascade"), plus Supabase's own internal auth tables
+-- user, which cascades to profiles, routines, sessions, settings,
+-- friendships, push_subscriptions, active_nudges, body_profile, body_log,
+-- and water_log (every one of those tables references auth.users or
+-- profiles with "on delete cascade"), plus Supabase's own internal auth tables
 -- (identities, sessions, refresh tokens) which cascade from auth.users by
 -- Supabase's own schema design. security definer runs this as the function
 -- owner (the postgres role, which has the necessary privileges on the auth

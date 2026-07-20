@@ -34,9 +34,11 @@ export function BodyProfileSetup({ onSaved }: { onSaved?: () => void }) {
   const [rateKgWeek, setRateKgWeek] = useState(bodyProfile.rateKgWeek);
   const [climate, setClimate] = useState<Climate>(bodyProfile.climate);
 
-  const displayHeight = toDisplayLength(heightCm, units);
-  const feet = units === 'lb' ? Math.floor(displayHeight / 12) : 0;
-  const inches = units === 'lb' ? Math.round(displayHeight % 12) : 0;
+  // Round the total inches first, then split into feet/inches — rounding
+  // each half separately can produce "5'12"" instead of rolling over to "6'0"".
+  const totalIn = Math.round(toDisplayLength(heightCm, units));
+  const feet = units === 'lb' ? Math.floor(totalIn / 12) : 0;
+  const inches = units === 'lb' ? totalIn % 12 : 0;
 
   function save() {
     const year = typeof birthYear === 'number' ? birthYear : parseInt(String(birthYear), 10);

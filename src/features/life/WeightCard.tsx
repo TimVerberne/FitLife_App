@@ -19,9 +19,7 @@ export function WeightCard() {
 
   const today = todayIso();
   const todayEntry = bodyLog.find((e) => e.loggedOn === today);
-  const [inputValue, setInputValue] = useState(() =>
-    todayEntry?.weightKg != null ? String(toDisplayWeight(todayEntry.weightKg, units)) : '',
-  );
+  const [inputValue, setInputValue] = useState('');
 
   const fullSeries = useMemo(() => seriesFor(bodyLog, 'weightKg'), [bodyLog]);
   const latestKg = latestValue(fullSeries);
@@ -41,6 +39,15 @@ export function WeightCard() {
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     logBodyMetrics({ loggedOn: today, weightKg: fromDisplayWeight(parsed, units) });
     setLogging(false);
+  }
+
+  // Computed fresh at the moment the form opens rather than on mount — a
+  // lazy useState initializer here would freeze whatever today's entry
+  // looked like when the card first rendered, going stale if bodyLog is
+  // still loading in (e.g. a cloud fetch resolving after mount).
+  function toggleLogging() {
+    if (!logging) setInputValue(todayEntry?.weightKg != null ? String(toDisplayWeight(todayEntry.weightKg, units)) : '');
+    setLogging((v) => !v);
   }
 
   return (
@@ -68,7 +75,7 @@ export function WeightCard() {
             <div style={{ color: 'var(--faint)', fontSize: 12, marginTop: 2 }}>7-day avg: {formatWeight(avgKg, units)} {units}</div>
           )}
         </div>
-        <button className="btn sec" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={() => setLogging((v) => !v)}>
+        <button className="btn sec" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={toggleLogging}>
           {logging ? 'Cancel' : 'Log today'}
         </button>
       </div>
