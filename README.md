@@ -102,6 +102,16 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.7**
+- Life tab: the last pieces — an optional, light-touch Wellness card (sleep,
+  resting heart rate, energy 1-5, each with its own trend chart, no
+  streaks or scores), and a sweat-rate calibration form in the Hydration
+  card (weigh in before/after a workout to replace the 500-1,000 ml/hour
+  default with your own measured rate, since sweat rates vary several-fold
+  between people). This completes the Life tab's full build-out: profile,
+  weight + measurements, body composition, calorie target with safety
+  guardrails, full macros, hydration, and calibration from real trend data.
+
 **Version 1.4.6**
 - Life tab: calorie calibration — once you've logged at least 14 days of
   weight, the Nutrition card compares your actual 7-day-rolling-average

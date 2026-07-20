@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { hydrationTarget } from '../../lib/hydration';
-import { formatVolume, fromDisplayVolume, toDisplayVolume } from '../../lib/units';
+import { hydrationTarget, sweatRateMlPerHour } from '../../lib/hydration';
+import { formatVolume, fromDisplayVolume, fromDisplayWeight, toDisplayVolume } from '../../lib/units';
 import { BarChart } from '../../components/BarChart';
 import type { WeekBucket } from '../../lib/records';
 
@@ -37,6 +37,80 @@ function ProgressRing({ pct }: { pct: number }) {
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
       />
     </svg>
+  );
+}
+
+// A before/after workout weigh-in is genuinely individual — sweat rates
+// vary several-fold between people — so a measured value beats the
+// 500-1000 ml/hour default whenever one's available.
+function SweatRateCalibration({ defaultHours }: { defaultHours: number }) {
+  const bodyProfile = useStore((s) => s.bodyProfile);
+  const saveBodyProfile = useStore((s) => s.saveBodyProfile);
+  const showToast = useStore((s) => s.showToast);
+  const units = useStore((s) => s.settings.units);
+  const [open, setOpen] = useState(false);
+  const [before, setBefore] = useState('');
+  const [after, setAfter] = useState('');
+  const [drunk, setDrunk] = useState('');
+  const [hours, setHours] = useState(defaultHours > 0 ? String(Math.round(defaultHours * 10) / 10) : '1');
+
+  function compute() {
+    const beforeKg = fromDisplayWeight(Number(before), units);
+    const afterKg = fromDisplayWeight(Number(after), units);
+    const drunkMl = fromDisplayVolume(Number(drunk) || 0, units);
+    const sessionHours = Number(hours);
+    if (!beforeKg || !afterKg || !sessionHours || beforeKg <= afterKg) {
+      showToast('Check your numbers — weight before should be higher than after.');
+      return;
+    }
+    const rate = sweatRateMlPerHour(beforeKg, afterKg, drunkMl, sessionHours);
+    saveBodyProfile({ sweatRateMlH: Math.round(rate) });
+    showToast(`Saved — ${Math.round(rate)} ml/hour`);
+    setBefore('');
+    setAfter('');
+    setDrunk('');
+    setOpen(false);
+  }
+
+  return (
+    <div style={{ borderTop: '1px solid var(--line)', marginTop: 14, paddingTop: 12 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: '100%', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 0 }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--faint)' }}>
+          {bodyProfile.sweatRateMlH != null ? `Sweat rate: ${bodyProfile.sweatRateMlH} ml/h · Recalibrate` : 'Calibrate your sweat rate'}
+        </span>
+        <span style={{ color: 'var(--faint)', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div style={{ marginTop: 10 }}>
+          <p style={{ color: 'var(--faint)', fontSize: 11, marginTop: 0 }}>
+            Weigh yourself right before and after a workout (same clothing, towelled dry) for a personal
+            number instead of the 500-1000 ml/hour default.
+          </p>
+          <div className="settings-row">
+            <div className="settings-row-label">Weight before ({units})</div>
+            <input type="number" inputMode="decimal" value={before} style={{ width: 80 }} onChange={(e) => setBefore(e.target.value)} />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-label">Weight after ({units})</div>
+            <input type="number" inputMode="decimal" value={after} style={{ width: 80 }} onChange={(e) => setAfter(e.target.value)} />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-label">Fluid drunk during</div>
+            <input type="number" inputMode="decimal" value={drunk} placeholder={units === 'lb' ? 'fl oz' : 'ml'} style={{ width: 80 }} onChange={(e) => setDrunk(e.target.value)} />
+          </div>
+          <div className="settings-row">
+            <div className="settings-row-label">Session length (hours)</div>
+            <input type="number" inputMode="decimal" value={hours} style={{ width: 80 }} onChange={(e) => setHours(e.target.value)} />
+          </div>
+          <button className="btn" style={{ marginTop: 8 }} onClick={compute}>
+            Save
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -148,6 +222,8 @@ export function HydrationCard() {
       <div style={{ marginTop: 14 }}>
         <BarChart weeks={last7} />
       </div>
+
+      <SweatRateCalibration defaultHours={todaySessionMinutes / 60} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { BodyCompositionCard } from '../features/life/BodyCompositionCard';
 import { NutritionCard } from '../features/life/NutritionCard';
 import { MacrosCard } from '../features/life/MacrosCard';
 import { HydrationCard } from '../features/life/HydrationCard';
+import { WellnessCard } from '../features/life/WellnessCard';
 import { formatHeight } from '../lib/units';
 import type { BodyProfile } from '../lib/types';
 
@@ -75,6 +76,7 @@ export function LifeScreen() {
           <NutritionCard />
           <MacrosCard />
           <HydrationCard />
+          <WellnessCard />
         </>
       )}
     </div>
