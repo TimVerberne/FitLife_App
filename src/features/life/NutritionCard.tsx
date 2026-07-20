@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { calorieTarget } from '../../lib/nutrition';
+import { calibrate } from '../../lib/calibration';
 import type { NutritionGoal } from '../../lib/types';
 import { chipStyle } from './chipStyle';
 
@@ -31,6 +32,12 @@ export function NutritionCard() {
       bodyProfile.rateKgWeek,
     );
   }, [latestWeightKg, bodyProfile, age]);
+
+  const predictedRateKgWeek = bodyProfile.goal === 'lose' ? -bodyProfile.rateKgWeek : bodyProfile.goal === 'gain' ? bodyProfile.rateKgWeek : 0;
+  const calibration = useMemo(() => {
+    if (!result) return null;
+    return calibrate(bodyLog, predictedRateKgWeek, result.target);
+  }, [bodyLog, predictedRateKgWeek, result]);
 
   if (!bodyProfile.sexAtBirth) return null;
 
@@ -71,6 +78,15 @@ export function NutritionCard() {
           {result.rateWarning && !result.maintenanceOnly && (
             <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 8 }}>
               Fairly aggressive rate — {bodyProfile.rateKgWeek.toFixed(1)} kg/week.
+            </p>
+          )}
+
+          {calibration?.suggestedCalorieTarget != null && (
+            <p style={{ color: 'var(--accent)', fontSize: 12, marginTop: 8 }}>
+              You've averaged {calibration.actualRateKgWeek >= 0 ? '+' : ''}
+              {calibration.actualRateKgWeek.toFixed(1)} kg/week over the last {calibration.daysOfData} days on{' '}
+              {Math.round(result.target)} kcal. To hit your {predictedRateKgWeek >= 0 ? '+' : ''}
+              {predictedRateKgWeek.toFixed(1)} kg/week goal, try ~{Math.round(calibration.suggestedCalorieTarget)}.
             </p>
           )}
 

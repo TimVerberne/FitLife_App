@@ -102,6 +102,15 @@ this is done.
 
 ## Update notes
 
+**Version 1.4.6**
+- Life tab: calorie calibration — once you've logged at least 14 days of
+  weight, the Nutrition card compares your actual 7-day-rolling-average
+  trend against what the target rate predicted and suggests a modest
+  (~150 kcal) adjustment if they've drifted apart, e.g. "You've averaged
+  −1.2 kg/week over the last 20 days on 2,318 kcal. To hit your −0.5
+  kg/week goal, try ~2,468." Protein and fat stay pinned to bodyweight;
+  carbs absorb the change automatically.
+
 **Version 1.4.5**
 - Life tab: hydration — a progress ring against today's target (bodyweight
   baseline + a hot-climate bonus + a training bonus that scales
