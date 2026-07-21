@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget, calorieTargetFromKcal, macros } from '../../lib/nutrition';
+import { useNutritionPlan } from '../../lib/useNutritionPlan';
 
 function round(n: number): number {
   return Math.round(n);
@@ -9,24 +7,10 @@ function round(n: number): number {
 
 export function MacrosCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
-  const bodyLog = useStore((s) => s.bodyLog);
+  const plan = useNutritionPlan();
 
-  const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
-  const latestBodyFatPct = latestValue(seriesFor(bodyLog, 'bodyFatPct'));
-  const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
-
-  const result = useMemo(() => {
-    if (!latestWeightKg || !bodyProfile.heightCm || !age || !bodyProfile.sexAtBirth) return null;
-    const calories =
-      bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null
-        ? calorieTargetFromKcal(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.manualKcalTarget)
-        : calorieTarget(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.goal, bodyProfile.rateKgWeek);
-    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, calories.effectiveGoal, calories.effectiveRateKgWeek);
-    return { calories, macroResult };
-  }, [latestWeightKg, latestBodyFatPct, bodyProfile, age]);
-
-  if (!bodyProfile.sexAtBirth || !result) return null;
-  const { macroResult } = result;
+  if (!bodyProfile.sexAtBirth || !plan) return null;
+  const { macroResult } = plan;
 
   return (
     <div className="card" style={{ marginTop: 16 }}>

@@ -102,6 +102,62 @@ this is done.
 
 ## Update notes
 
+**Version 1.10.0**
+- Full app-wide improvement pass (opportunities and polish, not bugs — a
+  separate review already covered those). Same page-by-page approach,
+  scanned via parallel focused passes, then built directly:
+  - **Home/Stats**: fixed a real perf bug where Stats' leaderboard/head-to-
+    head math never actually cached (a fresh `Date.now()` read on every
+    render was breaking `useMemo`); the "records this workout" count is now
+    computed once per feed instead of re-scanning full history per card;
+    unified the inconsistent "12.4k"-style volume formatting across
+    Home/Stats; added a sort control to the leaderboard (Volume/Workouts/
+    Sets/Streak); Home now shows "days since your last workout" when your
+    streak breaks, and a proper empty state before your first workout.
+  - **Train/Picker**: exercise search now matches target muscle/equipment
+    too (not just the name) and ranks results (exact/starts-with/contains)
+    instead of raw dataset order; added a "Recent" section to the picker;
+    routines can now be duplicated; drag-to-reorder is now keyboard-
+    operable (Enter to pick up, arrow keys to move, Enter to drop) and no
+    longer duplicated near-identically between Train and the active
+    session screen (extracted to one shared hook); toggle controls (body-
+    part chips, exercise rows, metric tabs) now expose their selected state
+    to screen readers; picker search has a clear button; the rename-routine
+    field now submits on Enter.
+  - **Life tab**: every tappable dashboard tile is now keyboard/screen-
+    reader accessible; `todayIso()` and the calorie-target calculation
+    pipeline were each copy-pasted across 5-7 files, now shared; water and
+    calorie entries can be deleted individually instead of only "clear the
+    whole day"; weight/measurements/wellness can now be logged for a past
+    date, not just today; Measurements and Wellness charts got the same
+    period picker Weight already had; disclosure buttons expose their
+    expanded state to screen readers; the 7-day chart data no longer
+    re-scans the whole log for each of the 7 days.
+  - **Profile/Settings/Friends**: destructive actions consolidated into one
+    "Danger zone" instead of split across two headings; "Member since" now
+    uses your real signup date instead of your oldest logged workout (was
+    wrong for anyone who's imported historical data); added a display-name
+    field (previously friends only ever saw your email username); the
+    import button now shows "Reading file…" instead of going quiet on a
+    large export; segmented controls across Settings/Profile now expose
+    their selected state; "browse all accounts" has a search filter; the
+    show-more/show-less pattern (4 near-identical copies) is now one shared
+    hook + component.
+  - **Active session** (the most-used screen): every keystroke used to
+    write the whole session to IndexedDB — now debounced, with a
+    visibility-based flush so backgrounding still saves promptly; the
+    "previous performance" lookup shown per set no longer re-scans full
+    session history for every row; the Finish screen now shows a 🏆 count
+    of new records set that workout; drag-to-reorder exercises is now
+    keyboard-operable; the set-type badge and set-complete checkbox got
+    larger tap targets; number inputs now have proper accessible labels.
+  - A few items were deliberately left for a follow-up conversation rather
+    than guessed at, since they involve real design decisions: quick +/-
+    steppers for weight/reps (tight grid, needs a layout call), real
+    supersetting (currently cosmetic-only), an import "merge" mode
+    (currently always replaces), and splitting the active session screen
+    into memoized subcomponents (large refactor).
+
 **Version 1.9.0**
 - Full app-wide bug review (every screen checked separately via parallel
   focused passes), then fixed directly rather than just reported. Most

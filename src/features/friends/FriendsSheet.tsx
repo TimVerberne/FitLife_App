@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { colorForPerson } from '../../lib/colors';
 import { fetchAllProfiles, type FriendProfile } from '../../lib/friends';
@@ -30,6 +30,7 @@ export function FriendsSheet() {
   const [browsing, setBrowsing] = useState(false);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [allProfiles, setAllProfiles] = useState<FriendProfile[]>([]);
+  const [browseFilter, setBrowseFilter] = useState('');
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
 
   async function submit(e: React.FormEvent) {
@@ -52,6 +53,7 @@ export function FriendsSheet() {
   async function toggleBrowse() {
     if (browsing) {
       setBrowsing(false);
+      setBrowseFilter('');
       return;
     }
     setBrowsing(true);
@@ -71,11 +73,19 @@ export function FriendsSheet() {
     if (!result.ok) setSentIds((s) => { const next = new Set(s); next.delete(profile.id); return next; });
   }
 
-  const friendIds = new Set(friends.map((f) => f.profile.id));
-  const outgoingIds = new Set(outgoingRequests.map((r) => r.profile.id));
-  const incomingIds = new Set(incomingRequests.map((r) => r.profile.id));
+  // Rebuilt fresh every render otherwise, including renders triggered purely
+  // by typing in the email/browse-filter inputs above.
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.profile.id)), [friends]);
+  const outgoingIds = useMemo(() => new Set(outgoingRequests.map((r) => r.profile.id)), [outgoingRequests]);
+  const incomingIds = useMemo(() => new Set(incomingRequests.map((r) => r.profile.id)), [incomingRequests]);
 
   const hasRequests = incomingRequests.length + outgoingRequests.length > 0;
+
+  const filteredProfiles = useMemo(() => {
+    const q = browseFilter.trim().toLowerCase();
+    if (!q) return allProfiles;
+    return allProfiles.filter((p) => (p.displayName ?? '').toLowerCase().includes(q) || p.email.toLowerCase().includes(q));
+  }, [allProfiles, browseFilter]);
 
   return (
     <div className="sheet-in">
@@ -111,12 +121,23 @@ export function FriendsSheet() {
 
       {browsing && (
         <div style={{ marginTop: 10 }}>
+          {!browseLoading && allProfiles.length > 0 && (
+            <div className="search" style={{ marginBottom: 10 }}>
+              <input
+                value={browseFilter}
+                onChange={(e) => setBrowseFilter(e.target.value)}
+                placeholder="Filter by name or email"
+              />
+            </div>
+          )}
           {browseLoading ? (
             <p style={{ color: 'var(--faint)', fontSize: 13 }}>Loading…</p>
           ) : allProfiles.length === 0 ? (
             <p style={{ color: 'var(--faint)', fontSize: 13 }}>No other accounts yet.</p>
+          ) : filteredProfiles.length === 0 ? (
+            <p style={{ color: 'var(--faint)', fontSize: 13 }}>No accounts match "{browseFilter}".</p>
           ) : (
-            allProfiles.map((p) => {
+            filteredProfiles.map((p) => {
               const already = friendIds.has(p.id) || outgoingIds.has(p.id) || incomingIds.has(p.id) || sentIds.has(p.id);
               const label = friendIds.has(p.id)
                 ? 'Friends'

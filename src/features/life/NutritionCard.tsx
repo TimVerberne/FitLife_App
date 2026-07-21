@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget, calorieTargetFromKcal } from '../../lib/nutrition';
-import { calibrate } from '../../lib/calibration';
+import { useNutritionPlan } from '../../lib/useNutritionPlan';
 import type { NutritionGoal } from '../../lib/types';
 import { chipStyle } from './chipStyle';
 
@@ -50,36 +48,16 @@ function KcalTargetInput({ currentTarget, onCommit }: { currentTarget: number; o
 
 export function NutritionCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
-  const bodyLog = useStore((s) => s.bodyLog);
   const saveBodyProfile = useStore((s) => s.saveBodyProfile);
-
-  const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
-  const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
 
   // goalMode/manualKcalTarget live on the profile itself (not local state) —
   // otherwise reopening this card (a sheet, which remounts) would forget
   // which mode you were in and silently show "Rate" again with whatever
   // rateKgWeek happened to be clamped to, which is exactly what used to
   // read as "changes my goal back to 1kg per week."
-  const result = useMemo(() => {
-    if (!latestWeightKg || !bodyProfile.heightCm || !age || !bodyProfile.sexAtBirth) return null;
-    if (bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null) {
-      return calorieTargetFromKcal(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.manualKcalTarget);
-    }
-    return calorieTarget(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.goal, bodyProfile.rateKgWeek);
-  }, [latestWeightKg, bodyProfile, age]);
-
-  const predictedRateKgWeek = result
-    ? result.effectiveGoal === 'lose'
-      ? -result.effectiveRateKgWeek
-      : result.effectiveGoal === 'gain'
-        ? result.effectiveRateKgWeek
-        : 0
-    : 0;
-  const calibration = useMemo(() => {
-    if (!result) return null;
-    return calibrate(bodyLog, predictedRateKgWeek, result.target);
-  }, [bodyLog, predictedRateKgWeek, result]);
+  const plan = useNutritionPlan();
+  const result = plan?.calories ?? null;
+  const calibration = plan?.calibration ?? null;
 
   if (!bodyProfile.sexAtBirth) return null;
 
@@ -123,12 +101,12 @@ export function NutritionCard() {
             </p>
           )}
 
+          {/* Kept brief — the full "you've averaged X kg/week" breakdown
+              already shows on the Today card this sheet was opened from, no
+              need to restate it verbatim here. */}
           {calibration?.suggestedCalorieTarget != null && (
             <p style={{ color: 'var(--accent)', fontSize: 12, marginTop: 8 }}>
-              You've averaged {calibration.actualRateKgWeek >= 0 ? '+' : ''}
-              {calibration.actualRateKgWeek.toFixed(1)} kg/week over the last {calibration.daysOfData} days on{' '}
-              {Math.round(result.target)} kcal. To hit your {predictedRateKgWeek >= 0 ? '+' : ''}
-              {predictedRateKgWeek.toFixed(1)} kg/week goal, try ~{Math.round(calibration.suggestedCalorieTarget)}.
+              Based on the last {calibration.daysOfData} days, try ~{Math.round(calibration.suggestedCalorieTarget)} kcal to hit your goal.
             </p>
           )}
 

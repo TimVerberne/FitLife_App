@@ -4,10 +4,12 @@ export function NumberField({
   value,
   onCommit,
   inputMode,
+  ariaLabel,
 }: {
   value: number;
   onCommit: (n: number) => void;
   inputMode: 'decimal' | 'numeric';
+  ariaLabel?: string;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -20,6 +22,7 @@ export function NumberField({
     <input
       type="number"
       inputMode={inputMode}
+      aria-label={ariaLabel}
       value={text}
       onFocus={() => setFocused(true)}
       onChange={(e) => {

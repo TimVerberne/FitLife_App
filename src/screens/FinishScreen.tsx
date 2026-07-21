@@ -1,16 +1,26 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { setsCountOf, volumeOf } from '../lib/records';
+import { newRecordsInWorkout, setsCountOf, volumeOf } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
 
 export function FinishScreen() {
   const result = useStore((s) => s.finishResult);
+  const sessions = useStore((s) => s.sessions);
   const saveRoutineFromFinish = useStore((s) => s.saveRoutineFromFinish);
   const updateRoutineExercises = useStore((s) => s.updateRoutineExercises);
   const routineName = useStore((s) => s.routines.find((r) => r.id === result?.routineId)?.name);
   const go = useStore((s) => s.go);
   const units = useStore((s) => s.settings.units);
   const [routineChoiceMade, setRoutineChoiceMade] = useState(false);
+
+  // finishSession() already pushed the finished session into `sessions`
+  // before switching to this screen, so it's already there to check against
+  // everything before it.
+  const records = useMemo(() => {
+    if (!result) return 0;
+    const session = sessions.find((s) => s.id === result.sessionId);
+    return session ? newRecordsInWorkout(sessions, session) : 0;
+  }, [sessions, result]);
 
   if (!result) return null;
   const volume = Math.round(toDisplayWeight(volumeOf(result.entries), units));
@@ -22,6 +32,11 @@ export function FinishScreen() {
         <div className="eyebrow">Done</div>
         <div className="h1" style={{ fontSize: 28 }}>{result.name} completed</div>
       </div>
+      {records > 0 && (
+        <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 14, marginTop: 6 }}>
+          🏆 {records} new record{records === 1 ? '' : 's'} this workout
+        </div>
+      )}
       <div className="summary">
         <div className="n">{volume.toLocaleString('en-US')}</div>
         <div style={{ color: '#9fe3c4', fontSize: 13, marginTop: 4 }}>{units} total volume</div>

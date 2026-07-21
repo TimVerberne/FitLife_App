@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
-import { formatDuration, isWorkingSet, newRecordsInWorkout, relativeDate, setsCountOf, volumeOf } from '../lib/records';
+import { formatDuration, isWorkingSet, relativeDate, setsCountOf, volumeOf } from '../lib/records';
 import { colorForPerson } from '../lib/colors';
 import { toDisplayWeight } from '../lib/units';
 import { useStore } from '../store/useStore';
@@ -15,17 +15,20 @@ function doneCount(entry: SessionEntry): number {
 
 export function WorkoutFeedCard({
   session,
-  allSessions,
+  records,
   onOpen,
 }: {
   session: WorkoutSession;
-  allSessions: WorkoutSession[];
+  // Precomputed by the caller (one shared pass over every session in the
+  // feed via records.ts's recordsPerSession) rather than derived here —
+  // recomputing per-session records from scratch on every card, on every
+  // render, doesn't scale with feed length. See HomeScreen.tsx.
+  records: number;
   onOpen: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const units = useStore((s) => s.settings.units);
   const colors = colorForPerson(session.person);
-  const records = newRecordsInWorkout(allSessions, session);
   // Filtered up front (not just skipped in the row-map below) so an entry
   // whose exercise can't be resolved (deleted from the library, or a
   // corrupted import) doesn't throw off the "See N more"/collapsed count —

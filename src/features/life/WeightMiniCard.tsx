@@ -1,13 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, rollingAverage, seriesFor } from '../../lib/bodyMetrics';
+import { latestValue, rollingAverage, seriesFor, todayIso } from '../../lib/bodyMetrics';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { MiniSparkline } from '../../components/MiniSparkline';
 import { TapIcon } from '../../components/TapIcon';
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Compact companion to the full WeightCard further down the screen — same
 // underlying data, condensed to number + 7-day avg + a tiny trend + a
@@ -44,7 +40,14 @@ export function WeightMiniCard() {
   }
 
   return (
-    <div className="card" style={{ position: 'relative', cursor: 'pointer' }} onClick={openWeightDetail}>
+    <div
+      className="card"
+      style={{ position: 'relative', cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onClick={openWeightDetail}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openWeightDetail()}
+    >
       <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>
         Weight
@@ -66,7 +69,7 @@ export function WeightMiniCard() {
         <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 8 }}>No entries yet</p>
       )}
 
-      <div onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
         {logging ? (
           <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
             <input

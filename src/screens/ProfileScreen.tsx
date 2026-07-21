@@ -17,10 +17,13 @@ import {
   type WeeklyMetric,
 } from '../lib/records';
 import { formatWeight, toDisplayWeight } from '../lib/units';
+import { useAuthState } from '../lib/auth';
+import { useCollapsedList } from '../lib/useCollapsedList';
 import { BarChart } from '../components/BarChart';
 import { RadarChart } from '../components/RadarChart';
 import { TrainingCalendar } from '../components/TrainingCalendar';
 import { PeriodPicker } from '../components/PeriodPicker';
+import { ShowMoreButton } from '../components/ShowMoreButton';
 import { Thumb } from '../components/Thumb';
 import { InstallCard } from '../components/InstallCard';
 
@@ -38,12 +41,12 @@ export function ProfileScreen() {
   ];
   const [metric, setMetric] = useState<WeeklyMetric>('volume');
   const [chartPeriod, setChartPeriod] = useState<StatPeriod>('week');
-  const [showAllRecords, setShowAllRecords] = useState(false);
-  const [showAllHistory, setShowAllHistory] = useState(false);
 
   const mySessions = useMemo(() => sessions.filter((s) => s.person === 'You').sort((a, b) => b.startedAt - a.startedAt), [sessions]);
   const totalVolume = useMemo(() => mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), [mySessions]);
   const records = useMemo(() => personalRecords(sessions), [sessions]);
+  const recordsList = useCollapsedList(records);
+  const historyList = useCollapsedList(mySessions);
   const weeks = useMemo(() => barBucketsForPeriod(sessions, chartPeriod, metric), [sessions, chartPeriod, metric]);
   const chartSince = useMemo(() => periodCutoff(chartPeriod), [chartPeriod]);
   const radarValues = useMemo(() => muscleSplit(sessions, 'You', chartSince), [sessions, chartSince]);
@@ -56,7 +59,10 @@ export function ProfileScreen() {
   const delta = periodPrev ? Math.round(((periodValue - periodPrev) / periodPrev) * 100) : 0;
   const up = delta >= 0;
 
-  const oldestSessionYear = mySessions.length > 0 ? new Date(mySessions[mySessions.length - 1].startedAt).getFullYear() : new Date().getFullYear();
+  // Real account signup date, not the oldest logged workout — the latter is
+  // wrong for anyone who's imported historical data via the Hevy CSV import.
+  const { createdAt } = useAuthState();
+  const memberSinceYear = createdAt ? new Date(createdAt).getFullYear() : new Date().getFullYear();
 
   return (
     <div className="screen">
@@ -90,7 +96,7 @@ export function ProfileScreen() {
         <div>
           <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, lineHeight: 1 }}>Your account</div>
           <div style={{ fontSize: 12, color: '#8b8e94', marginTop: 2 }}>
-            Member since {oldestSessionYear} · {mySessions.length} workouts
+            Member since {memberSinceYear} · {mySessions.length} workouts
           </div>
         </div>
       </div>
@@ -138,6 +144,7 @@ export function ProfileScreen() {
           {METRICS.map((m) => (
             <button
               key={m.id}
+              aria-pressed={metric === m.id}
               onClick={() => setMetric(m.id)}
               style={{
                 flex: 1,
@@ -174,7 +181,7 @@ export function ProfileScreen() {
 
       <div className="section-h">Personal records</div>
       {records.length === 0 && <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>Finish a workout to set your first record.</p>}
-      {(showAllRecords ? records : records.slice(0, 5)).map((r) => {
+      {recordsList.visible.map((r) => {
         const ex = exerciseById(r.exerciseId);
         if (!ex) return null;
         return (
@@ -209,11 +216,7 @@ export function ProfileScreen() {
           </div>
         );
       })}
-      {records.length > 5 && (
-        <button className="feed-more" onClick={() => setShowAllRecords((v) => !v)}>
-          {showAllRecords ? 'Show less' : `Show ${records.length - 5} more`}
-        </button>
-      )}
+      <ShowMoreButton hiddenCount={recordsList.hiddenCount} expanded={recordsList.expanded} onToggle={recordsList.toggle} />
 
       <div className="section-h">History</div>
       {mySessions.length === 0 && (
@@ -221,7 +224,7 @@ export function ProfileScreen() {
           <p>Your finished workouts will show up here.</p>
         </div>
       )}
-      {(showAllHistory ? mySessions : mySessions.slice(0, 5)).map((h) => (
+      {historyList.visible.map((h) => (
         <div
           className="hist-row"
           key={h.id}
@@ -242,11 +245,7 @@ export function ProfileScreen() {
           <span className="go-arrow">›</span>
         </div>
       ))}
-      {mySessions.length > 5 && (
-        <button className="feed-more" onClick={() => setShowAllHistory((v) => !v)}>
-          {showAllHistory ? 'Show less' : `Show ${mySessions.length - 5} more`}
-        </button>
-      )}
+      <ShowMoreButton hiddenCount={historyList.hiddenCount} expanded={historyList.expanded} onToggle={historyList.toggle} />
     </div>
   );
 }

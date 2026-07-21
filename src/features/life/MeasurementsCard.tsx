@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor, todayIso } from '../../lib/bodyMetrics';
+import { periodCutoff, type StatPeriod } from '../../lib/records';
 import { formatLength, fromDisplayLength, toDisplayLength } from '../../lib/units';
+import { PeriodPicker } from '../../components/PeriodPicker';
 import { ProgressChart, type ChartPoint } from '../../components/ProgressChart';
 import type { BodyLogEntry } from '../../lib/types';
 
@@ -14,31 +16,36 @@ const SITES: { key: keyof Pick<BodyLogEntry, 'waistCm' | 'chestCm' | 'armCm' | '
   { key: 'neckCm', label: 'Neck' },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function MeasurementRow({ site }: { site: (typeof SITES)[number] }) {
   const bodyLog = useStore((s) => s.bodyLog);
   const units = useStore((s) => s.settings.units);
   const logBodyMetrics = useStore((s) => s.logBodyMetrics);
+  const today = todayIso();
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [logDate, setLogDate] = useState(today);
+  const [period, setPeriod] = useState<StatPeriod>('month');
 
   const series = useMemo(() => seriesFor(bodyLog, site.key), [bodyLog, site.key]);
   const latestCm = latestValue(series);
-  const points: ChartPoint[] = series.map((p) => ({ ts: p.ts, value: toDisplayLength(p.value, units) }));
+  const cutoff = periodCutoff(period);
+  const inRange = useMemo(() => series.filter((p) => p.ts >= cutoff), [series, cutoff]);
+  const points: ChartPoint[] = inRange.map((p) => ({ ts: p.ts, value: toDisplayLength(p.value, units) }));
+  const panelId = `measurement-panel-${site.key}`;
 
   function save() {
     const parsed = Number(inputValue);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
-    logBodyMetrics({ loggedOn: todayIso(), [site.key]: fromDisplayLength(parsed, units) });
+    logBodyMetrics({ loggedOn: logDate, [site.key]: fromDisplayLength(parsed, units) });
     setInputValue('');
+    setLogDate(today);
   }
 
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginTop: 10 }}>
       <button
+        aria-expanded={expanded}
+        aria-controls={panelId}
         onClick={() => setExpanded((v) => !v)}
         style={{
           width: '100%',
@@ -60,8 +67,9 @@ function MeasurementRow({ site }: { site: (typeof SITES)[number] }) {
       </button>
 
       {expanded && (
-        <div style={{ marginTop: 8 }}>
+        <div id={panelId} style={{ marginTop: 8 }}>
           <div style={{ display: 'flex', gap: 8 }}>
+            <input type="date" value={logDate} max={today} onChange={(e) => setLogDate(e.target.value)} style={{ flex: 'none' }} />
             <input
               type="number"
               inputMode="decimal"
@@ -74,12 +82,17 @@ function MeasurementRow({ site }: { site: (typeof SITES)[number] }) {
               Log
             </button>
           </div>
-          {points.length >= 2 && (
-            <ProgressChart
-              points={points}
-              formatValue={(v) => `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })} ${units === 'lb' ? 'in' : 'cm'}`}
-              formatDate={(ts) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
-            />
+          {series.length >= 2 && (
+            <>
+              <div style={{ marginTop: 10 }}>
+                <PeriodPicker value={period} onChange={setPeriod} />
+              </div>
+              <ProgressChart
+                points={points}
+                formatValue={(v) => `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })} ${units === 'lb' ? 'in' : 'cm'}`}
+                formatDate={(ts) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+              />
+            </>
           )}
         </div>
       )}

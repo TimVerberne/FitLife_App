@@ -73,14 +73,24 @@ export function ExerciseDetailSheet() {
           </div>
           <div className="metric-tabs">
             {METRICS.map((m) => (
-              <button key={m.id} className={`metric-tab${metric === m.id ? ' on' : ''}`} onClick={() => setMetric(m.id)}>
+              <button
+                key={m.id}
+                className={`metric-tab${metric === m.id ? ' on' : ''}`}
+                aria-pressed={metric === m.id}
+                onClick={() => setMetric(m.id)}
+              >
                 {m.label}
               </button>
             ))}
           </div>
           <div className="metric-tabs">
             {PERIODS.map((p) => (
-              <button key={p} className={`metric-tab${period === p ? ' on' : ''}`} onClick={() => setPeriod(p)}>
+              <button
+                key={p}
+                className={`metric-tab${period === p ? ' on' : ''}`}
+                aria-pressed={period === p}
+                onClick={() => setPeriod(p)}
+              >
                 {STAT_PERIOD_LABEL[p]}
               </button>
             ))}

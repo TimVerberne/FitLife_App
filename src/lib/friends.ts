@@ -53,6 +53,24 @@ export async function fetchAllProfiles(): Promise<FriendProfile[]> {
   return (data ?? []).map(toProfile);
 }
 
+export async function fetchOwnProfile(): Promise<FriendProfile | null> {
+  const userId = requireUserId();
+  const { data, error } = await supabase.from('profiles').select('id, email, display_name').eq('id', userId).maybeSingle();
+  if (error) throw error;
+  return data ? toProfile(data) : null;
+}
+
+// Every friend-facing read path (labelFor, FriendsSheet) already handles a
+// display_name and falls back to the email username — this is what lets a
+// user actually set it, instead of every friend seeing that email-username
+// fallback forever.
+export async function updateOwnDisplayName(name: string): Promise<void> {
+  const userId = requireUserId();
+  const trimmed = name.trim();
+  const { error } = await supabase.from('profiles').update({ display_name: trimmed || null }).eq('id', userId);
+  if (error) throw error;
+}
+
 export type SendFriendRequestResult = { ok: true } | { ok: false; reason: 'self' | 'already-pending' | 'already-friends' | 'unknown' };
 
 export async function sendFriendRequest(addresseeId: string): Promise<SendFriendRequestResult> {

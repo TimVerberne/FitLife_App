@@ -1,19 +1,42 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, WorkoutSession } from '../lib/types';
-import { MUSCLE_AXES, MUSCLE_GROUP, epley, isWorkingSet, newRecordsInWorkout, setsCountOf, volumeOf, weeklyStreak } from '../lib/records';
+import {
+  MUSCLE_AXES,
+  MUSCLE_GROUP,
+  exerciseHistory,
+  exercisePR,
+  isWorkingSet,
+  periodCutoff,
+  recordsPerSession,
+  setsCountOf,
+  volumeOf,
+  weeklyStreak,
+  type StatPeriod,
+} from '../lib/records';
 import type { WeekStart } from '../lib/settings';
 import { colorForPerson } from '../lib/colors';
 import { labelsForFriends } from '../lib/friends';
 import { exerciseById } from '../lib/exercises';
-import { formatWeight, toDisplayWeight } from '../lib/units';
+import { formatTrainingVolume, formatWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
 
-type Period = 'week' | 'month' | 'all';
-const PERIOD_DAYS: Record<Period, number | null> = { week: 7, month: 30, all: null };
+// Only 3 of records.ts's 4 StatPeriod values are offered here — 'week',
+// 'month', 'all' are this screen's own picker, kept as a subset of the
+// shared type instead of a separate near-duplicate Period/PERIOD_DAYS.
+const PERIODS: StatPeriod[] = ['week', 'month', 'all'];
 
-function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number | null, now: number, weekStart: WeekStart) {
-  const cutoff = periodDays ? now - periodDays * 86_400_000 : -Infinity;
+type LeaderboardSort = 'volume' | 'workouts' | 'sets' | 'streak';
+const SORT_LABEL: Record<LeaderboardSort, string> = { volume: 'Volume', workouts: 'Workouts', sets: 'Sets', streak: 'Streak' };
+
+function statsFor(
+  sessions: WorkoutSession[],
+  person: Person,
+  cutoff: number,
+  now: number,
+  weekStart: WeekStart,
+  recordsBySession: Map<string, number>,
+) {
   const mine = sessions.filter((h) => h.person === person && h.startedAt >= cutoff);
   return {
     person,
@@ -21,35 +44,29 @@ function statsFor(sessions: WorkoutSession[], person: Person, periodDays: number
     volume: mine.reduce((a, h) => a + volumeOf(h.entries), 0),
     sets: mine.reduce((a, h) => a + setsCountOf(h.entries), 0),
     totalMinutes: mine.reduce((a, h) => a + h.durationMin, 0),
-    records: mine.reduce((a, h) => a + newRecordsInWorkout(sessions, h), 0),
+    records: mine.reduce((a, h) => a + (recordsBySession.get(h.id) ?? 0), 0),
     streak: weeklyStreak(sessions, person, now, weekStart),
   };
 }
 
-function exerciseStatsFor(sessions: WorkoutSession[], person: Person, exerciseId: string, periodDays: number | null, now: number) {
-  const cutoff = periodDays ? now - periodDays * 86_400_000 : -Infinity;
+function exerciseStatsFor(sessions: WorkoutSession[], person: Person, exerciseId: string, cutoff: number) {
+  const inWindow = sessions.filter((h) => h.person === person && h.startedAt >= cutoff);
   let volume = 0;
   let timesPerformed = 0;
-  let maxWeight = 0;
-  let maxWeightReps = 0;
-  let best1RM = 0;
-  sessions
-    .filter((h) => h.person === person && h.startedAt >= cutoff)
-    .forEach((h) => {
-      const entry = h.entries.find((e) => e.exerciseId === exerciseId);
-      const doneSets = entry?.sets.filter(isWorkingSet) ?? [];
-      if (doneSets.length === 0) return;
-      timesPerformed += 1;
-      doneSets.forEach((s) => {
-        volume += s.weight * s.reps;
-        if (s.weight > maxWeight || (s.weight === maxWeight && s.reps > maxWeightReps)) {
-          maxWeight = s.weight;
-          maxWeightReps = s.reps;
-        }
-        best1RM = Math.max(best1RM, epley(s.weight, s.reps));
-      });
+  inWindow.forEach((h) => {
+    const entry = h.entries.find((e) => e.exerciseId === exerciseId);
+    const doneSets = entry?.sets.filter(isWorkingSet) ?? [];
+    if (doneSets.length === 0) return;
+    timesPerformed += 1;
+    doneSets.forEach((s) => {
+      volume += s.weight * s.reps;
     });
-  return { volume, timesPerformed, maxWeight, maxWeightReps, best1RM };
+  });
+  // Best-weight/1RM tracking reuses the same PR logic exerciseHistory/
+  // exercisePR already implement for ExerciseDetailSheet, instead of
+  // re-deriving the same max-tracking comparisons a second time here.
+  const pr = exercisePR(exerciseHistory(inWindow, exerciseId, person));
+  return { volume, timesPerformed, maxWeight: pr.maxWeight, maxWeightReps: pr.maxWeightReps, best1RM: pr.oneRM };
 }
 
 export function StatsScreen() {
@@ -60,9 +77,23 @@ export function StatsScreen() {
   const sessions = useMemo(() => [...ownSessions, ...friendSessionsRaw], [ownSessions, friendSessionsRaw]);
   const units = useStore((s) => s.settings.units);
   const weekStart = useStore((s) => s.settings.weekStart);
-  const [period, setPeriod] = useState<Period>('week');
+  const [period, setPeriod] = useState<StatPeriod>('week');
   const [selectedRival, setSelectedRival] = useState<Person | null>(null);
-  const now = Date.now();
+  const [sortBy, setSortBy] = useState<LeaderboardSort>('volume');
+  // Frozen at mount rather than read fresh every render — this screen fully
+  // unmounts/remounts on every tab switch (see App.tsx's CurrentScreen), so
+  // that already keeps it fresh across visits without needing a live tick,
+  // while avoiding the previous bug where reading Date.now() directly in the
+  // render body made every useMemo below depend on a value that's never
+  // equal between renders, defeating their memoization entirely.
+  const [now] = useState(() => Date.now());
+  const cutoff = useMemo(() => periodCutoff(period, now), [period, now]);
+
+  // Computed once for every session across every person, rather than the
+  // previous per-session newRecordsInWorkout() call (which itself re-derives
+  // that person's full record history from scratch each time) — see
+  // recordsPerSession's doc comment in records.ts.
+  const recordsBySession = useMemo(() => recordsPerSession(sessions), [sessions]);
 
   const board = useMemo(() => {
     // Derived from the actual friend list, not from friendSessionsRaw — a
@@ -72,9 +103,9 @@ export function StatsScreen() {
     const friendLabels = labelsForFriends(acceptedFriends);
     const people: Person[] = ['You', ...new Set(friendLabels.values())];
     return people
-      .map((p) => statsFor(sessions, p, PERIOD_DAYS[period], now, weekStart))
-      .sort((a, b) => b.volume - a.volume);
-  }, [sessions, acceptedFriends, period, now, weekStart]);
+      .map((p) => statsFor(sessions, p, cutoff, now, weekStart, recordsBySession))
+      .sort((a, b) => b[sortBy] - a[sortBy]);
+  }, [sessions, acceptedFriends, cutoff, now, weekStart, recordsBySession, sortBy]);
 
   const you = board.find((b) => b.person === 'You')!;
   const friends = board.filter((b) => b.person !== 'You');
@@ -87,7 +118,6 @@ export function StatsScreen() {
     // Also respects the period filter, same as exerciseStatsFor below —
     // otherwise an exercise trained outside the selected window would still
     // show up in this list, just always reading "0"/"—" once selected.
-    const cutoff = PERIOD_DAYS[period] ? now - PERIOD_DAYS[period]! * 86_400_000 : -Infinity;
     const mineIds = new Set<string>();
     const rivalIds = new Set<string>();
     sessions
@@ -101,7 +131,7 @@ export function StatsScreen() {
       .map(exerciseById)
       .filter((e): e is NonNullable<typeof e> => e !== undefined)
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [sessions, rival, period, now]);
+  }, [sessions, rival, cutoff]);
 
   const muscleGroups = useMemo(() => {
     const set = new Set<string>();
@@ -116,18 +146,35 @@ export function StatsScreen() {
   const [showAllExercises, setShowAllExercises] = useState(false);
   const muscle = muscleGroups.includes(selectedMuscle ?? '') ? selectedMuscle! : muscleGroups[0];
 
+  // Keyed by exercise id so the selected exercise's you/rival stats (used
+  // below) are looked up from this same pass instead of being recomputed a
+  // third time from scratch.
+  const exerciseStatsById = useMemo(() => {
+    const map = new Map<string, { you: ReturnType<typeof exerciseStatsFor>; rival: ReturnType<typeof exerciseStatsFor> }>();
+    if (!muscle || !rival) return map;
+    sharedExercises
+      .filter((ex) => MUSCLE_GROUP[ex.body_part] === muscle)
+      .forEach((ex) => {
+        map.set(ex.id, {
+          you: exerciseStatsFor(sessions, 'You', ex.id, cutoff),
+          rival: exerciseStatsFor(sessions, rival.person, ex.id, cutoff),
+        });
+      });
+    return map;
+  }, [sharedExercises, muscle, rival, sessions, cutoff]);
+
   const rankedExercises = useMemo(() => {
     if (!muscle || !rival) return [];
     return sharedExercises
       .filter((ex) => MUSCLE_GROUP[ex.body_part] === muscle)
       .map((ex) => {
-        const y = exerciseStatsFor(sessions, 'You', ex.id, PERIOD_DAYS[period], now);
-        const r = exerciseStatsFor(sessions, rival.person, ex.id, PERIOD_DAYS[period], now);
-        return { ex, combined: y.volume + r.volume };
+        const stats = exerciseStatsById.get(ex.id);
+        const combined = stats ? stats.you.volume + stats.rival.volume : 0;
+        return { ex, combined };
       })
       .sort((a, b) => b.combined - a.combined)
       .map((x) => x.ex);
-  }, [sharedExercises, muscle, rival, sessions, period, now]);
+  }, [sharedExercises, muscle, rival, exerciseStatsById]);
 
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const exerciseId = rankedExercises.some((e) => e.id === selectedExerciseId) ? selectedExerciseId! : rankedExercises[0]?.id;
@@ -135,15 +182,24 @@ export function StatsScreen() {
   const visibleExercises = showAllExercises ? rankedExercises : rankedExercises.slice(0, 5);
   const hiddenCount = rankedExercises.length - visibleExercises.length;
 
-  const youExStats = exercise ? exerciseStatsFor(sessions, 'You', exercise.id, PERIOD_DAYS[period], now) : null;
-  const rivalExStats = exercise && rival ? exerciseStatsFor(sessions, rival.person, exercise.id, PERIOD_DAYS[period], now) : null;
+  const selectedStats = exerciseId ? exerciseStatsById.get(exerciseId) : undefined;
+  const youExStats = selectedStats?.you ?? null;
+  const rivalExStats = selectedStats?.rival ?? null;
+
+  // Same abbreviation everywhere a "volume" head-to-head tile needs a unit
+  // appended, instead of each tile inlining its own (previously
+  // inconsistent — one used uppercase "K", the leaderboard used lowercase).
+  function formatVolumeTile(v: number): string {
+    const { main, abbreviated } = formatTrainingVolume(v);
+    return `${main}${abbreviated ? 'k' : ''} ${units}`;
+  }
 
   return (
     <div className="screen">
       <div className="top top-row">
         <div className="h1" style={{ fontSize: 30 }}>Stats</div>
         <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 9, padding: 3 }}>
-          {(['week', 'month', 'all'] as Period[]).map((p) => (
+          {PERIODS.map((p) => (
             <button
               key={p}
               type="button"
@@ -168,11 +224,21 @@ export function StatsScreen() {
         </div>
       </div>
 
-      <div className="section-h" style={{ marginTop: 4 }}>Leaderboard · volume</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+        <div className="section-h" style={{ margin: 0 }}>Leaderboard · {SORT_LABEL[sortBy].toLowerCase()}</div>
+        <div className="chips">
+          {(Object.keys(SORT_LABEL) as LeaderboardSort[]).map((s) => (
+            <button key={s} className={`chip${sortBy === s ? ' on' : ''}`} aria-pressed={sortBy === s} onClick={() => setSortBy(s)}>
+              {SORT_LABEL[s]}
+            </button>
+          ))}
+        </div>
+      </div>
       {board.map((row, i) => {
         const colors = colorForPerson(row.person);
         const isTop = i === 0;
-        const displayVolume = toDisplayWeight(row.volume, units);
+        const metricParts =
+          sortBy === 'volume' ? formatTrainingVolume(toDisplayWeight(row.volume, units)) : { main: String(row[sortBy]), abbreviated: false };
         return (
           <div
             key={row.person}
@@ -198,8 +264,8 @@ export function StatsScreen() {
               <div className="crew-meta">{row.workouts} WORKOUTS</div>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 19, color: isTop ? 'var(--accent)' : 'var(--ink)', lineHeight: 1 }}>
-              {displayVolume >= 1000 ? `${(displayVolume / 1000).toFixed(1)}` : Math.round(displayVolume)}
-              {displayVolume >= 1000 && <span style={{ fontSize: 10, color: 'var(--faint)' }}>k</span>}
+              {metricParts.main}
+              {metricParts.abbreviated && <span style={{ fontSize: 10, color: 'var(--faint)' }}>k</span>}
             </div>
           </div>
         );
@@ -236,7 +302,7 @@ export function StatsScreen() {
               label="Volume"
               youVal={toDisplayWeight(you.volume, units)}
               rivalVal={toDisplayWeight(rival.volume, units)}
-              format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
+              format={formatVolumeTile}
               rivalColor={colorForPerson(rival.person).bg}
             />
             <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
@@ -322,7 +388,7 @@ export function StatsScreen() {
                       label="Total volume"
                       youVal={toDisplayWeight(youExStats.volume, units)}
                       rivalVal={toDisplayWeight(rivalExStats.volume, units)}
-                      format={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}K ${units}` : `${Math.round(v)} ${units}`)}
+                      format={formatVolumeTile}
                       rivalColor={colorForPerson(rival.person).bg}
                     />
                     <HeadToHeadTile

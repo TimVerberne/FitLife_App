@@ -1,25 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById } from '../lib/exercises';
 import type { Exercise } from '../lib/types';
 import { relativeDate, sortRoutines } from '../lib/records';
+import { useDragReorder } from '../lib/useDragReorder';
 import { Thumb } from '../components/Thumb';
 
 // Same fixed-height-during-drag technique as the exercise reorder in
-// ActiveSessionScreen.tsx — a dragged card's target slot is plain
-// arithmetic on the pointer's Y delta instead of re-measuring
-// variable-height cards after every swap.
+// ActiveSessionScreen.tsx (both go through the shared useDragReorder hook)
+// — a dragged card's target slot is plain arithmetic on the pointer's Y
+// delta instead of re-measuring variable-height cards after every swap.
 const COMPACT_CARD_HEIGHT = 60;
 const COMPACT_GAP = 12;
 const COMPACT_ROW_HEIGHT = COMPACT_CARD_HEIGHT + COMPACT_GAP;
-
-interface DragState {
-  order: number[]; // order[slot] = original sortedRoutines-index now occupying that slot
-  draggingIndex: number; // the original sortedRoutines-index being dragged
-  startSlot: number;
-  startY: number;
-  dy: number;
-}
 
 export function TrainScreen() {
   const routinesRaw = useStore((s) => s.routines);
@@ -41,61 +34,11 @@ export function TrainScreen() {
     return map;
   }, [sessions]);
 
-  const [drag, setDrag] = useState<DragState | null>(null);
-  // See ActiveSessionScreen.tsx for why the reorder commits off this ref
-  // rather than off `drag` (React state) directly — same "setState during
-  // render" pitfall applies here.
-  const dragRef = useRef<DragState | null>(null);
-
-  function startDrag(e: React.PointerEvent, originalIndex: number) {
-    const d: DragState = {
-      order: routines.map((_, i) => i),
-      draggingIndex: originalIndex,
-      startSlot: originalIndex,
-      startY: e.clientY,
-      dy: 0,
-    };
-    dragRef.current = d;
-    setDrag(d);
-  }
-
-  useEffect(() => {
-    if (!drag) return;
-    function onMove(e: PointerEvent) {
-      const d = dragRef.current;
-      if (!d) return;
-      const dy = e.clientY - d.startY;
-      const rawSlot = d.startSlot + dy / COMPACT_ROW_HEIGHT;
-      const targetSlot = Math.max(0, Math.min(d.order.length - 1, Math.round(rawSlot)));
-      const currentSlot = d.order.indexOf(d.draggingIndex);
-      let next = d;
-      if (targetSlot !== currentSlot) {
-        const order = [...d.order];
-        order.splice(currentSlot, 1);
-        order.splice(targetSlot, 0, d.draggingIndex);
-        next = { ...d, order, dy };
-      } else {
-        next = { ...d, dy };
-      }
-      dragRef.current = next;
-      setDrag(next);
-    }
-    function onUp() {
-      const d = dragRef.current;
-      if (d) reorderRoutines(d.order);
-      dragRef.current = null;
-      setDrag(null);
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!drag]);
+  const { drag, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
+    routines.length,
+    COMPACT_ROW_HEIGHT,
+    reorderRoutines,
+  );
 
   return (
     <div className="screen">
@@ -135,8 +78,12 @@ export function TrainScreen() {
       >
       {(drag ? drag.order : routines.map((_, i) => i)).map((ri, slot) => {
         const r = routines[ri];
-        const exercises = r.exerciseIds.map(exerciseById).filter((e): e is Exercise => e !== undefined);
-        const bodyParts = Array.from(new Set(exercises.map((e) => e.target)));
+        // Skipped entirely while dragging — the compact drag view (`!drag &&`
+        // below) never renders this, so mapping every routine's
+        // exerciseIds through exerciseById and rebuilding a body-part Set on
+        // every pointermove-driven re-render was pure wasted work.
+        const exercises = drag ? [] : r.exerciseIds.map(exerciseById).filter((e): e is Exercise => e !== undefined);
+        const bodyParts = drag ? [] : Array.from(new Set(exercises.map((e) => e.target)));
         const last = lastTrained.get(r.id);
         const isDraggingThis = !!drag && ri === drag.draggingIndex;
         const positionStyle: React.CSSProperties | undefined = drag
@@ -185,9 +132,26 @@ export function TrainScreen() {
                 )}
                 <button
                   className="s-drag-handle"
-                  aria-label={`Reorder ${r.name}`}
+                  aria-label={`Reorder ${r.name}. Press Enter to pick up, arrow keys to move, Enter again to drop.`}
                   onClick={(e) => e.stopPropagation()}
                   onPointerDown={(e) => startDrag(e, ri)}
+                  onKeyDown={(e) => {
+                    const isActive = drag?.draggingIndex === ri;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      if (isActive) confirmKeyboardReorder();
+                      else startKeyboardReorder(ri);
+                    } else if (isActive && e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      moveKeyboardSlot(-1);
+                    } else if (isActive && e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      moveKeyboardSlot(1);
+                    } else if (isActive && e.key === 'Escape') {
+                      e.preventDefault();
+                      cancelKeyboardReorder();
+                    }
+                  }}
                 >
                   ⠿
                 </button>
@@ -206,6 +170,26 @@ export function TrainScreen() {
                       style={{ width: 34, height: 34, borderRadius: 8, marginLeft: i === 0 ? 0 : -6, border: '2px solid var(--surface)' }}
                     />
                   ))}
+                  {exercises.length > 5 && (
+                    <div
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 8,
+                        marginLeft: -6,
+                        border: '2px solid var(--surface)',
+                        background: 'var(--surface-2)',
+                        color: 'var(--faint)',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        fontFamily: 'var(--font-display)',
+                      }}
+                    >
+                      +{exercises.length - 5}
+                    </div>
+                  )}
                 </div>
                 <div className="tag-row">
                   {bodyParts.slice(0, 2).map((bp, i) => (

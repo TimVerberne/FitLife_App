@@ -4,6 +4,7 @@ import { ACCENT_PRESETS, type AccentPreset } from '../../lib/settings';
 import { REST_PRESETS, formatRest } from '../../lib/rest';
 import { useAuthState, signOut } from '../../lib/auth';
 import { enableNudges, disableNudges, isPushCapable } from '../../lib/pushNudges';
+import { fetchOwnProfile, updateOwnDisplayName } from '../../lib/friends';
 
 const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -20,11 +21,43 @@ export function SettingsSheet() {
   const updateSettings = useStore((s) => s.updateSettings);
   const exportData = useStore((s) => s.exportData);
   const importData = useStore((s) => s.importData);
+  const importing = useStore((s) => s.importing);
   const clearAllData = useStore((s) => s.clearAllData);
   const deleteAccount = useStore((s) => s.deleteAccount);
+  const showToast = useStore((s) => s.showToast);
   const fileRef = useRef<HTMLInputElement>(null);
   const { email } = useAuthState();
   const [pushError, setPushError] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [savedDisplayName, setSavedDisplayName] = useState<string | null>(null);
+  const [savingName, setSavingName] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOwnProfile()
+      .then((profile) => {
+        if (cancelled || !profile) return;
+        setDisplayName(profile.displayName ?? '');
+        setSavedDisplayName(profile.displayName ?? '');
+      })
+      .catch((err: unknown) => console.error('Failed to load display name', err));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function saveDisplayName() {
+    setSavingName(true);
+    try {
+      await updateOwnDisplayName(displayName);
+      setSavedDisplayName(displayName.trim());
+    } catch (err) {
+      console.error('Failed to save display name', err);
+      showToast("Couldn't save — try again");
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   const pushCapable = isPushCapable();
   const pushBlocked = pushCapable && typeof Notification !== 'undefined' && Notification.permission === 'denied';
@@ -84,7 +117,27 @@ export function SettingsSheet() {
           <div className="settings-row-desc">{email}</div>
         </div>
       </div>
-      <button className="btn sec" onClick={() => void signOut()}>
+      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+        <div className="settings-row-label">Display name</div>
+        <div className="settings-row-desc">Shown to friends instead of your email username.</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={displayName}
+            placeholder="Not set"
+            style={{ flex: 1 }}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+          <button
+            className="btn sec"
+            style={{ width: 'auto', padding: '0 14px' }}
+            disabled={savingName || displayName.trim() === (savedDisplayName ?? '')}
+            onClick={saveDisplayName}
+          >
+            {savingName ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+      <button className="btn sec" style={{ marginTop: 8 }} onClick={() => void signOut()}>
         Sign out
       </button>
 
@@ -94,10 +147,10 @@ export function SettingsSheet() {
       <div className="settings-row">
         <div className="settings-row-label">Weight unit</div>
         <div className="seg" style={{ width: 110 }}>
-          <button className={settings.units === 'kg' ? 'on' : ''} onClick={() => updateSettings({ units: 'kg' })}>
+          <button aria-pressed={settings.units === 'kg'} className={settings.units === 'kg' ? 'on' : ''} onClick={() => updateSettings({ units: 'kg' })}>
             Kg
           </button>
-          <button className={settings.units === 'lb' ? 'on' : ''} onClick={() => updateSettings({ units: 'lb' })}>
+          <button aria-pressed={settings.units === 'lb'} className={settings.units === 'lb' ? 'on' : ''} onClick={() => updateSettings({ units: 'lb' })}>
             Lb
           </button>
         </div>
@@ -105,10 +158,18 @@ export function SettingsSheet() {
       <div className="settings-row">
         <div className="settings-row-label">Week starts on</div>
         <div className="seg" style={{ width: 130 }}>
-          <button className={settings.weekStart === 'mon' ? 'on' : ''} onClick={() => updateSettings({ weekStart: 'mon' })}>
+          <button
+            aria-pressed={settings.weekStart === 'mon'}
+            className={settings.weekStart === 'mon' ? 'on' : ''}
+            onClick={() => updateSettings({ weekStart: 'mon' })}
+          >
             Mon
           </button>
-          <button className={settings.weekStart === 'sun' ? 'on' : ''} onClick={() => updateSettings({ weekStart: 'sun' })}>
+          <button
+            aria-pressed={settings.weekStart === 'sun'}
+            className={settings.weekStart === 'sun' ? 'on' : ''}
+            onClick={() => updateSettings({ weekStart: 'sun' })}
+          >
             Sun
           </button>
         </div>
@@ -118,12 +179,17 @@ export function SettingsSheet() {
       <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
         <div className="settings-row-label">Default rest timer</div>
         <div className="rest-menu-grid" style={{ marginBottom: 0 }}>
-          <button className={`rest-chip${settings.defaultRestSeconds === null ? ' on' : ''}`} onClick={() => updateSettings({ defaultRestSeconds: null })}>
+          <button
+            aria-pressed={settings.defaultRestSeconds === null}
+            className={`rest-chip${settings.defaultRestSeconds === null ? ' on' : ''}`}
+            onClick={() => updateSettings({ defaultRestSeconds: null })}
+          >
             Off
           </button>
           {REST_PRESETS.map((s) => (
             <button
               key={s}
+              aria-pressed={settings.defaultRestSeconds === s}
               className={`rest-chip${settings.defaultRestSeconds === s ? ' on' : ''}`}
               onClick={() => updateSettings({ defaultRestSeconds: s })}
             >
@@ -136,7 +202,12 @@ export function SettingsSheet() {
         <div className="settings-row-label">Open to tab</div>
         <div className="seg">
           {TAB_OPTIONS.map((t) => (
-            <button key={t.id} className={settings.defaultTab === t.id ? 'on' : ''} onClick={() => updateSettings({ defaultTab: t.id })}>
+            <button
+              key={t.id}
+              aria-pressed={settings.defaultTab === t.id}
+              className={settings.defaultTab === t.id ? 'on' : ''}
+              onClick={() => updateSettings({ defaultTab: t.id })}
+            >
               {t.label}
             </button>
           ))}
@@ -209,10 +280,10 @@ export function SettingsSheet() {
       <div className="settings-row">
         <div className="settings-row-label">Theme</div>
         <div className="seg" style={{ width: 110 }}>
-          <button className={settings.theme === 'dark' ? 'on' : ''} onClick={() => updateSettings({ theme: 'dark' })}>
+          <button aria-pressed={settings.theme === 'dark'} className={settings.theme === 'dark' ? 'on' : ''} onClick={() => updateSettings({ theme: 'dark' })}>
             Dark
           </button>
-          <button className={settings.theme === 'light' ? 'on' : ''} onClick={() => updateSettings({ theme: 'light' })}>
+          <button aria-pressed={settings.theme === 'light'} className={settings.theme === 'light' ? 'on' : ''} onClick={() => updateSettings({ theme: 'light' })}>
             Light
           </button>
         </div>
@@ -245,8 +316,8 @@ export function SettingsSheet() {
       <button className="btn sec" onClick={exportData}>
         Export data
       </button>
-      <button className="btn sec" style={{ marginTop: 8 }} onClick={() => fileRef.current?.click()}>
-        Import data
+      <button className="btn sec" style={{ marginTop: 8 }} disabled={importing} onClick={() => fileRef.current?.click()}>
+        {importing ? 'Reading file…' : 'Import data'}
       </button>
       <input
         ref={fileRef}
@@ -264,17 +335,19 @@ export function SettingsSheet() {
           e.target.value = '';
         }}
       />
-      <button className="btn danger" style={{ marginTop: 8 }} onClick={clearAllData}>
-        Clear all data
-      </button>
-
       <div className="section-h">Danger zone</div>
       <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>
-        Permanently deletes your account, not just your data. This can't be undone.
+        Both actions below are permanent and can't be undone.
       </div>
-      <button className="btn danger" onClick={deleteAccount}>
+      <button className="btn danger" onClick={clearAllData}>
+        Clear all data
+      </button>
+      <button className="btn danger" style={{ marginTop: 8 }} onClick={deleteAccount}>
         Delete account
       </button>
+      <div className="settings-row-desc" style={{ padding: '8px 2px 0' }}>
+        "Delete account" permanently removes your account itself, not just its data.
+      </div>
 
       <div className="section-h">About</div>
       <div style={{ fontSize: 12, color: 'var(--faint)', lineHeight: 1.6, padding: '0 2px 6px' }}>

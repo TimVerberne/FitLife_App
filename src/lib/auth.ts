@@ -8,6 +8,11 @@ export interface AuthState {
   status: AuthStatus;
   userId: string | null;
   email: string | null;
+  // Real account signup date (Supabase auth's own created_at), not derived
+  // from local data — a "member since" label built from the oldest workout
+  // instead is wrong for anyone who's imported historical data (the app's
+  // own Hevy CSV import feature encourages exactly that).
+  createdAt: string | null;
 }
 
 function redirectUrl(): string {
@@ -66,6 +71,7 @@ export function useAuthState(): AuthState {
     status: recoveryActive ? 'recovery' : 'checking',
     userId: null,
     email: null,
+    createdAt: null,
   }));
 
   useEffect(() => {
@@ -76,6 +82,7 @@ export function useAuthState(): AuthState {
         status: recoveryActive ? 'recovery' : session ? 'signedIn' : 'signedOut',
         userId: session?.user.id ?? null,
         email: session?.user.email ?? null,
+        createdAt: session?.user.created_at ?? null,
       });
     }
 

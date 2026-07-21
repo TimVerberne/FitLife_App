@@ -47,7 +47,14 @@ export function LifeScreen() {
 
           {/* No TapIcon here — the "Edit" button already sits in this card's
               top-right corner and would visually collide with it. */}
-          <div className="card" style={{ marginTop: 16, cursor: 'pointer' }} onClick={openProfileDetail}>
+          <div
+            className="card"
+            style={{ marginTop: 16, cursor: 'pointer' }}
+            role="button"
+            tabIndex={0}
+            onClick={openProfileDetail}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openProfileDetail()}
+          >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="section-h" style={{ margin: 0 }}>
                 Profile
@@ -59,6 +66,7 @@ export function LifeScreen() {
                   e.stopPropagation();
                   setEditing(true);
                 }}
+                onKeyDown={(e) => e.stopPropagation()}
               >
                 Edit
               </button>

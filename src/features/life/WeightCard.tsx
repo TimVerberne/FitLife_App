@@ -1,14 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, rollingAverage, seriesFor, trendDelta } from '../../lib/bodyMetrics';
+import { latestValue, rollingAverage, seriesFor, todayIso, trendDelta } from '../../lib/bodyMetrics';
 import { periodCutoff, type StatPeriod } from '../../lib/records';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { PeriodPicker } from '../../components/PeriodPicker';
 import { ProgressChart, type ChartPoint } from '../../components/ProgressChart';
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 export function WeightCard() {
   const bodyLog = useStore((s) => s.bodyLog);
@@ -20,6 +16,7 @@ export function WeightCard() {
   const today = todayIso();
   const todayEntry = bodyLog.find((e) => e.loggedOn === today);
   const [inputValue, setInputValue] = useState('');
+  const [logDate, setLogDate] = useState(today);
 
   const fullSeries = useMemo(() => seriesFor(bodyLog, 'weightKg'), [bodyLog]);
   const latestKg = latestValue(fullSeries);
@@ -37,7 +34,7 @@ export function WeightCard() {
   function save() {
     const parsed = Number(inputValue);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
-    logBodyMetrics({ loggedOn: today, weightKg: fromDisplayWeight(parsed, units) });
+    logBodyMetrics({ loggedOn: logDate, weightKg: fromDisplayWeight(parsed, units) });
     setLogging(false);
   }
 
@@ -46,7 +43,10 @@ export function WeightCard() {
   // looked like when the card first rendered, going stale if bodyLog is
   // still loading in (e.g. a cloud fetch resolving after mount).
   function toggleLogging() {
-    if (!logging) setInputValue(todayEntry?.weightKg != null ? String(toDisplayWeight(todayEntry.weightKg, units)) : '');
+    if (!logging) {
+      setInputValue(todayEntry?.weightKg != null ? String(toDisplayWeight(todayEntry.weightKg, units)) : '');
+      setLogDate(today);
+    }
     setLogging((v) => !v);
   }
 
@@ -82,6 +82,7 @@ export function WeightCard() {
 
       {logging && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <input type="date" value={logDate} max={today} onChange={(e) => setLogDate(e.target.value)} style={{ flex: 'none' }} />
           <input
             type="number"
             inputMode="decimal"

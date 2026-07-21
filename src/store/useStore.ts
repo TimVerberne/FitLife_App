@@ -44,6 +44,7 @@ export interface ImportPreview {
 applyTheme(loadSettings());
 
 export interface FinishResult {
+  sessionId: string;
   entries: SessionEntry[];
   durationMin: number;
   name: string;
@@ -118,6 +119,10 @@ interface StoreState {
   pickQuery: string;
   pickBodyPart: string;
   importPreview: ImportPreview | null;
+  // True while importData() is reading/parsing the selected file — the CSV
+  // path in particular runs an O(rows × exercises) fuzzy match that can take
+  // a visible moment on a large export, with no other UI feedback otherwise.
+  importing: boolean;
   pickSelected: Set<string>;
   // Non-null while the picker was opened from a past workout being edited
   // (openPickerForHistory) rather than from an in-progress session — tells
@@ -182,6 +187,7 @@ interface StoreState {
   openRoutineActions(id: string): void;
   renameRoutine(id: string, name: string): void;
   deleteRoutine(id: string): void;
+  duplicateRoutine(id: string): void;
   reorderRoutines(order: number[]): void;
   closeSheet(): void;
   setPickQuery(q: string): void;
@@ -235,8 +241,10 @@ interface StoreState {
   logBodyMetrics(patch: Partial<BodyLogEntry> & { loggedOn: string }): void;
   addWater(ml: number): void;
   clearWaterToday(): void;
+  deleteWaterEntry(id: string): void;
   addCalories(kcal: number): void;
   clearCaloriesToday(): void;
+  deleteCalorieEntry(id: string): void;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -326,6 +334,7 @@ export const useStore = create<StoreState>((set, get) => ({
   pickSelected: new Set(),
   pickerTargetSessionId: null,
   importPreview: null,
+  importing: false,
 
   dialog: null,
   toastMsg: '',
@@ -671,7 +680,16 @@ export const useStore = create<StoreState>((set, get) => ({
       active: null,
       mode: 'finish',
       restTimer: null,
-      finishResult: { entries, durationMin, name: active.name, exerciseIds, newRoutine, routineId: active.routineId, routineChanged },
+      finishResult: {
+        sessionId: newSession.id,
+        entries,
+        durationMin,
+        name: active.name,
+        exerciseIds,
+        newRoutine,
+        routineId: active.routineId,
+        routineChanged,
+      },
     }));
   },
 
@@ -732,6 +750,19 @@ export const useStore = create<StoreState>((set, get) => ({
       set((s) => ({ routines: s.routines.filter((r) => r.id !== id), sheet: null }));
       get().showToast('Routine deleted');
     }, true);
+  },
+
+  duplicateRoutine(id) {
+    const source = get().routines.find((r) => r.id === id);
+    if (!source) return;
+    // No explicit sortOrder — falls back to createdAt (see sortRoutines),
+    // which naturally places the copy at the end of the list, same as any
+    // other freshly-created routine.
+    const copy: Routine = { id: crypto.randomUUID(), name: `${source.name} copy`, exerciseIds: [...source.exerciseIds], createdAt: Date.now() };
+    void db.routines.add(copy);
+    void cloudSync.pushRoutine(copy);
+    set((s) => ({ routines: [...s.routines, copy], sheet: null }));
+    get().showToast('Routine duplicated');
   },
 
   // `order[i]` is the displayed-list index (per sortRoutines, same ordering
@@ -1024,6 +1055,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   importData(file) {
+    set({ importing: true });
     file
       .text()
       .then((text) => {
@@ -1065,7 +1097,8 @@ export const useStore = create<StoreState>((set, get) => ({
           get().showToast(`Skipped ${skipped} item${skipped === 1 ? '' : 's'} that can't be imported`);
         }
       })
-      .catch(() => get().showToast('Could not read that file'));
+      .catch(() => get().showToast('Could not read that file'))
+      .finally(() => set({ importing: false }));
   },
 
   confirmImport() {
@@ -1419,6 +1452,14 @@ export const useStore = create<StoreState>((set, get) => ({
     todayIds.forEach((id) => void bodySync.deleteWaterLogEntryRemote(id));
   },
 
+  // Fixes a single mis-logged entry (e.g. "500" fat-fingered as "5000")
+  // without wiping the whole day the way clearWaterToday() does.
+  deleteWaterEntry(id) {
+    set((s) => ({ waterLog: s.waterLog.filter((e) => e.id !== id) }));
+    void db.waterLog.delete(id);
+    void bodySync.deleteWaterLogEntryRemote(id);
+  },
+
   addCalories(kcal) {
     const entry: CalorieLogEntry = {
       id: crypto.randomUUID(),
@@ -1438,6 +1479,13 @@ export const useStore = create<StoreState>((set, get) => ({
     set((s) => ({ calorieLog: s.calorieLog.filter((e) => e.loggedOn !== today) }));
     void db.calorieLog.bulkDelete(todayIds);
     todayIds.forEach((id) => void bodySync.deleteCalorieLogEntryRemote(id));
+  },
+
+  // Same as deleteWaterEntry — fixes one entry without wiping the whole day.
+  deleteCalorieEntry(id) {
+    set((s) => ({ calorieLog: s.calorieLog.filter((e) => e.id !== id) }));
+    void db.calorieLog.delete(id);
+    void bodySync.deleteCalorieLogEntryRemote(id);
   },
 }));
 
@@ -1471,10 +1519,41 @@ onSignedOut(() => {
 // deletes the record) instead of requiring every action that touches it to
 // remember to persist — a single place that can't be missed as new
 // active-session actions get added later.
+//
+// Writes are debounced (not deletes — those fire immediately, see below) —
+// typing a weight/reps value commits per keystroke via setVal(), so without
+// this, typing "125" would fire three separate IndexedDB writes. A pending
+// write is flushed early if the tab is about to be hidden/evicted, so a
+// backgrounded PWA getting killed (iOS does this aggressively) can't lose
+// the last <400ms of edits the debounce alone would otherwise risk.
 let lastPersistedActive: ActiveSession | null = null;
+let persistTimer: ReturnType<typeof setTimeout> | undefined;
+let pendingActive: ActiveSession | null = null;
+
+function flushPendingActivePersist() {
+  if (!persistTimer) return;
+  clearTimeout(persistTimer);
+  persistTimer = undefined;
+  if (pendingActive) void db.activeSession.put({ id: 'current', ...pendingActive });
+  pendingActive = null;
+}
+
 useStore.subscribe((state) => {
   if (state.active === lastPersistedActive) return;
   lastPersistedActive = state.active;
-  if (state.active) void db.activeSession.put({ id: 'current', ...state.active });
-  else void db.activeSession.delete('current');
+  if (persistTimer) clearTimeout(persistTimer);
+  if (!state.active) {
+    persistTimer = undefined;
+    pendingActive = null;
+    void db.activeSession.delete('current');
+    return;
+  }
+  pendingActive = state.active;
+  persistTimer = setTimeout(flushPendingActivePersist, 400);
 });
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushPendingActivePersist();
+  });
+}

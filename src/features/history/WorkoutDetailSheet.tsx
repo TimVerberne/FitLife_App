@@ -98,6 +98,7 @@ export function WorkoutDetailSheet() {
                         <NumberField
                           value={Math.round((s.durationSec ?? 0) / 60)}
                           inputMode="numeric"
+                          ariaLabel={`Set ${si + 1} minutes`}
                           onCommit={(n) => updateHistorySet(session.id, i, si, 'durationSec', n * 60)}
                         />
                       </div>
@@ -106,6 +107,7 @@ export function WorkoutDetailSheet() {
                         <NumberField
                           value={s.distanceKm ?? 0}
                           inputMode="decimal"
+                          ariaLabel={`Set ${si + 1} distance in kilometers`}
                           onCommit={(n) => updateHistorySet(session.id, i, si, 'distanceKm', n)}
                         />
                       </div>
@@ -120,12 +122,18 @@ export function WorkoutDetailSheet() {
                         <NumberField
                           value={toDisplayWeight(s.weight, units)}
                           inputMode="decimal"
+                          ariaLabel={`Set ${si + 1} weight in ${units}`}
                           onCommit={(n) => updateHistorySet(session.id, i, si, 'weight', fromDisplayWeight(n, units))}
                         />
                       </div>
                       <span className="hist-edit-x">{units} ×</span>
                       <div className="set-fld">
-                        <NumberField value={s.reps} inputMode="numeric" onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)} />
+                        <NumberField
+                          value={s.reps}
+                          inputMode="numeric"
+                          ariaLabel={`Set ${si + 1} reps`}
+                          onCommit={(n) => updateHistorySet(session.id, i, si, 'reps', n)}
+                        />
                       </div>
                       <button className="s-del" aria-label={`Remove set ${si + 1}`} onClick={() => removeHistorySet(session.id, i, si)}>
                         ✕

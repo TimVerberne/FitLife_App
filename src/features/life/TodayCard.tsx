@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
-import { calorieTarget, calorieTargetFromKcal, macros } from '../../lib/nutrition';
-import { calibrate } from '../../lib/calibration';
+import { todayIso } from '../../lib/bodyMetrics';
+import { useNutritionPlan } from '../../lib/useNutritionPlan';
 import { ProgressRing } from '../../components/ProgressRing';
 import { BarChart } from '../../components/BarChart';
 import { TapIcon } from '../../components/TapIcon';
@@ -19,14 +18,17 @@ const GOAL_VERB: Record<'lose' | 'maintain' | 'gain', string> = {
 const FAT_COLOR = '#f2994a';
 const CARB_COLOR = '#5b8def';
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function MacroTile({ label, grams, max, color, onOpen }: { label: string; grams: number; max: number; color: string; onOpen: () => void }) {
   const pct = max > 0 ? (grams / max) * 100 : 0;
   return (
-    <div className="stat-tile" style={{ textAlign: 'left', padding: '10px 12px', position: 'relative', cursor: 'pointer' }} onClick={onOpen}>
+    <div
+      className="stat-tile"
+      style={{ textAlign: 'left', padding: '10px 12px', position: 'relative', cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+    >
       <TapIcon size={10} style={{ top: 6, right: 6 }} />
       <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 18 }}>
         {Math.round(grams)}
@@ -53,6 +55,7 @@ export function TodayCard() {
   const calorieLog = useStore((s) => s.calorieLog);
   const addCalories = useStore((s) => s.addCalories);
   const clearCaloriesToday = useStore((s) => s.clearCaloriesToday);
+  const deleteCalorieEntry = useStore((s) => s.deleteCalorieEntry);
   const confirm = useStore((s) => s.confirm);
   const openNutritionDetail = useStore((s) => s.openNutritionDetail);
   const openMacrosDetail = useStore((s) => s.openMacrosDetail);
@@ -60,36 +63,27 @@ export function TodayCard() {
   const today = todayIso();
   const [inputValue, setInputValue] = useState('');
 
-  const latestWeightKg = latestValue(seriesFor(bodyLog, 'weightKg'));
-  const latestBodyFatPct = latestValue(seriesFor(bodyLog, 'bodyFatPct'));
-  const age = bodyProfile.birthYear ? new Date().getFullYear() - bodyProfile.birthYear : null;
   const loggedWeightToday = bodyLog.some((e) => e.loggedOn === today && e.weightKg != null);
 
-  const plan = useMemo(() => {
-    if (!latestWeightKg || !bodyProfile.heightCm || !age || !bodyProfile.sexAtBirth) return null;
-    const calories =
-      bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null
-        ? calorieTargetFromKcal(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.manualKcalTarget)
-        : calorieTarget(latestWeightKg, bodyProfile.heightCm, age, bodyProfile.sexAtBirth, bodyProfile.activity, bodyProfile.goal, bodyProfile.rateKgWeek);
-    const macroResult = macros(latestWeightKg, latestBodyFatPct, calories.target, calories.effectiveGoal, calories.effectiveRateKgWeek);
-    const predictedRateKgWeek =
-      calories.effectiveGoal === 'lose' ? -calories.effectiveRateKgWeek : calories.effectiveGoal === 'gain' ? calories.effectiveRateKgWeek : 0;
-    const calibration = calibrate(bodyLog, predictedRateKgWeek, calories.target);
-    return { calories, macroResult, calibration, predictedRateKgWeek };
-  }, [latestWeightKg, latestBodyFatPct, bodyProfile, age, bodyLog]);
+  const plan = useNutritionPlan();
 
   // Filtering calorieLog to today's date is the entire "reset" mechanism —
   // a new day is just a loggedOn value with nothing logged against it yet,
   // same as every other "today" check throughout this feature.
-  const todayKcal = useMemo(() => calorieLog.filter((e) => e.loggedOn === today).reduce((a, e) => a + e.amountKcal, 0), [calorieLog, today]);
+  const todayEntries = useMemo(() => calorieLog.filter((e) => e.loggedOn === today), [calorieLog, today]);
+  const todayKcal = todayEntries.reduce((a, e) => a + e.amountKcal, 0);
 
   const last7 = useMemo(() => {
+    // Bucketed once (one pass over the whole log), then looked up per day —
+    // filtering calorieLog fresh for each of the 7 days was O(7n) and only
+    // gets more expensive as the log grows over months of use.
+    const totalsByDay = new Map<string, number>();
+    calorieLog.forEach((e) => totalsByDay.set(e.loggedOn, (totalsByDay.get(e.loggedOn) ?? 0) + e.amountKcal));
     const days: WeekBucket[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000);
       const iso = d.toISOString().slice(0, 10);
-      const total = calorieLog.filter((e) => e.loggedOn === iso).reduce((a, e) => a + e.amountKcal, 0);
-      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: total });
+      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: totalsByDay.get(iso) ?? 0 });
     }
     return days;
   }, [calorieLog]);
@@ -130,7 +124,10 @@ export function TodayCard() {
 
       <div
         style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12, position: 'relative', cursor: 'pointer' }}
+        role="button"
+        tabIndex={0}
         onClick={openNutritionDetail}
+        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openNutritionDetail()}
       >
         <TapIcon />
         <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
@@ -171,6 +168,23 @@ export function TodayCard() {
           Add
         </button>
       </div>
+
+      {todayEntries.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {todayEntries.map((e) => (
+            <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--faint)' }}>{Math.round(e.amountKcal)} kcal</span>
+              <button
+                aria-label="Delete this entry"
+                onClick={() => deleteCalorieEntry(e.id)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--faint)', fontSize: 15, lineHeight: 1, padding: '2px 4px', cursor: 'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {todayKcal > 0 && (
         <button

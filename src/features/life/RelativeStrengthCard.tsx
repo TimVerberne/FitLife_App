@@ -53,7 +53,10 @@ export function RelativeStrengthCard({
     <div
       className="card"
       style={{ marginTop: 16, position: 'relative', cursor: onOpen ? 'pointer' : undefined }}
+      role={onOpen ? 'button' : undefined}
+      tabIndex={onOpen ? 0 : undefined}
       onClick={onOpen}
+      onKeyDown={onOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && onOpen() : undefined}
     >
       {onOpen && <TapIcon />}
       <div className="section-h" style={{ margin: 0 }}>

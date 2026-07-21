@@ -66,6 +66,18 @@ export function fromDisplayVolume(value: number, units: Units): number {
   return units === 'lb' ? value / ML_TO_FLOZ : value;
 }
 
+// Abbreviates an already-unit-converted training-volume number (kg or lb
+// lifted) the same way everywhere it's summarized — Home's stat tile and
+// Stats' leaderboard/head-to-head tiles each rolled their own version of
+// this with different decimal precision and k/K casing; centralizing it
+// keeps the "how big is this number" reading consistent across screens the
+// user moves between in one tap. Caller decides whether/how to render the
+// `k` suffix (inline, smaller font, with a unit label, etc.).
+export function formatTrainingVolume(displayValue: number): { main: string; abbreviated: boolean } {
+  if (displayValue >= 1000) return { main: (displayValue / 1000).toFixed(1), abbreviated: true };
+  return { main: String(Math.round(displayValue)), abbreviated: false };
+}
+
 export function formatVolume(ml: number, units: Units): string {
   if (units !== 'lb' && ml >= 1000) {
     return `${(ml / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })} L`;

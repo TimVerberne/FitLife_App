@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor, todayIso } from '../../lib/bodyMetrics';
+import { periodCutoff, type StatPeriod } from '../../lib/records';
+import { PeriodPicker } from '../../components/PeriodPicker';
 import { ProgressChart, type ChartPoint } from '../../components/ProgressChart';
 import type { BodyLogEntry } from '../../lib/types';
 
@@ -10,19 +12,20 @@ const FIELDS: { key: keyof Pick<BodyLogEntry, 'sleepHours' | 'restingHr' | 'ener
   { key: 'energy', label: 'Energy', unit: '/5', placeholder: '1-5', min: 1, max: 5 },
 ];
 
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
   const bodyLog = useStore((s) => s.bodyLog);
   const logBodyMetrics = useStore((s) => s.logBodyMetrics);
+  const today = todayIso();
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [logDate, setLogDate] = useState(today);
+  const [period, setPeriod] = useState<StatPeriod>('month');
 
   const series = useMemo(() => seriesFor(bodyLog, field.key), [bodyLog, field.key]);
   const latest = latestValue(series);
-  const points: ChartPoint[] = series;
+  const cutoff = periodCutoff(period);
+  const points: ChartPoint[] = useMemo(() => series.filter((p) => p.ts >= cutoff), [series, cutoff]);
+  const panelId = `wellness-panel-${field.key}`;
 
   function save() {
     const parsed = Number(inputValue);
@@ -31,13 +34,16 @@ function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
     // rounding alone let a value like "0.4" (passes the `> 0` check above)
     // round down to 0, one below the documented 1-5 range.
     const value = field.max ? Math.min(field.max, Math.max(field.min ?? 1, Math.round(parsed))) : parsed;
-    logBodyMetrics({ loggedOn: todayIso(), [field.key]: value });
+    logBodyMetrics({ loggedOn: logDate, [field.key]: value });
     setInputValue('');
+    setLogDate(today);
   }
 
   return (
     <div style={{ borderTop: '1px solid var(--line)', paddingTop: 10, marginTop: 10 }}>
       <button
+        aria-expanded={expanded}
+        aria-controls={panelId}
         onClick={() => setExpanded((v) => !v)}
         style={{
           width: '100%',
@@ -59,8 +65,9 @@ function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
       </button>
 
       {expanded && (
-        <div style={{ marginTop: 8 }}>
+        <div id={panelId} style={{ marginTop: 8 }}>
           <div style={{ display: 'flex', gap: 8 }}>
+            <input type="date" value={logDate} max={today} onChange={(e) => setLogDate(e.target.value)} style={{ flex: 'none' }} />
             <input
               type="number"
               inputMode="decimal"
@@ -75,12 +82,17 @@ function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
               Log
             </button>
           </div>
-          {points.length >= 2 && (
-            <ProgressChart
-              points={points}
-              formatValue={(v) => `${Math.round(v * 10) / 10}${field.unit}`}
-              formatDate={(ts) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
-            />
+          {series.length >= 2 && (
+            <>
+              <div style={{ marginTop: 10 }}>
+                <PeriodPicker value={period} onChange={setPeriod} />
+              </div>
+              <ProgressChart
+                points={points}
+                formatValue={(v) => `${Math.round(v * 10) / 10}${field.unit}`}
+                formatDate={(ts) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+              />
+            </>
           )}
         </div>
       )}

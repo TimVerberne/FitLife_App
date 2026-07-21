@@ -24,16 +24,39 @@ export function bodyParts(): string[] {
   return Array.from(parts).sort();
 }
 
+// Lower is more relevant. Matching only via target/equipment/body_part
+// (not the exercise's own name) ranks last — those exist so "shoulder"
+// finds every shoulder-target exercise even when the word isn't in the
+// name, without letting a metadata-only match outrank a real name match.
+function nameMatchRank(name: string, q: string): number {
+  if (name === q) return 0;
+  if (name.startsWith(q)) return 1;
+  if (name.includes(q)) return 2;
+  return 3;
+}
+
 export function searchExercises(query: string, bodyPart: string): Exercise[] {
   const q = query.trim().toLowerCase();
-  return EXERCISES.filter((e) => {
+  const filtered = EXERCISES.filter((e) => {
     const matchesBp =
       bodyPart === 'all'
         ? true
         : bodyPart === 'biceps' || bodyPart === 'triceps'
           ? e.body_part === 'upper arms' && e.target === bodyPart
           : e.body_part === bodyPart;
-    const matchesQ = !q || e.name.toLowerCase().includes(q);
-    return matchesBp && matchesQ;
+    if (!matchesBp) return false;
+    if (!q) return true;
+    const name = e.name.toLowerCase();
+    return (
+      name.includes(q) ||
+      e.target.toLowerCase().includes(q) ||
+      e.equipment.toLowerCase().includes(q) ||
+      e.body_part.toLowerCase().includes(q)
+    );
+  });
+  if (!q) return filtered;
+  return [...filtered].sort((a, b) => {
+    const r = nameMatchRank(a.name.toLowerCase(), q) - nameMatchRank(b.name.toLowerCase(), q);
+    return r !== 0 ? r : a.name.localeCompare(b.name);
   });
 }

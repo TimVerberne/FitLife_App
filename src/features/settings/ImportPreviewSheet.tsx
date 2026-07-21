@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { formatDuration, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { toDisplayWeight } from '../../lib/units';
-
-const COLLAPSED_COUNT = 5;
+import { useCollapsedList } from '../../lib/useCollapsedList';
+import { ShowMoreButton } from '../../components/ShowMoreButton';
 
 export function ImportPreviewSheet() {
   const preview = useStore((s) => s.importPreview);
@@ -11,23 +11,20 @@ export function ImportPreviewSheet() {
   const confirmImport = useStore((s) => s.confirmImport);
   const cancelImportPreview = useStore((s) => s.cancelImportPreview);
 
-  const [showAllRoutines, setShowAllRoutines] = useState(false);
-  const [showAllSessions, setShowAllSessions] = useState(false);
-
   // Most recent workout first, matching how history reads everywhere else in the app.
   const sessionsNewestFirst = useMemo(
     () => (preview ? [...preview.sessions].sort((a, b) => b.startedAt - a.startedAt) : []),
     [preview],
   );
 
+  const routinesList = useCollapsedList(preview?.routines ?? []);
+  const sessionsList = useCollapsedList(sessionsNewestFirst);
+
   if (!preview) return null;
   const { routines, sessions, unmatchedNames, isCsv } = preview;
 
   const totalSets = sessions.reduce((a, s) => a + setsCountOf(s.entries), 0);
   const totalVolume = sessions.reduce((a, s) => a + volumeOf(s.entries), 0);
-
-  const visibleRoutines = showAllRoutines ? routines : routines.slice(0, COLLAPSED_COUNT);
-  const visibleSessions = showAllSessions ? sessionsNewestFirst : sessionsNewestFirst.slice(0, COLLAPSED_COUNT);
 
   return (
     <div className="sheet-in">
@@ -62,7 +59,7 @@ export function ImportPreviewSheet() {
       <div className="section-h" style={{ marginTop: 18 }}>
         Routines ({routines.length})
       </div>
-      {visibleRoutines.map((r) => (
+      {routinesList.visible.map((r) => (
         <div className="hist-row" key={r.id}>
           <div className="hist-b">
             <div className="hist-name">{r.name}</div>
@@ -70,16 +67,12 @@ export function ImportPreviewSheet() {
           </div>
         </div>
       ))}
-      {routines.length > COLLAPSED_COUNT && (
-        <button className="feed-more" onClick={() => setShowAllRoutines((v) => !v)}>
-          {showAllRoutines ? 'Show less' : `Show ${routines.length - COLLAPSED_COUNT} more`}
-        </button>
-      )}
+      <ShowMoreButton hiddenCount={routinesList.hiddenCount} expanded={routinesList.expanded} onToggle={routinesList.toggle} />
 
       <div className="section-h" style={{ marginTop: 14 }}>
         Workout history ({sessions.length})
       </div>
-      {visibleSessions.map((s) => (
+      {sessionsList.visible.map((s) => (
         <div className="hist-row" key={s.id}>
           <div className="hist-b">
             <div className="hist-name">{s.name}</div>
@@ -92,11 +85,7 @@ export function ImportPreviewSheet() {
           </div>
         </div>
       ))}
-      {sessions.length > COLLAPSED_COUNT && (
-        <button className="feed-more" onClick={() => setShowAllSessions((v) => !v)}>
-          {showAllSessions ? 'Show less' : `Show ${sessions.length - COLLAPSED_COUNT} more`}
-        </button>
-      )}
+      <ShowMoreButton hiddenCount={sessionsList.hiddenCount} expanded={sessionsList.expanded} onToggle={sessionsList.toggle} />
 
       <div className="sheet-footer">
         <button className="btn danger" onClick={confirmImport}>

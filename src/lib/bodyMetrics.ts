@@ -7,6 +7,12 @@ export interface DatedValue {
 
 const DAY = 86_400_000;
 
+// Shared by every Life-tab card that logs "today" — was copy-pasted
+// verbatim in 7 different feature files before being hoisted here.
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function toTs(loggedOn: string): number {
   return new Date(`${loggedOn}T00:00:00`).getTime();
 }
@@ -58,7 +64,7 @@ export function trendDelta(series: DatedValue[], daysAgo = 7): number | null {
 // Total minutes of your own logged sessions today — feeds the hydration
 // training bonus (see hydration.ts's hydrationTarget()).
 export function todaysTrainingMinutes(sessions: WorkoutSession[]): number {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayIso();
   return sessions
     .filter((s) => s.person === 'You' && new Date(s.startedAt).toISOString().slice(0, 10) === today)
     .reduce((a, s) => a + s.durationMin, 0);

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor, todayIso, todaysTrainingMinutes } from '../../lib/bodyMetrics';
 import { hydrationTarget, sweatRateMlPerHour } from '../../lib/hydration';
 import { formatVolume, fromDisplayVolume, fromDisplayWeight, toDisplayVolume } from '../../lib/units';
 import { BarChart } from '../../components/BarChart';
@@ -11,10 +11,6 @@ import type { WeekBucket } from '../../lib/records';
 // real-world quantities) — displayed converted to the user's unit setting,
 // but the underlying add is always exactly 250/500 ml.
 const QUICK_ADD_ML = [250, 500];
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // A before/after workout weigh-in is genuinely individual — sweat rates
 // vary several-fold between people — so a measured value beats the
@@ -51,6 +47,8 @@ function SweatRateCalibration({ defaultHours }: { defaultHours: number }) {
   return (
     <div style={{ borderTop: '1px solid var(--line)', marginTop: 14, paddingTop: 12 }}>
       <button
+        aria-expanded={open}
+        aria-controls="sweat-rate-panel"
         onClick={() => setOpen((v) => !v)}
         style={{ width: '100%', display: 'flex', justifyContent: 'space-between', background: 'transparent', border: 'none', color: 'var(--text)', cursor: 'pointer', padding: 0 }}
       >
@@ -60,7 +58,7 @@ function SweatRateCalibration({ defaultHours }: { defaultHours: number }) {
         <span style={{ color: 'var(--faint)', fontSize: 11 }}>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
-        <div style={{ marginTop: 10 }}>
+        <div id="sweat-rate-panel" style={{ marginTop: 10 }}>
           <p style={{ color: 'var(--faint)', fontSize: 11, marginTop: 0 }}>
             Weigh yourself right before and after a workout (same clothing, towelled dry) for a personal
             number instead of the 500-1000 ml/hour default.
@@ -97,6 +95,7 @@ export function HydrationCard() {
   const sessions = useStore((s) => s.sessions);
   const addWater = useStore((s) => s.addWater);
   const clearWaterToday = useStore((s) => s.clearWaterToday);
+  const deleteWaterEntry = useStore((s) => s.deleteWaterEntry);
   const confirm = useStore((s) => s.confirm);
   const units = useStore((s) => s.settings.units);
   const [customValue, setCustomValue] = useState('');
@@ -111,15 +110,19 @@ export function HydrationCard() {
     return hydrationTarget(latestWeightKg, bodyProfile.climate, todaySessionMinutes, bodyProfile.sweatRateMlH);
   }, [latestWeightKg, bodyProfile.climate, bodyProfile.sweatRateMlH, todaySessionMinutes]);
 
-  const todayTotalMl = useMemo(() => waterLog.filter((w) => w.loggedOn === today).reduce((a, w) => a + w.amountMl, 0), [waterLog, today]);
+  const todayEntries = useMemo(() => waterLog.filter((w) => w.loggedOn === today), [waterLog, today]);
+  const todayTotalMl = todayEntries.reduce((a, w) => a + w.amountMl, 0);
 
   const last7 = useMemo(() => {
+    // Bucketed once instead of re-filtering the whole log per day — see
+    // TodayCard.tsx's identical fix for the same O(7n) pattern.
+    const totalsByDay = new Map<string, number>();
+    waterLog.forEach((w) => totalsByDay.set(w.loggedOn, (totalsByDay.get(w.loggedOn) ?? 0) + w.amountMl));
     const days: WeekBucket[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000);
       const iso = d.toISOString().slice(0, 10);
-      const total = waterLog.filter((w) => w.loggedOn === iso).reduce((a, w) => a + w.amountMl, 0);
-      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: toDisplayVolume(total, units) });
+      days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: toDisplayVolume(totalsByDay.get(iso) ?? 0, units) });
     }
     return days;
   }, [waterLog, units]);
@@ -194,6 +197,23 @@ export function HydrationCard() {
       <p style={{ color: 'var(--faint)', fontSize: 11, marginTop: 10, marginBottom: 0 }}>
         A starting point, not a race — thirst and pale-straw urine colour are good real-world guides too.
       </p>
+
+      {todayEntries.length > 0 && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {todayEntries.map((w) => (
+            <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--faint)' }}>{formatVolume(w.amountMl, units)}</span>
+              <button
+                aria-label="Delete this entry"
+                onClick={() => deleteWaterEntry(w.id)}
+                style={{ background: 'transparent', border: 'none', color: 'var(--faint)', fontSize: 15, lineHeight: 1, padding: '2px 4px', cursor: 'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {todayTotalMl > 0 && (
         <button

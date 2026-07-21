@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { primaryMuscleGroup, volumeOf, weeklyStreak } from '../lib/records';
-import { toDisplayWeight } from '../lib/units';
+import { daysSinceLastWorkout, primaryMuscleGroup, recordsPerSession, volumeOf, weeklyStreak } from '../lib/records';
+import { formatTrainingVolume, toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
@@ -31,6 +31,7 @@ export function HomeScreen() {
     () => toDisplayWeight(mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), settings.units),
     [mySessions, settings.units],
   );
+  const volumeParts = useMemo(() => formatTrainingVolume(totalVolume), [totalVolume]);
   // nowTick is a deliberate cache-buster (forces a fresh Date.now() read
   // every 30s), not an input the computation itself reads.
   const streak = useMemo(
@@ -38,6 +39,8 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessions, settings.weekStart, nowTick],
   );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const daysSince = useMemo(() => daysSinceLastWorkout(sessions, 'You', Date.now()), [sessions, nowTick]);
 
   const nextRoutine = useMemo(() => {
     if (routines.length === 0) return null;
@@ -67,6 +70,7 @@ export function HomeScreen() {
 
   const CREW_PAGE_SIZE = 4;
   const crewAll = useMemo(() => [...sessions].sort((a, b) => b.startedAt - a.startedAt), [sessions]);
+  const crewRecords = useMemo(() => recordsPerSession(sessions), [sessions]);
   const [crewVisibleCount, setCrewVisibleCount] = useState(CREW_PAGE_SIZE);
   const crew = useMemo(() => crewAll.slice(0, crewVisibleCount), [crewAll, crewVisibleCount]);
   const hasMoreCrew = crewVisibleCount < crewAll.length;
@@ -155,7 +159,8 @@ export function HomeScreen() {
         </div>
         <div className="stat-tile">
           <div className="n" style={{ color: 'var(--accent)' }}>
-            {totalVolume >= 1000 ? `${Math.round(totalVolume / 1000)}k` : Math.round(totalVolume)}
+            {volumeParts.main}
+            {volumeParts.abbreviated ? 'k' : ''}
           </div>
           <div className="l">Volume</div>
         </div>
@@ -165,12 +170,25 @@ export function HomeScreen() {
         </div>
       </div>
 
+      {mySessions.length === 0 ? (
+        <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>
+          Log your first workout to start tracking stats.
+        </p>
+      ) : (
+        streak === 0 &&
+        daysSince > 0 && (
+          <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>
+            Last workout {daysSince} day{daysSince === 1 ? '' : 's'} ago — jump back in!
+          </p>
+        )
+      )}
+
       <div className="section-h" style={{ margin: '20px 2px 0' }}>
         The crew
       </div>
       {crew.length === 0 && <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>No activity from your crew yet.</p>}
       {crew.map((h) => (
-        <WorkoutFeedCard key={h.id} session={h} allSessions={sessions} onOpen={() => openWorkoutSheet(h.id)} />
+        <WorkoutFeedCard key={h.id} session={h} records={crewRecords.get(h.id) ?? 0} onOpen={() => openWorkoutSheet(h.id)} />
       ))}
       {hasMoreCrew && <div ref={crewSentinelRef} style={{ height: 1 }} />}
     </div>

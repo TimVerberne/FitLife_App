@@ -1,16 +1,12 @@
 import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor, todaysTrainingMinutes } from '../../lib/bodyMetrics';
+import { latestValue, seriesFor, todayIso, todaysTrainingMinutes } from '../../lib/bodyMetrics';
 import { hydrationTarget } from '../../lib/hydration';
 import { formatVolume } from '../../lib/units';
 import { ProgressRing } from '../../components/ProgressRing';
 import { TapIcon } from '../../components/TapIcon';
 
 const QUICK_ADD_ML = [250, 500];
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 // Compact companion to the full HydrationCard further down the screen —
 // same target/total computation, condensed to ring + quick-add only. The
@@ -37,7 +33,14 @@ export function HydrationMiniCard() {
   const todayTotalMl = useMemo(() => waterLog.filter((w) => w.loggedOn === today).reduce((a, w) => a + w.amountMl, 0), [waterLog, today]);
 
   return (
-    <div className="card" style={{ position: 'relative', cursor: 'pointer' }} onClick={openHydrationDetail}>
+    <div
+      className="card"
+      style={{ position: 'relative', cursor: 'pointer' }}
+      role="button"
+      tabIndex={0}
+      onClick={openHydrationDetail}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openHydrationDetail()}
+    >
       <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>
         Hydration
@@ -52,7 +55,7 @@ export function HydrationMiniCard() {
           <div style={{ textAlign: 'center', marginTop: 8, fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--faint)' }}>
             {formatVolume(todayTotalMl, units)} / {formatVolume(target.totalMl, units)}
           </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 10 }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
             {QUICK_ADD_ML.map((ml) => (
               <button key={ml} className="btn sec" style={{ width: 'auto', flex: 1, padding: '6px 4px', fontSize: 11 }} onClick={() => addWater(ml)}>
                 +{ml}

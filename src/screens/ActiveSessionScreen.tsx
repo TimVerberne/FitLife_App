@@ -3,12 +3,13 @@ import { useStore } from '../store/useStore';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { epley, isWorkingSet, personalRecords, plannedSetsCountOf, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
+import { useDragReorder } from '../lib/useDragReorder';
 import { REST_PRESETS, formatRest } from '../lib/rest';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
 import { NumberField } from '../components/NumberField';
 import { RestTimerBar } from '../components/RestTimerBar';
-import type { SetEntry, SetKind } from '../lib/types';
+import type { SessionEntry, SetEntry, SetKind } from '../lib/types';
 
 function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
   let best = startingBest;
@@ -53,18 +54,12 @@ interface MenuState {
 // Reordering swaps every card to a fixed height (see .s-ex.compact) so a
 // dragged card's target slot is plain arithmetic on the pointer's Y delta,
 // instead of re-measuring variable-height cards (which is what full cards
-// are, once sets/rest-timer content is showing) after every swap.
+// are, once sets/rest-timer content is showing) after every swap. Drag
+// mechanics themselves live in the shared useDragReorder hook (also used by
+// TrainScreen's routine reorder).
 const COMPACT_CARD_HEIGHT = 60;
 const COMPACT_GAP = 14;
 const COMPACT_ROW_HEIGHT = COMPACT_CARD_HEIGHT + COMPACT_GAP;
-
-interface DragState {
-  order: number[]; // order[slot] = original entries-index now occupying that slot
-  draggingIndex: number; // the original entries-index being dragged
-  startSlot: number;
-  startY: number;
-  dy: number;
-}
 
 export function ActiveSessionScreen() {
   const active = useStore((s) => s.active);
@@ -88,10 +83,36 @@ export function ActiveSessionScreen() {
   const settings = useStore((s) => s.settings);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
+  // Built once per render (not once per set row) — the most recent prior
+  // session's entry for each exercise currently in this workout, so
+  // prevPerformance() below is a plain map lookup instead of re-scanning
+  // the full session history for every single set displayed.
+  const exerciseIdsKey = active ? active.entries.map((e) => e.exerciseId).join(',') : '';
+  const priorEntryByExerciseId = useMemo(() => {
+    const map = new Map<string, SessionEntry>();
+    if (!exerciseIdsKey) return map;
+    const exerciseIds = exerciseIdsKey.split(',');
+    const mySessions = sessions.filter((h) => h.person === 'You').sort((a, b) => b.startedAt - a.startedAt);
+    exerciseIds.forEach((id) => {
+      for (const h of mySessions) {
+        const entry = h.entries.find((e) => e.exerciseId === id);
+        if (entry) {
+          map.set(id, entry);
+          break;
+        }
+      }
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, exerciseIdsKey]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<string | null>(null);
-  const [drag, setDrag] = useState<DragState | null>(null);
+  const { drag, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
+    active?.entries.length ?? 0,
+    COMPACT_ROW_HEIGHT,
+    reorderEntries,
+  );
   const [headerHidden, setHeaderHidden] = useState(false);
   const lastScrollTop = useRef(0);
 
@@ -122,73 +143,6 @@ export function ActiveSessionScreen() {
     window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
     return () => window.removeEventListener('scroll', onAnyScroll, true);
   }, []);
-  // The authoritative live value, updated synchronously inside the native
-  // event handlers below — `drag` (React state) is a render snapshot of
-  // this, always one tick behind. Committing the reorder off of `drag`
-  // instead (e.g. reading it inside a setDrag() updater callback, which is
-  // where this lived originally) hit a real bug: calling the reorderEntries
-  // store action as a side effect of a setState updater tripped React's
-  // "setState during render" detection (updaters can be invoked more than
-  // once, e.g. under StrictMode), and the order actually committed ended up
-  // one step behind the last position the drag visually showed.
-  const dragRef = useRef<DragState | null>(null);
-
-  function startDrag(e: React.PointerEvent, originalIndex: number) {
-    if (!active) return;
-    const d: DragState = {
-      order: active.entries.map((_, i) => i),
-      draggingIndex: originalIndex,
-      startSlot: originalIndex,
-      startY: e.clientY,
-      dy: 0,
-    };
-    dragRef.current = d;
-    setDrag(d);
-  }
-
-  // Deliberately window-level rather than setPointerCapture on the handle
-  // button: capture is tied to that specific DOM node, and once the first
-  // live swap moves it to a new position in the keyed list, capture doesn't
-  // reliably survive the reorder — pointer events silently stop reaching it
-  // (confirmed: the dragged card would freeze after exactly one swap). A
-  // window listener has no such dependency on one element's identity.
-  useEffect(() => {
-    if (!drag) return;
-    function onMove(e: PointerEvent) {
-      const d = dragRef.current;
-      if (!d) return;
-      const dy = e.clientY - d.startY;
-      const rawSlot = d.startSlot + dy / COMPACT_ROW_HEIGHT;
-      const targetSlot = Math.max(0, Math.min(d.order.length - 1, Math.round(rawSlot)));
-      const currentSlot = d.order.indexOf(d.draggingIndex);
-      let next = d;
-      if (targetSlot !== currentSlot) {
-        const order = [...d.order];
-        order.splice(currentSlot, 1);
-        order.splice(targetSlot, 0, d.draggingIndex);
-        next = { ...d, order, dy };
-      } else {
-        next = { ...d, dy };
-      }
-      dragRef.current = next;
-      setDrag(next);
-    }
-    function onUp() {
-      const d = dragRef.current;
-      if (d) reorderEntries(d.order);
-      dragRef.current = null;
-      setDrag(null);
-    }
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!drag]);
 
   useEffect(() => {
     if (!settings.keepScreenAwake) return;
@@ -248,12 +202,7 @@ export function ActiveSessionScreen() {
   const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
   function prevPerformance(exerciseId: string, setIdx: number, cardio: boolean): string | null {
-    const prior = sessions
-      .filter((h) => h.person === 'You' && h.entries.some((e) => e.exerciseId === exerciseId))
-      .sort((a, b) => b.startedAt - a.startedAt)[0];
-    if (!prior) return null;
-    const entry = prior.entries.find((e) => e.exerciseId === exerciseId);
-    const set = entry?.sets[setIdx];
+    const set = priorEntryByExerciseId.get(exerciseId)?.sets[setIdx];
     if (!set) return null;
     if (cardio) return `${Math.round((set.durationSec ?? 0) / 60)}m · ${(set.distanceKm ?? 0).toFixed(1)}km`;
     return `${formatWeight(set.weight, settings.units)}×${set.reps}`;
@@ -396,8 +345,25 @@ export function ActiveSessionScreen() {
               )}
               <button
                 className="s-drag-handle"
-                aria-label={`Reorder ${ex.name}`}
+                aria-label={`Reorder ${ex.name}. Press Enter to pick up, arrow keys to move, Enter again to drop.`}
                 onPointerDown={(e) => startDrag(e, ei)}
+                onKeyDown={(e) => {
+                  const isActive = drag?.draggingIndex === ei;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    if (isActive) confirmKeyboardReorder();
+                    else startKeyboardReorder(ei);
+                  } else if (isActive && e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    moveKeyboardSlot(-1);
+                  } else if (isActive && e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    moveKeyboardSlot(1);
+                  } else if (isActive && e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelKeyboardReorder();
+                  }
+                }}
               >
                 ⠿
               </button>
@@ -517,6 +483,7 @@ export function ActiveSessionScreen() {
                           <NumberField
                             value={Math.round((st.durationSec ?? 0) / 60)}
                             inputMode="numeric"
+                            ariaLabel={`Set ${si + 1} minutes`}
                             onCommit={(n) => setVal(ei, si, 'durationSec', n * 60)}
                           />
                         </div>
@@ -524,6 +491,7 @@ export function ActiveSessionScreen() {
                           <NumberField
                             value={st.distanceKm ?? 0}
                             inputMode="decimal"
+                            ariaLabel={`Set ${si + 1} distance in kilometers`}
                             onCommit={(n) => setVal(ei, si, 'distanceKm', n)}
                           />
                         </div>
@@ -534,11 +502,17 @@ export function ActiveSessionScreen() {
                           <NumberField
                             value={toDisplayWeight(st.weight, settings.units)}
                             inputMode="decimal"
+                            ariaLabel={`Set ${si + 1} weight in ${settings.units}`}
                             onCommit={(n) => setVal(ei, si, 'weight', fromDisplayWeight(n, settings.units))}
                           />
                         </div>
                         <div className="set-fld">
-                          <NumberField value={st.reps} inputMode="numeric" onCommit={(n) => setVal(ei, si, 'reps', n)} />
+                          <NumberField
+                            value={st.reps}
+                            inputMode="numeric"
+                            ariaLabel={`Set ${si + 1} reps`}
+                            onCommit={(n) => setVal(ei, si, 'reps', n)}
+                          />
                         </div>
                       </>
                     )}

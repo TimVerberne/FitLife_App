@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { EXERCISES, bodyParts, searchExercises } from '../../lib/exercises';
+import { EXERCISES, bodyParts, exerciseById, searchExercises } from '../../lib/exercises';
+import type { Exercise } from '../../lib/types';
 import { Thumb } from '../../components/Thumb';
+
+const RECENT_COUNT = 8;
 
 // Must match .pick-row's rendered height (44px thumb + 22px vertical padding
 // + 1px border). The list can run to 1000+ rows with the full exercise
@@ -87,6 +90,28 @@ export function PickerSheet() {
   const list = useMemo(() => searchExercises(pickQuery, pickBodyPart), [pickQuery, pickBodyPart]);
   const bps = useMemo(() => ['all', ...bodyParts()], []);
 
+  // Shown only while browsing (no query, no filter narrowed yet) — once
+  // someone's searching or filtering they're after something specific, not
+  // a shortcut back to what they already train regularly.
+  const showRecent = !pickQuery && pickBodyPart === 'all';
+  const recentExercises = useMemo(() => {
+    if (!showRecent) return [];
+    const lastUsed = new Map<string, number>();
+    sessions
+      .filter((s) => s.person === 'You')
+      .forEach((s) => {
+        s.entries.forEach((e) => {
+          const prev = lastUsed.get(e.exerciseId) ?? 0;
+          if (s.startedAt > prev) lastUsed.set(e.exerciseId, s.startedAt);
+        });
+      });
+    return Array.from(lastUsed.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, RECENT_COUNT)
+      .map(([id]) => exerciseById(id))
+      .filter((e): e is Exercise => !!e);
+  }, [showRecent, sessions]);
+
   const listRef = useRef<HTMLDivElement>(null);
   const range = useVirtualRange(list.length, listRef);
 
@@ -127,15 +152,90 @@ export function PickerSheet() {
             value={pickQuery}
             onChange={(e) => setPickQuery(e.target.value)}
           />
+          {pickQuery && (
+            <button
+              type="button"
+              className="search-clear"
+              aria-label="Clear search"
+              onClick={() => setPickQuery('')}
+            >
+              ×
+            </button>
+          )}
         </div>
         <div className="chips">
           {bps.map((bp) => (
-            <button key={bp} className={`chip${pickBodyPart === bp ? ' on' : ''}`} onClick={() => setPickBodyPart(bp)}>
+            <button
+              key={bp}
+              className={`chip${pickBodyPart === bp ? ' on' : ''}`}
+              aria-pressed={pickBodyPart === bp}
+              onClick={() => setPickBodyPart(bp)}
+            >
               {bp === 'all' ? 'All' : bp}
             </button>
           ))}
         </div>
       </div>
+
+      {recentExercises.length > 0 && (
+        <div style={{ marginBottom: 4 }}>
+          <div className="section-h" style={{ margin: '0 2px 6px' }}>Recent</div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+            {recentExercises.map((ex) => {
+              const isIn = alreadyIn.has(ex.id);
+              const isSelected = selected.has(ex.id);
+              return (
+                <button
+                  key={ex.id}
+                  type="button"
+                  aria-label={ex.name}
+                  aria-pressed={isSelected}
+                  onClick={() => toggle(ex.id)}
+                  style={{
+                    flex: 'none',
+                    width: 58,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 4,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    opacity: isIn ? 0.5 : 1,
+                  }}
+                >
+                  <Thumb
+                    className="pick-thumb"
+                    src={ex.image}
+                    alt=""
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 10,
+                      outline: isSelected ? '2px solid var(--accent)' : 'none',
+                      outlineOffset: 1,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--faint)',
+                      textAlign: 'center',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      width: '100%',
+                    }}
+                  >
+                    {ex.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div ref={listRef}>
         <div style={{ height: range.start * ROW_HEIGHT }} />
@@ -148,6 +248,7 @@ export function PickerSheet() {
               key={ex.id}
               role="button"
               tabIndex={0}
+              aria-pressed={isSelected}
               onClick={() => toggle(ex.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') toggle(ex.id);

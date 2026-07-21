@@ -207,6 +207,44 @@ export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutS
   return count;
 }
 
+// Same "new record" definition as newRecordsInWorkout, but for every session
+// across every person present in `sessions` in one pass — calling
+// newRecordsInWorkout per session instead re-derives that person's full
+// personalRecords() from scratch for every session before it, which is
+// quadratic over a person's history. Grouping by person and walking each
+// person's sessions oldest-first, carrying the running best forward, gets
+// the same per-session counts in a single linear pass per person.
+export function recordsPerSession(sessions: WorkoutSession[]): Map<string, number> {
+  const byPerson = new Map<string, WorkoutSession[]>();
+  sessions.forEach((h) => {
+    const list = byPerson.get(h.person);
+    if (list) list.push(h);
+    else byPerson.set(h.person, [h]);
+  });
+  const result = new Map<string, number>();
+  byPerson.forEach((theirs) => {
+    const best = new Map<string, number>();
+    [...theirs]
+      .sort((a, b) => a.startedAt - b.startedAt)
+      .forEach((h) => {
+        let count = 0;
+        h.entries.forEach((entry) => {
+          const bestInSession = entry.sets
+            .filter((s) => isWorkingSet(s) && s.weight > 0)
+            .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
+          if (bestInSession === 0) return;
+          const prior = best.get(entry.exerciseId) ?? 0;
+          if (bestInSession > prior) {
+            count++;
+            best.set(entry.exerciseId, bestInSession);
+          }
+        });
+        result.set(h.id, count);
+      });
+  });
+  return result;
+}
+
 export interface WeekBucket {
   label: string;
   value: number;
