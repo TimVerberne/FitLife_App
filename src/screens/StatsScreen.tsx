@@ -144,8 +144,10 @@ export function StatsScreen() {
         <div className="h1" style={{ fontSize: 30 }}>Stats</div>
         <div style={{ display: 'flex', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 9, padding: 3 }}>
           {(['week', 'month', 'all'] as Period[]).map((p) => (
-            <span
+            <button
               key={p}
+              type="button"
+              aria-pressed={period === p}
               onClick={() => setPeriod(p)}
               style={{
                 fontFamily: 'var(--font-display)',
@@ -154,13 +156,14 @@ export function StatsScreen() {
                 background: period === p ? 'var(--accent)' : 'transparent',
                 color: period === p ? 'var(--accent-ink)' : 'var(--faint)',
                 padding: '5px 9px',
+                border: 'none',
                 borderRadius: 6,
                 textTransform: 'uppercase',
                 cursor: 'pointer',
               }}
             >
               {p}
-            </span>
+            </button>
           ))}
         </div>
       </div>

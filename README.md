@@ -102,6 +102,58 @@ this is done.
 
 ## Update notes
 
+**Version 1.9.0**
+- Full app-wide bug review (every screen checked separately via parallel
+  focused passes), then fixed directly rather than just reported. Most
+  severe first:
+  - **Data resurrection via cloud sync** — `clearAllData()`/`confirmImport()`
+    used to call a bulk clear/replace against Supabase with no retry on
+    failure; if that network call failed, local state already showed
+    cleared/replaced while the server still had the old rows, and the next
+    sync would silently restore ("resurrect") exactly what was just
+    deleted. Both now go through the same per-row push/delete functions
+    used everywhere else in the app, which already retry via a pending-sync
+    queue.
+  - **Malformed JSON backup import** — importing a hand-edited or corrupted
+    backup only checked that `routines`/`sessions` were arrays, not that
+    each item had the fields the rest of the app assumes exist — could
+    crash the import preview. Now validates each item's shape and skips
+    (with a toast) anything malformed instead of crashing.
+  - **Workout progress ratio stuck below 100%** — the mini-bar and active
+    session screen counted "done" sets excluding warmups but "total" sets
+    including them, so a workout with any warmup rows could never show
+    fully complete.
+  - **Nutrition goal display regression** — the Profile summary and the
+    "edit profile" screen still showed the old kg/week goal fields even
+    when using the newer kcal/day manual target mode, which was misleading
+    (editing them did nothing).
+  - **History-edit "+ Add to workout" targeted the wrong workout** — the
+    button on an exercise's detail sheet only ever knew about a live
+    in-progress session, not a past workout being edited.
+  - **Import preview count mismatch** — the preview could show more
+    workouts than would actually import (sessions that aren't your own get
+    filtered out at confirm time); it's now filtered up front so the count
+    is accurate.
+  - **Stale menu after reordering/removing exercises mid-session** — the
+    set-type and rest-timer menus were keyed by array position, so a
+    drag-reorder or a removal while a menu was technically open could point
+    it at the wrong exercise. Now keyed by exercise id instead.
+  - **Rest timer could silently steal another exercise's countdown** —
+    checking off a set with its own rest timer configured would replace
+    any other exercise's already-running countdown with no indication;
+    now shows a toast when that happens.
+  - Streak/today-highlight could go stale if a screen was left open across
+    a day or week boundary with nothing else to trigger a re-render.
+  - Smaller fixes: rest-timer vibration now has its own setting (was
+    wrongly tied to "vibrate on set checked off"); tapping "See more" on a
+    workout card with a keyboard no longer also opens the workout;
+    searching your own email in Friends now says so instead of "no account
+    found"; the exercise picker's virtual list no longer flashes blank
+    right after narrowing a filter; the Life tab's Energy field no longer
+    lets a value like 0.4 round down to 0 (outside its 1-5 scale); the
+    Stats period selector (Week/Month/All) is now real buttons, operable
+    by keyboard.
+
 **Version 1.8.2**
 - Battery drain investigation, two real findings fixed:
   - **"Keep screen awake during a workout"** now defaults to **off**. It

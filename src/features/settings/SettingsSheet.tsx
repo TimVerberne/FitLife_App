@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore, type Tab } from '../../store/useStore';
 import { ACCENT_PRESETS, type AccentPreset } from '../../lib/settings';
 import { REST_PRESETS, formatRest } from '../../lib/rest';
@@ -28,6 +28,31 @@ export function SettingsSheet() {
 
   const pushCapable = isPushCapable();
   const pushBlocked = pushCapable && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+
+  // `settings.notifyActiveWorkout` is only ever written by this sheet's own
+  // toggle, so it can drift from reality — the actual push subscription can
+  // be silently dropped by the browser (or permission revoked and later
+  // re-granted, which un-blocks `pushBlocked` again without restoring the
+  // subscription) with nothing else to notice and flip the flag back off.
+  // Reconcile once whenever Settings is opened rather than trusting the
+  // stored flag forever.
+  useEffect(() => {
+    if (!pushCapable || !settings.notifyActiveWorkout || !('serviceWorker' in navigator)) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (!cancelled && !subscription) updateSettings({ notifyActiveWorkout: false });
+      } catch {
+        // Best-effort reconciliation only — leave the flag as-is on failure.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function toggleNudges(next: boolean) {
     if (!next) {
@@ -144,6 +169,11 @@ export function SettingsSheet() {
         label="Sound when rest timer ends"
         checked={settings.restTimerSound}
         onChange={(v) => updateSettings({ restTimerSound: v })}
+      />
+      <SettingsSwitchRow
+        label="Vibrate when rest timer ends"
+        checked={settings.hapticsOnRestEnd}
+        onChange={(v) => updateSettings({ hapticsOnRestEnd: v })}
       />
 
       <div className="section-h">Notifications</div>

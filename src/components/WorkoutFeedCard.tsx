@@ -26,8 +26,14 @@ export function WorkoutFeedCard({
   const units = useStore((s) => s.settings.units);
   const colors = colorForPerson(session.person);
   const records = newRecordsInWorkout(allSessions, session);
-  const shown = expanded ? session.entries : session.entries.slice(0, COLLAPSED_COUNT);
-  const remaining = session.entries.length - shown.length;
+  // Filtered up front (not just skipped in the row-map below) so an entry
+  // whose exercise can't be resolved (deleted from the library, or a
+  // corrupted import) doesn't throw off the "See N more"/collapsed count —
+  // otherwise it'd silently vanish from the rendered rows while still being
+  // counted toward `remaining`.
+  const validEntries = session.entries.filter((e) => !!exerciseById(e.exerciseId));
+  const shown = expanded ? validEntries : validEntries.slice(0, COLLAPSED_COUNT);
+  const remaining = validEntries.length - shown.length;
 
   return (
     <div className="feed-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
@@ -82,6 +88,7 @@ export function WorkoutFeedCard({
             e.stopPropagation();
             setExpanded(true);
           }}
+          onKeyDown={(e) => e.stopPropagation()}
         >
           See {remaining} more exercise{remaining === 1 ? '' : 's'}
         </button>

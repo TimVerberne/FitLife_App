@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
-import { epley, isWorkingSet, personalRecords, setsCountOf, volumeOf } from '../lib/records';
+import { epley, isWorkingSet, personalRecords, plannedSetsCountOf, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { REST_PRESETS, formatRest } from '../lib/rest';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../lib/units';
@@ -40,8 +40,11 @@ function setLabelFor(sets: SetEntry[], index: number): { text: string; kind: Set
   return { text: String(n), kind: 'normal' };
 }
 
+// Keyed by exerciseId, not entries-array index — an index would go stale
+// (and silently point at the wrong exercise) the moment a drag-reorder or
+// an exercise removal shifts what's at that index while this menu is open.
 interface MenuState {
-  entryIdx: number;
+  exerciseId: string;
   setIdx: number;
   step: 'options' | 'dropCount';
   dropCount: number;
@@ -87,7 +90,7 @@ export function ActiveSessionScreen() {
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [restMenuFor, setRestMenuFor] = useState<number | null>(null);
+  const [restMenuFor, setRestMenuFor] = useState<string | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [headerHidden, setHeaderHidden] = useState(false);
   const lastScrollTop = useRef(0);
@@ -241,7 +244,7 @@ export function ActiveSessionScreen() {
   if (!active) return null;
 
   const done = setsCountOf(active.entries);
-  const total = active.entries.reduce((a, e) => a + e.sets.length, 0);
+  const total = plannedSetsCountOf(active.entries);
   const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
   function prevPerformance(exerciseId: string, setIdx: number, cardio: boolean): string | null {
@@ -261,18 +264,22 @@ export function ActiveSessionScreen() {
   }
 
   function pickKind(kind: SetKind) {
-    if (!menu) return;
+    if (!menu || !active) return;
     if (kind === 'dropset') {
       setMenu({ ...menu, step: 'dropCount', dropCount: 3 });
       return;
     }
-    setSetKind(menu.entryIdx, menu.setIdx, kind);
+    const entryIdx = active.entries.findIndex((e) => e.exerciseId === menu.exerciseId);
+    if (entryIdx === -1) { closeMenu(); return; }
+    setSetKind(entryIdx, menu.setIdx, kind);
     closeMenu();
   }
 
   function confirmDropSet() {
-    if (!menu) return;
-    applyDropSet(menu.entryIdx, menu.setIdx, menu.dropCount);
+    if (!menu || !active) return;
+    const entryIdx = active.entries.findIndex((e) => e.exerciseId === menu.exerciseId);
+    if (entryIdx === -1) { closeMenu(); return; }
+    applyDropSet(entryIdx, menu.setIdx, menu.dropCount);
     closeMenu();
   }
 
@@ -398,10 +405,10 @@ export function ActiveSessionScreen() {
             {!drag && (
             <>
             <div className="rest-toggle-wrap">
-              <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuFor === ei ? null : ei)}>
+              <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuFor === en.exerciseId ? null : en.exerciseId)}>
                 ⏱ Rest timer: {active.restTimers[en.exerciseId] ? formatRest(active.restTimers[en.exerciseId]) : 'Off'}
               </button>
-              {restMenuFor === ei && (
+              {restMenuFor === en.exerciseId && (
                 <>
                   <div className="set-menu-scrim" onClick={() => setRestMenuFor(null)} />
                   <div className="rest-menu">
@@ -445,7 +452,7 @@ export function ActiveSessionScreen() {
             {en.sets.map((st, si) => {
               const prev = prevPerformance(en.exerciseId, si, cardio);
               const label = setLabelFor(en.sets, si);
-              const menuOpen = menu?.entryIdx === ei && menu?.setIdx === si;
+              const menuOpen = menu?.exerciseId === en.exerciseId && menu?.setIdx === si;
               return (
                 <div key={si}>
                   <div className={`set-row${st.done ? ' done' : ''}`}>
@@ -453,7 +460,7 @@ export function ActiveSessionScreen() {
                       <button
                         className={`set-idx${label.kind !== 'normal' ? ` kind-${label.kind}` : ''}`}
                         aria-label={`Set ${si + 1} type: ${label.kind}. Tap to change.`}
-                        onClick={() => setMenu(menuOpen ? null : { entryIdx: ei, setIdx: si, step: 'options', dropCount: 3 })}
+                        onClick={() => setMenu(menuOpen ? null : { exerciseId: en.exerciseId, setIdx: si, step: 'options', dropCount: 3 })}
                       >
                         {label.text}
                       </button>

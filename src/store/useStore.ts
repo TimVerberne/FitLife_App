@@ -12,7 +12,7 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
 import { sortRoutines } from '../lib/records';
-import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
 export type SheetKind =
@@ -242,6 +242,50 @@ interface StoreState {
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let cloudSyncUserId: string | null = null;
 
+// Guards a JSON backup import against malformed items — the top-level
+// array check alone (routines/sessions being arrays at all) doesn't catch a
+// hand-edited or truncated file whose *items* are missing fields, which
+// would otherwise crash later when the preview/import path reads
+// r.exerciseIds.length or iterates s.entries.
+function isValidSetEntry(v: unknown): v is SetEntry {
+  if (!v || typeof v !== 'object') return false;
+  const x = v as Record<string, unknown>;
+  return typeof x.reps === 'number' && typeof x.weight === 'number' && typeof x.done === 'boolean';
+}
+
+function isValidSessionEntry(v: unknown): v is SessionEntry {
+  if (!v || typeof v !== 'object') return false;
+  const x = v as Record<string, unknown>;
+  return typeof x.exerciseId === 'string' && Array.isArray(x.sets) && x.sets.every(isValidSetEntry);
+}
+
+function isValidImportedRoutine(v: unknown): v is Routine {
+  if (!v || typeof v !== 'object') return false;
+  const x = v as Record<string, unknown>;
+  return (
+    typeof x.id === 'string' &&
+    typeof x.name === 'string' &&
+    typeof x.createdAt === 'number' &&
+    Array.isArray(x.exerciseIds) &&
+    x.exerciseIds.every((e) => typeof e === 'string')
+  );
+}
+
+function isValidImportedSession(v: unknown): v is WorkoutSession {
+  if (!v || typeof v !== 'object') return false;
+  const x = v as Record<string, unknown>;
+  return (
+    typeof x.id === 'string' &&
+    typeof x.person === 'string' &&
+    typeof x.name === 'string' &&
+    (x.routineId === null || typeof x.routineId === 'string') &&
+    typeof x.startedAt === 'number' &&
+    typeof x.durationMin === 'number' &&
+    Array.isArray(x.entries) &&
+    x.entries.every(isValidSessionEntry)
+  );
+}
+
 // Shared by both import paths (FitFlow JSON backup and Hevy CSV) — remaps
 // legacy/placeholder ids to real UUIDs before anything reaches Dexie or
 // Supabase, and merges in any imported settings without clobbering the rest.
@@ -401,12 +445,23 @@ export const useStore = create<StoreState>((set, get) => ({
       navigator.vibrate(15);
     }
     const restSeconds = turningOn ? active.restTimers[entry.exerciseId] : undefined;
+    // A different exercise's rest timer already counting down would
+    // otherwise get silently overwritten (only one restTimer can be shown
+    // at a time) — supersetting between exercises made this easy to trigger
+    // by accident, so at least surface it instead of losing the countdown
+    // with no explanation.
+    const currentTimer = get().restTimer;
+    const replacingOtherTimer =
+      !!restSeconds && !!currentTimer && currentTimer.exerciseId !== entry.exerciseId && currentTimer.endsAt > Date.now();
     set({
       active: { ...active, entries },
       restTimer: restSeconds
         ? { exerciseId: entry.exerciseId, endsAt: Date.now() + restSeconds * 1000, total: restSeconds }
         : get().restTimer,
     });
+    if (replacingOtherTimer) {
+      get().showToast('Rest timer switched to this exercise');
+    }
   },
 
   addSet(entryIdx) {
@@ -494,6 +549,15 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   addExerciseToSession(exerciseId) {
+    // Reached via ExerciseDetailSheet's "+ Add to workout" — when that sheet
+    // was opened from the history-edit picker (pickerTargetSessionId set),
+    // route through the same target-session-aware path the picker's own
+    // multi-select "Add" button uses, instead of always assuming there's a
+    // live in-progress session.
+    if (get().pickerTargetSessionId) {
+      get().addExercisesToSession([exerciseId]);
+      return;
+    }
     const active = get().active;
     if (!active) return;
     if (active.entries.some((e) => e.exerciseId === exerciseId)) {
@@ -977,15 +1041,29 @@ export const useStore = create<StoreState>((set, get) => ({
           return;
         }
 
-        const data = JSON.parse(text) as { routines?: Routine[]; sessions?: WorkoutSession[]; settings?: Partial<Settings> };
+        const data = JSON.parse(text) as { routines?: unknown; sessions?: unknown; settings?: Partial<Settings> };
         if (!Array.isArray(data.routines) || !Array.isArray(data.sessions)) {
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
           return;
         }
+        const validRoutines = data.routines.filter(isValidImportedRoutine);
+        // Filtered to 'You' here too (not just in prepareImportedData at
+        // confirm time) so the preview's counts — and the "Import N
+        // workouts" button — match exactly what actually gets imported,
+        // instead of showing a higher count that silently shrinks on confirm.
+        const validSessions = data.sessions.filter(isValidImportedSession).filter((s) => s.person === 'You');
+        if (validRoutines.length === 0 && validSessions.length === 0) {
+          get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
+          return;
+        }
+        const skipped = data.routines.length - validRoutines.length + (data.sessions.length - validSessions.length);
         set({
-          importPreview: { routines: data.routines, sessions: data.sessions, unmatchedNames: [], isCsv: false, settingsPatch: data.settings },
+          importPreview: { routines: validRoutines, sessions: validSessions, unmatchedNames: [], isCsv: false, settingsPatch: data.settings },
           sheet: 'importPreview',
         });
+        if (skipped > 0) {
+          get().showToast(`Skipped ${skipped} item${skipped === 1 ? '' : 's'} that can't be imported`);
+        }
       })
       .catch(() => get().showToast('Could not read that file'));
   },
@@ -993,10 +1071,24 @@ export const useStore = create<StoreState>((set, get) => ({
   confirmImport() {
     const preview = get().importPreview;
     if (!preview) return;
+    const prevRoutines = get().routines;
+    const prevSessions = get().sessions;
     const { routines, sessions, settings } = prepareImportedData(get().settings, preview.routines, preview.sessions, preview.settingsPatch);
     void db.routines.clear().then(() => db.routines.bulkPut(routines));
     void db.sessions.clear().then(() => db.sessions.bulkPut(sessions));
-    void cloudSync.replaceAllRemote(routines, sessions);
+    // Per-row delete/upsert instead of a bulk clear+replace — each of these
+    // already retries via pendingSync on failure (see pushRoutine etc. in
+    // cloudSync.ts), so a network hiccup here gets queued and flushed later
+    // instead of leaving stale rows on the server that reconcileNewFromCloud
+    // would otherwise resurrect on the next sync.
+    const newRoutineIds = new Set(routines.map((r) => r.id));
+    const newSessionIds = new Set(sessions.map((s) => s.id));
+    void Promise.all([
+      ...prevRoutines.filter((r) => !newRoutineIds.has(r.id)).map((r) => cloudSync.deleteRoutineRemote(r.id)),
+      ...prevSessions.filter((s) => s.person === 'You' && !newSessionIds.has(s.id)).map((s) => cloudSync.deleteSessionRemote(s.id)),
+      ...routines.map((r) => cloudSync.pushRoutine(r)),
+      ...sessions.filter((s) => s.person === 'You').map((s) => cloudSync.pushSession(s)),
+    ]);
     set({ routines, sessions, settings, sheet: null, importPreview: null });
     if (preview.settingsPatch) {
       saveSettings(settings);
@@ -1015,9 +1107,17 @@ export const useStore = create<StoreState>((set, get) => ({
 
   clearAllData() {
     get().confirm('Delete all routines and workout history? This can\'t be undone.', 'Yes, delete everything', () => {
+      const prevRoutines = get().routines;
+      const prevSessions = get().sessions;
       void db.routines.clear();
       void db.sessions.clear();
-      void cloudSync.clearAllRemote();
+      // Per-row deletes so a failed one gets queued in pendingSync and
+      // retried, instead of silently leaving that row on the server to be
+      // resurrected by the next sync (see confirmImport for the same fix).
+      void Promise.all([
+        ...prevRoutines.map((r) => cloudSync.deleteRoutineRemote(r.id)),
+        ...prevSessions.filter((s) => s.person === 'You').map((s) => cloudSync.deleteSessionRemote(s.id)),
+      ]);
       set({ routines: [], sessions: [], sheet: null });
       get().showToast('All data cleared');
     }, true);

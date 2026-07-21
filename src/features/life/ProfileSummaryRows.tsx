@@ -28,8 +28,12 @@ export function ProfileSummaryRows() {
       <div>Birth year: {bodyProfile.birthYear}</div>
       <div>{ACTIVITY_LABEL[bodyProfile.activity]}</div>
       <div>
-        {GOAL_LABEL[bodyProfile.goal]}
-        {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/week` : ''}
+        {bodyProfile.goalMode === 'kcal' && bodyProfile.manualKcalTarget != null
+          ? `Manual target · ${bodyProfile.manualKcalTarget} kcal/day`
+          : <>
+              {GOAL_LABEL[bodyProfile.goal]}
+              {bodyProfile.goal !== 'maintain' ? ` · ${bodyProfile.rateKgWeek.toFixed(1)} kg/week` : ''}
+            </>}
       </div>
     </div>
   );

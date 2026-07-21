@@ -4,10 +4,10 @@ import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { ProgressChart, type ChartPoint } from '../../components/ProgressChart';
 import type { BodyLogEntry } from '../../lib/types';
 
-const FIELDS: { key: keyof Pick<BodyLogEntry, 'sleepHours' | 'restingHr' | 'energy'>; label: string; unit: string; placeholder: string; max?: number }[] = [
+const FIELDS: { key: keyof Pick<BodyLogEntry, 'sleepHours' | 'restingHr' | 'energy'>; label: string; unit: string; placeholder: string; min?: number; max?: number }[] = [
   { key: 'sleepHours', label: 'Sleep', unit: 'hrs', placeholder: 'hrs' },
   { key: 'restingHr', label: 'Resting HR', unit: 'bpm', placeholder: 'bpm' },
-  { key: 'energy', label: 'Energy', unit: '/5', placeholder: '1-5', max: 5 },
+  { key: 'energy', label: 'Energy', unit: '/5', placeholder: '1-5', min: 1, max: 5 },
 ];
 
 function todayIso(): string {
@@ -27,7 +27,10 @@ function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
   function save() {
     const parsed = Number(inputValue);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
-    const value = field.max ? Math.min(field.max, Math.round(parsed)) : parsed;
+    // For a bounded 1-N scale (energy), round *then* clamp to both ends —
+    // rounding alone let a value like "0.4" (passes the `> 0` check above)
+    // round down to 0, one below the documented 1-5 range.
+    const value = field.max ? Math.min(field.max, Math.max(field.min ?? 1, Math.round(parsed))) : parsed;
     logBodyMetrics({ loggedOn: todayIso(), [field.key]: value });
     setInputValue('');
   }
@@ -61,6 +64,7 @@ function WellnessRow({ field }: { field: (typeof FIELDS)[number] }) {
             <input
               type="number"
               inputMode="decimal"
+              min={field.min}
               max={field.max}
               value={inputValue}
               placeholder={field.placeholder}

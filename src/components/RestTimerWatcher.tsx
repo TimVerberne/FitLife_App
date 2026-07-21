@@ -15,7 +15,7 @@ export function RestTimerWatcher() {
   const restTimer = useStore((s) => s.restTimer);
   const skipRestTimer = useStore((s) => s.skipRestTimer);
   const soundEnabled = useStore((s) => s.settings.restTimerSound);
-  const hapticsEnabled = useStore((s) => s.settings.hapticsOnSetComplete);
+  const hapticsEnabled = useStore((s) => s.settings.hapticsOnRestEnd);
 
   useEffect(() => {
     if (!restTimer) return;

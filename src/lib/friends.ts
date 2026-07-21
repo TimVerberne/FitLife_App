@@ -29,12 +29,16 @@ function toProfile(row: { id: string; email: string; display_name: string | null
 }
 
 export async function searchProfileByEmail(email: string): Promise<FriendProfile | null> {
-  const userId = requireUserId();
   const trimmed = email.trim();
   if (!trimmed) return null;
   const { data, error } = await supabase.from('profiles').select('id, email, display_name').ilike('email', trimmed).maybeSingle();
   if (error) throw error;
-  if (!data || data.id === userId) return null;
+  if (!data) return null;
+  // Deliberately not excluding your own row here (unlike fetchAllProfiles) —
+  // sendFriendRequest()'s self-check downstream is what turns this into the
+  // correct "That's your own email" message; filtering it out here instead
+  // would surface the wrong, misleading "No FitFlow account with that
+  // email" message when you search yourself.
   return toProfile(data);
 }
 

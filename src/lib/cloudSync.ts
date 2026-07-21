@@ -91,34 +91,12 @@ export async function pushSettings(settings: Settings): Promise<void> {
   }
 }
 
-export async function clearAllRemote(): Promise<void> {
-  const userId = requireUserId();
-  await Promise.all([
-    supabase.from('routines').delete().eq('user_id', userId),
-    supabase.from('sessions').delete().eq('user_id', userId),
-  ]);
-}
-
 // Deletes the auth.users row itself (via the delete_own_account Postgres
 // function) — not just this account's data. Cascades through profiles,
 // routines, sessions, settings, and friendships on the database side.
 export async function deleteOwnAccount(): Promise<void> {
   const { error } = await supabase.rpc('delete_own_account');
   if (error) throw error;
-}
-
-export async function replaceAllRemote(routines: Routine[], sessions: WorkoutSession[]): Promise<void> {
-  const userId = requireUserId();
-  const mine = sessions.filter((s) => s.person === 'You');
-  await clearAllRemote();
-  if (routines.length > 0) {
-    const { error } = await supabase.from('routines').insert(routines.map((r) => routineRow(r, userId)));
-    if (error) throw error;
-  }
-  if (mine.length > 0) {
-    const { error } = await supabase.from('sessions').insert(mine.map((s) => sessionRow(s, userId)));
-    if (error) throw error;
-  }
 }
 
 export async function remoteCounts(): Promise<{ routines: number; sessions: number }> {

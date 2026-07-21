@@ -19,6 +19,7 @@ const PERIODS: StatPeriod[] = ['month', '3months', 'all'];
 export function ExerciseDetailSheet() {
   const detailExerciseId = useStore((s) => s.detailExerciseId);
   const active = useStore((s) => s.active);
+  const pickerTargetSessionId = useStore((s) => s.pickerTargetSessionId);
   const sessions = useStore((s) => s.sessions);
   const units = useStore((s) => s.settings.units);
   const closeSheet = useStore((s) => s.closeSheet);
@@ -122,7 +123,7 @@ export function ExerciseDetailSheet() {
         ))}
       </div>
       <div className="attribution">{ex.attribution}</div>
-      {active && (
+      {(active || pickerTargetSessionId) && (
         <button className="btn" style={{ marginTop: 16 }} onClick={() => addExerciseToSession(ex.id)}>
           + Add to workout
         </button>

@@ -145,32 +145,49 @@ export function BodyProfileSetup({ onSaved }: { onSaved?: () => void }) {
       <div className="section-h" style={{ margin: '14px 2px 6px' }}>
         Goal
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        {GOAL_OPTIONS.map((opt) => (
-          <button key={opt.id} onClick={() => setGoal(opt.id)} style={{ ...chipStyle(goal === opt.id), flex: 1 }}>
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      {goal !== 'maintain' && (
+      {bodyProfile.goalMode === 'kcal' ? (
+        // Goal/rate here would be inert — a manual kcal/day target (set from
+        // the Nutrition card) is what actually drives the calorie target
+        // while goalMode is 'kcal', so editing these wouldn't change
+        // anything and would just look broken.
         <div className="settings-row">
           <div>
-            <div className="settings-row-label">Target rate</div>
+            <div className="settings-row-label">Set via manual kcal/day target</div>
             <div className="settings-row-desc">
-              {rateKgWeek.toFixed(1)} kg/week{rateKgWeek > 0.75 ? ' — fairly aggressive' : ''}
+              {bodyProfile.manualKcalTarget ?? '—'} kcal/day — change it from the Nutrition card
             </div>
           </div>
-          <input
-            type="range"
-            min={0.1}
-            max={1}
-            step={0.1}
-            value={rateKgWeek}
-            onChange={(e) => setRateKgWeek(Number(e.target.value))}
-            style={{ width: 110 }}
-          />
         </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {GOAL_OPTIONS.map((opt) => (
+              <button key={opt.id} onClick={() => setGoal(opt.id)} style={{ ...chipStyle(goal === opt.id), flex: 1 }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {goal !== 'maintain' && (
+            <div className="settings-row">
+              <div>
+                <div className="settings-row-label">Target rate</div>
+                <div className="settings-row-desc">
+                  {rateKgWeek.toFixed(1)} kg/week{rateKgWeek > 0.75 ? ' — fairly aggressive' : ''}
+                </div>
+              </div>
+              <input
+                type="range"
+                min={0.1}
+                max={1}
+                step={0.1}
+                value={rateKgWeek}
+                onChange={(e) => setRateKgWeek(Number(e.target.value))}
+                style={{ width: 110 }}
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div className="settings-row">

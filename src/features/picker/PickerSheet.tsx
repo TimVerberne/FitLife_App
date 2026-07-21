@@ -34,7 +34,13 @@ function useVirtualRange(count: number, listRef: React.RefObject<HTMLDivElement 
     function update() {
       raf = 0;
       const scrolledIntoList = scrollEl!.scrollTop - listTop;
-      const start = Math.max(0, Math.floor(scrolledIntoList / ROW_HEIGHT) - OVERSCAN);
+      // Clamped to `count`, not just floored at 0 — when the filtered list
+      // shrinks (a narrower query/body-part filter) this effect re-runs
+      // before the separate scroll-to-top effect below has actually reset
+      // scrollTop, so the stale scroll position can otherwise compute a
+      // start index past the new, shorter list and render a blank flash.
+      const rawStart = Math.max(0, Math.floor(scrolledIntoList / ROW_HEIGHT) - OVERSCAN);
+      const start = Math.min(rawStart, count);
       const visibleRows = Math.ceil(scrollEl!.clientHeight / ROW_HEIGHT) + OVERSCAN * 2;
       setRange({ start, end: Math.min(count, start + visibleRows) });
     }

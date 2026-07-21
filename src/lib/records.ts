@@ -46,6 +46,14 @@ export function setsCountOf(entries: SessionEntry[]): number {
   return entries.reduce((a, e) => a + e.sets.filter(isLoggedSet).length, 0);
 }
 
+// The "planned" side of a done/total ratio — must exclude warmups the same
+// way isLoggedSet does, or the ratio (setsCountOf as the numerator) can
+// never reach total/total since warmups can contribute to one side but not
+// the other.
+export function plannedSetsCountOf(entries: SessionEntry[]): number {
+  return entries.reduce((a, e) => a + e.sets.filter((s) => s.kind !== 'warmup').length, 0);
+}
+
 export function repsOf(entries: SessionEntry[]): number {
   return entries.reduce((a, e) => a + e.sets.filter(isWorkingSet).reduce((b, s) => b + s.reps, 0), 0);
 }

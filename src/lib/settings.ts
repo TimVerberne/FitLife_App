@@ -14,6 +14,7 @@ export interface Settings {
   confirmRemoveExercise: boolean;
   keepScreenAwake: boolean;
   hapticsOnSetComplete: boolean;
+  hapticsOnRestEnd: boolean;
   restTimerSound: boolean;
   theme: ThemeMode;
   accent: AccentPreset;
@@ -30,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmRemoveExercise: true,
   keepScreenAwake: false,
   hapticsOnSetComplete: true,
+  hapticsOnRestEnd: true,
   restTimerSound: true,
   theme: 'dark',
   accent: 'mint',

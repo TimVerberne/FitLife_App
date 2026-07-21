@@ -5,13 +5,15 @@ import { toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
 export function HomeScreen() {
-  // The date/time header otherwise only recomputes when something else
-  // triggers a re-render, so it silently goes stale while this screen just
-  // sits open. This tick has no other purpose than forcing a fresh `Date()`
-  // read every 30s.
-  const [, tick] = useState(0);
+  // The date/time header, and anything memoized off Date.now() below (the
+  // weekly streak), otherwise only recompute when something else triggers a
+  // re-render — so both silently go stale while this screen just sits open
+  // (e.g. left open across a week-boundary rollover with no new session
+  // logged). `nowTick` is read by those useMemo deps purely to force a
+  // fresh recompute every 30s; its own value is never used directly.
+  const [nowTick, setNowTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => tick((n) => n + 1), 30_000);
+    const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
     return () => clearInterval(id);
   }, []);
 
@@ -29,7 +31,13 @@ export function HomeScreen() {
     () => toDisplayWeight(mySessions.reduce((a, h) => a + volumeOf(h.entries), 0), settings.units),
     [mySessions, settings.units],
   );
-  const streak = useMemo(() => weeklyStreak(sessions, 'You', Date.now(), settings.weekStart), [sessions, settings.weekStart]);
+  // nowTick is a deliberate cache-buster (forces a fresh Date.now() read
+  // every 30s), not an input the computation itself reads.
+  const streak = useMemo(
+    () => weeklyStreak(sessions, 'You', Date.now(), settings.weekStart),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, settings.weekStart, nowTick],
+  );
 
   const nextRoutine = useMemo(() => {
     if (routines.length === 0) return null;

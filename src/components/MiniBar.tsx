@@ -1,5 +1,5 @@
 import { useStore } from '../store/useStore';
-import { setsCountOf } from '../lib/records';
+import { plannedSetsCountOf, setsCountOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 
 export function MiniBar() {
@@ -10,7 +10,7 @@ export function MiniBar() {
 
   if (!active || mode !== 'tabs') return null;
 
-  return <MiniBarInner name={active.name} startedAt={active.startedAt} done={setsCountOf(active.entries)} total={active.entries.reduce((a, e) => a + e.sets.length, 0)} onRestore={restoreSession} onCancel={cancelSession} />;
+  return <MiniBarInner name={active.name} startedAt={active.startedAt} done={setsCountOf(active.entries)} total={plannedSetsCountOf(active.entries)} onRestore={restoreSession} onCancel={cancelSession} />;
 }
 
 function MiniBarInner({

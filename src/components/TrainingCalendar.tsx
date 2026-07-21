@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { WorkoutSession } from '../lib/types';
 import { daysSinceLastWorkout, sessionsByDay, weeklyStreak } from '../lib/records';
 import { useStore } from '../store/useStore';
@@ -23,10 +23,24 @@ function isSameMonth(a: Date, b: Date): boolean {
 export function TrainingCalendar({ sessions, onOpen }: { sessions: WorkoutSession[]; onOpen: (id: string) => void }) {
   const weekStart = useStore((s) => s.settings.weekStart);
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
+  // Both the streak and "today" highlight are computed off Date.now()/new
+  // Date() at render time — without something to force a periodic
+  // recompute, either would silently freeze on a stale value (last week's
+  // streak, yesterday's date highlighted) if this screen is left open
+  // across a week or day boundary with no new session logged to otherwise
+  // trigger a re-render.
+  const [nowTick, setNowTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setNowTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
   const byDay = useMemo(() => sessionsByDay(sessions), [sessions]);
-  const streak = useMemo(() => weeklyStreak(sessions, 'You', Date.now(), weekStart), [sessions, weekStart]);
+  // nowTick is a deliberate cache-buster, not an input either computation reads.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const streak = useMemo(() => weeklyStreak(sessions, 'You', Date.now(), weekStart), [sessions, weekStart, nowTick]);
   const restDays = useMemo(() => daysSinceLastWorkout(sessions), [sessions]);
-  const todayKey = useMemo(() => startOfDay(new Date()).getTime(), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const todayKey = useMemo(() => startOfDay(new Date()).getTime(), [nowTick]);
   const weekdayLabels = weekStart === 'mon' ? WEEKDAY_LABELS_MON : WEEKDAY_LABELS_SUN;
 
   const weeks = useMemo(() => {
