@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface DragState {
   order: number[]; // order[slot] = original index now occupying that slot
@@ -31,17 +31,25 @@ export function useDragReorder(itemCount: number, rowHeight: number, onCommit: (
   const [drag, setDrag] = useState<DragState | null>(null);
   const dragRef = useRef<DragState | null>(null);
 
-  function startDrag(e: React.PointerEvent, originalIndex: number) {
-    const d: DragState = {
-      order: Array.from({ length: itemCount }, (_, i) => i),
-      draggingIndex: originalIndex,
-      startSlot: originalIndex,
-      startY: e.clientY,
-      dy: 0,
-    };
-    dragRef.current = d;
-    setDrag(d);
-  }
+  // Wrapped in useCallback so consumers that pass these down to memoized
+  // per-item child components (e.g. ActiveSessionScreen's ExerciseCard) get
+  // a stable reference across renders — otherwise every render of the
+  // parent would hand every child a "new" prop, defeating memoization even
+  // for cards that have nothing to do with the drag.
+  const startDrag = useCallback(
+    (e: React.PointerEvent, originalIndex: number) => {
+      const d: DragState = {
+        order: Array.from({ length: itemCount }, (_, i) => i),
+        draggingIndex: originalIndex,
+        startSlot: originalIndex,
+        startY: e.clientY,
+        dy: 0,
+      };
+      dragRef.current = d;
+      setDrag(d);
+    },
+    [itemCount],
+  );
 
   // Keyboard equivalent of the pointer drag above — reuses the exact same
   // `drag` state (and so the exact same "compact" rendering both screens
@@ -50,44 +58,50 @@ export function useDragReorder(itemCount: number, rowHeight: number, onCommit: (
   // formula both screens already use for the actively-dragged card —
   // resolves to the new slot's position, even though there's no real
   // pointer Y delta driving it here.
-  function startKeyboardReorder(originalIndex: number) {
-    const d: DragState = {
-      order: Array.from({ length: itemCount }, (_, i) => i),
-      draggingIndex: originalIndex,
-      startSlot: originalIndex,
-      startY: 0,
-      dy: 0,
-    };
-    dragRef.current = d;
-    setDrag(d);
-  }
+  const startKeyboardReorder = useCallback(
+    (originalIndex: number) => {
+      const d: DragState = {
+        order: Array.from({ length: itemCount }, (_, i) => i),
+        draggingIndex: originalIndex,
+        startSlot: originalIndex,
+        startY: 0,
+        dy: 0,
+      };
+      dragRef.current = d;
+      setDrag(d);
+    },
+    [itemCount],
+  );
 
-  function moveKeyboardSlot(delta: number) {
-    setDrag((d) => {
-      if (!d) return d;
-      const currentSlot = d.order.indexOf(d.draggingIndex);
-      const targetSlot = Math.max(0, Math.min(d.order.length - 1, currentSlot + delta));
-      if (targetSlot === currentSlot) return d;
-      const order = [...d.order];
-      order.splice(currentSlot, 1);
-      order.splice(targetSlot, 0, d.draggingIndex);
-      const next = { ...d, order, dy: (targetSlot - d.startSlot) * rowHeight };
-      dragRef.current = next;
-      return next;
-    });
-  }
+  const moveKeyboardSlot = useCallback(
+    (delta: number) => {
+      setDrag((d) => {
+        if (!d) return d;
+        const currentSlot = d.order.indexOf(d.draggingIndex);
+        const targetSlot = Math.max(0, Math.min(d.order.length - 1, currentSlot + delta));
+        if (targetSlot === currentSlot) return d;
+        const order = [...d.order];
+        order.splice(currentSlot, 1);
+        order.splice(targetSlot, 0, d.draggingIndex);
+        const next = { ...d, order, dy: (targetSlot - d.startSlot) * rowHeight };
+        dragRef.current = next;
+        return next;
+      });
+    },
+    [rowHeight],
+  );
 
-  function confirmKeyboardReorder() {
+  const confirmKeyboardReorder = useCallback(() => {
     const d = dragRef.current;
     if (d) onCommit(d.order);
     dragRef.current = null;
     setDrag(null);
-  }
+  }, [onCommit]);
 
-  function cancelKeyboardReorder() {
+  const cancelKeyboardReorder = useCallback(() => {
     dragRef.current = null;
     setDrag(null);
-  }
+  }, []);
 
   useEffect(() => {
     if (!drag) return;

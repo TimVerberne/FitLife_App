@@ -1,55 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
-import { epley, isWorkingSet, personalRecords, plannedSetsCountOf, setsCountOf, volumeOf } from '../lib/records';
+import { personalRecords, plannedSetsCountOf, setsCountOf, volumeOf } from '../lib/records';
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { useDragReorder } from '../lib/useDragReorder';
-import { REST_PRESETS, formatRest } from '../lib/rest';
-import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../lib/units';
-import { Thumb } from '../components/Thumb';
-import { NumberField } from '../components/NumberField';
+import { toDisplayWeight } from '../lib/units';
 import { RestTimerBar } from '../components/RestTimerBar';
-import type { SessionEntry, SetEntry, SetKind } from '../lib/types';
-
-function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
-  let best = startingBest;
-  return sets.map((s) => {
-    if (!isWorkingSet(s) || s.weight <= 0) return false;
-    const oneRepMax = epley(s.weight, s.reps);
-    if (oneRepMax > best) {
-      best = oneRepMax;
-      return true;
-    }
-    return false;
-  });
-}
-
-function setLabelFor(sets: SetEntry[], index: number): { text: string; kind: SetKind } {
-  const kind = sets[index].kind ?? 'normal';
-  if (kind === 'warmup') return { text: 'W', kind };
-  if (kind === 'failure') return { text: 'F', kind };
-  if (kind === 'superset') return { text: 'S', kind };
-  if (kind === 'dropset') {
-    let start = index;
-    while (start > 0 && (sets[start - 1].kind ?? 'normal') === 'dropset') start--;
-    return { text: `D${index - start + 1}`, kind };
-  }
-  let n = 0;
-  for (let i = 0; i <= index; i++) {
-    if ((sets[i].kind ?? 'normal') === 'normal') n++;
-  }
-  return { text: String(n), kind: 'normal' };
-}
-
-// Keyed by exerciseId, not entries-array index — an index would go stale
-// (and silently point at the wrong exercise) the moment a drag-reorder or
-// an exercise removal shifts what's at that index while this menu is open.
-interface MenuState {
-  exerciseId: string;
-  setIdx: number;
-  step: 'options' | 'dropCount';
-  dropCount: number;
-}
+import { ExerciseCard, type MenuState } from '../features/session/ExerciseCard';
+import type { SessionEntry } from '../lib/types';
 
 // Reordering swaps every card to a fixed height (see .s-ex.compact) so a
 // dragged card's target slot is plain arithmetic on the pointer's Y delta,
@@ -72,6 +30,8 @@ export function ActiveSessionScreen() {
   const setSetKind = useStore((s) => s.setSetKind);
   const applyDropSet = useStore((s) => s.applyDropSet);
   const removeExercise = useStore((s) => s.removeExercise);
+  const pairSuperset = useStore((s) => s.pairSuperset);
+  const unpairSuperset = useStore((s) => s.unpairSuperset);
   const openPicker = useStore((s) => s.openPicker);
   const openDetail = useStore((s) => s.openDetail);
   const minimizeSession = useStore((s) => s.minimizeSession);
@@ -105,9 +65,18 @@ export function ActiveSessionScreen() {
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, exerciseIdsKey]);
+  // One stable array shared by every card (rather than each card filtering
+  // `active.entries` itself into a fresh array every render) — recomputed
+  // only when the set of exercises actually changes, not on every keystroke,
+  // so it doesn't defeat ExerciseCard's memoization for unrelated cards.
+  const allExercises = useMemo(
+    () => (exerciseIdsKey ? exerciseIdsKey.split(',').map((id) => ({ exerciseId: id, name: exerciseById(id)?.name ?? '?' })) : []),
+    [exerciseIdsKey],
+  );
   const mins = useElapsedMinutes(active?.startedAt ?? Date.now());
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<string | null>(null);
+  const [supersetMenuFor, setSupersetMenuFor] = useState<string | null>(null);
   const { drag, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
     active?.entries.length ?? 0,
     COMPACT_ROW_HEIGHT,
@@ -201,37 +170,6 @@ export function ActiveSessionScreen() {
   const total = plannedSetsCountOf(active.entries);
   const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
-  function prevPerformance(exerciseId: string, setIdx: number, cardio: boolean): string | null {
-    const set = priorEntryByExerciseId.get(exerciseId)?.sets[setIdx];
-    if (!set) return null;
-    if (cardio) return `${Math.round((set.durationSec ?? 0) / 60)}m · ${(set.distanceKm ?? 0).toFixed(1)}km`;
-    return `${formatWeight(set.weight, settings.units)}×${set.reps}`;
-  }
-
-  function closeMenu() {
-    setMenu(null);
-  }
-
-  function pickKind(kind: SetKind) {
-    if (!menu || !active) return;
-    if (kind === 'dropset') {
-      setMenu({ ...menu, step: 'dropCount', dropCount: 3 });
-      return;
-    }
-    const entryIdx = active.entries.findIndex((e) => e.exerciseId === menu.exerciseId);
-    if (entryIdx === -1) { closeMenu(); return; }
-    setSetKind(entryIdx, menu.setIdx, kind);
-    closeMenu();
-  }
-
-  function confirmDropSet() {
-    if (!menu || !active) return;
-    const entryIdx = active.entries.findIndex((e) => e.exerciseId === menu.exerciseId);
-    if (entryIdx === -1) { closeMenu(); return; }
-    applyDropSet(entryIdx, menu.setIdx, menu.dropCount);
-    closeMenu();
-  }
-
   return (
     <div className="screen" style={{ padding: '0 18px 24px' }}>
       <div className={`sess-bar${headerHidden ? ' hidden' : ''}`}>
@@ -297,7 +235,6 @@ export function ActiveSessionScreen() {
         if (!ex) return null;
         const cardio = isCardioExercise(ex);
         const rec = records.find((r) => r.exerciseId === ex.id);
-        const prFlags = cardio ? [] : prFlagsFor(en.sets, rec?.estOneRepMax ?? 0);
         const isDraggingThis = !!drag && ei === drag.draggingIndex;
         const positionStyle: React.CSSProperties | undefined = drag
           ? {
@@ -310,237 +247,45 @@ export function ActiveSessionScreen() {
             }
           : undefined;
         return (
-          <div className={`s-ex${drag ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}`} key={en.exerciseId} style={positionStyle}>
-            <div className="s-top">
-              <div
-                className="s-info-btn"
-                role="button"
-                tabIndex={0}
-                aria-label={`View ${ex.name} details`}
-                onClick={() => openDetail(ex.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') openDetail(ex.id);
-                }}
-              >
-                <Thumb className="ph" src={ex.image} alt={ex.name} />
-                <div className="s-name">
-                  {ex.name}
-                  {!drag && <span className="sub">{ex.target} · {ex.equipment}</span>}
-                </div>
-              </div>
-              {!drag && (
-                <button
-                  className="s-del"
-                  aria-label={`Remove ${ex.name} from workout`}
-                  onClick={() => {
-                    if (settings.confirmRemoveExercise) {
-                      confirm(`Remove ${ex.name} from this workout?`, 'Remove', () => removeExercise(ei), true);
-                    } else {
-                      removeExercise(ei);
-                    }
-                  }}
-                >
-                  ✕
-                </button>
-              )}
-              <button
-                className="s-drag-handle"
-                aria-label={`Reorder ${ex.name}. Press Enter to pick up, arrow keys to move, Enter again to drop.`}
-                onPointerDown={(e) => startDrag(e, ei)}
-                onKeyDown={(e) => {
-                  const isActive = drag?.draggingIndex === ei;
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    if (isActive) confirmKeyboardReorder();
-                    else startKeyboardReorder(ei);
-                  } else if (isActive && e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    moveKeyboardSlot(-1);
-                  } else if (isActive && e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    moveKeyboardSlot(1);
-                  } else if (isActive && e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelKeyboardReorder();
-                  }
-                }}
-              >
-                ⠿
-              </button>
-            </div>
-            {!drag && (
-            <>
-            <div className="rest-toggle-wrap">
-              <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuFor === en.exerciseId ? null : en.exerciseId)}>
-                ⏱ Rest timer: {active.restTimers[en.exerciseId] ? formatRest(active.restTimers[en.exerciseId]) : 'Off'}
-              </button>
-              {restMenuFor === en.exerciseId && (
-                <>
-                  <div className="set-menu-scrim" onClick={() => setRestMenuFor(null)} />
-                  <div className="rest-menu">
-                    <div className="set-menu-title">Rest timer</div>
-                    <div className="rest-menu-grid">
-                      {REST_PRESETS.map((s) => (
-                        <button
-                          key={s}
-                          className={`rest-chip${active.restTimers[en.exerciseId] === s ? ' on' : ''}`}
-                          onClick={() => {
-                            setRestDuration(en.exerciseId, s);
-                            setRestMenuFor(null);
-                          }}
-                        >
-                          {formatRest(s)}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      className="set-menu-item danger"
-                      onClick={() => {
-                        setRestDuration(en.exerciseId, null);
-                        setRestMenuFor(null);
-                      }}
-                    >
-                      Turn off
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-            {en.sets.length > 0 && (
-              <div className="set-head">
-                <span>#</span>
-                <span>Prev</span>
-                <span>{cardio ? 'Min' : settings.units === 'kg' ? 'Kg' : 'Lb'}</span>
-                <span>{cardio ? 'Km' : 'Reps'}</span>
-                <span></span>
-              </div>
-            )}
-            {en.sets.map((st, si) => {
-              const prev = prevPerformance(en.exerciseId, si, cardio);
-              const label = setLabelFor(en.sets, si);
-              const menuOpen = menu?.exerciseId === en.exerciseId && menu?.setIdx === si;
-              return (
-                <div key={si}>
-                  <div className={`set-row${st.done ? ' done' : ''}`}>
-                    <div className="set-idx-wrap">
-                      <button
-                        className={`set-idx${label.kind !== 'normal' ? ` kind-${label.kind}` : ''}`}
-                        aria-label={`Set ${si + 1} type: ${label.kind}. Tap to change.`}
-                        onClick={() => setMenu(menuOpen ? null : { exerciseId: en.exerciseId, setIdx: si, step: 'options', dropCount: 3 })}
-                      >
-                        {label.text}
-                      </button>
-                      {menuOpen && (
-                        <>
-                          <div className="set-menu-scrim" onClick={closeMenu} />
-                          <div className="set-menu">
-                            {menu!.step === 'options' ? (
-                              <>
-                                <button className="set-menu-item" onClick={() => pickKind('warmup')}>
-                                  <span className="set-menu-badge warmup">W</span> Warm up
-                                </button>
-                                <button className="set-menu-item" onClick={() => pickKind('normal')}>
-                                  <span className="set-menu-badge">{si + 1}</span> Normal
-                                </button>
-                                <button className="set-menu-item" onClick={() => pickKind('failure')}>
-                                  <span className="set-menu-badge failure">F</span> Failure
-                                </button>
-                                <button className="set-menu-item" onClick={() => pickKind('dropset')}>
-                                  <span className="set-menu-badge dropset">D</span> Drop set
-                                </button>
-                                <button className="set-menu-item" onClick={() => pickKind('superset')}>
-                                  <span className="set-menu-badge superset">S</span> Superset
-                                </button>
-                                <button className="set-menu-item danger" onClick={() => { removeSet(ei, si); closeMenu(); }}>
-                                  <span className="set-menu-badge">✕</span> Remove set
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <div className="set-menu-title">Drop set rounds</div>
-                                <div className="set-menu-stepper">
-                                  <button onClick={() => setMenu((m) => (m ? { ...m, dropCount: Math.max(2, m.dropCount - 1) } : m))}>
-                                    −
-                                  </button>
-                                  <span className="count">{menu!.dropCount}</span>
-                                  <button onClick={() => setMenu((m) => (m ? { ...m, dropCount: Math.min(6, m.dropCount + 1) } : m))}>
-                                    +
-                                  </button>
-                                </div>
-                                <button className="btn" style={{ marginTop: 4 }} onClick={confirmDropSet}>
-                                  Add
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <div className="set-prev">{prev ?? '—'}</div>
-                    {cardio ? (
-                      <>
-                        <div className="set-fld">
-                          <NumberField
-                            value={Math.round((st.durationSec ?? 0) / 60)}
-                            inputMode="numeric"
-                            ariaLabel={`Set ${si + 1} minutes`}
-                            onCommit={(n) => setVal(ei, si, 'durationSec', n * 60)}
-                          />
-                        </div>
-                        <div className="set-fld">
-                          <NumberField
-                            value={st.distanceKm ?? 0}
-                            inputMode="decimal"
-                            ariaLabel={`Set ${si + 1} distance in kilometers`}
-                            onCommit={(n) => setVal(ei, si, 'distanceKm', n)}
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="set-fld">
-                          <NumberField
-                            value={toDisplayWeight(st.weight, settings.units)}
-                            inputMode="decimal"
-                            ariaLabel={`Set ${si + 1} weight in ${settings.units}`}
-                            onCommit={(n) => setVal(ei, si, 'weight', fromDisplayWeight(n, settings.units))}
-                          />
-                        </div>
-                        <div className="set-fld">
-                          <NumberField
-                            value={st.reps}
-                            inputMode="numeric"
-                            ariaLabel={`Set ${si + 1} reps`}
-                            onCommit={(n) => setVal(ei, si, 'reps', n)}
-                          />
-                        </div>
-                      </>
-                    )}
-                    <button
-                      className="set-check"
-                      aria-label={st.done ? `Mark set ${si + 1} not done` : `Mark set ${si + 1} done`}
-                      aria-pressed={st.done}
-                      onClick={() => toggleSet(ei, si)}
-                    >
-                      {st.done ? '✓' : ''}
-                    </button>
-                  </div>
-                  {prFlags[si] && (
-                    <div style={{ textAlign: 'right', marginTop: -4, marginBottom: 6 }}>
-                      <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 11 }}>
-                        🏆 new record
-                      </span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <button className="add-set" onClick={() => addSet(ei)}>
-              + Add set
-            </button>
-            </>
-            )}
-          </div>
+          <ExerciseCard
+            key={en.exerciseId}
+            ei={ei}
+            entry={en}
+            ex={ex}
+            cardio={cardio}
+            startingBest={rec?.estOneRepMax ?? 0}
+            priorEntry={priorEntryByExerciseId.get(en.exerciseId)}
+            restSeconds={active.restTimers[en.exerciseId]}
+            units={settings.units}
+            confirmRemoveExercise={settings.confirmRemoveExercise}
+            compact={!!drag}
+            isDraggingThis={isDraggingThis}
+            positionStyle={positionStyle}
+            menu={menu?.exerciseId === en.exerciseId ? menu : null}
+            restMenuOpen={restMenuFor === en.exerciseId}
+            supersetMenuOpen={supersetMenuFor === en.exerciseId}
+            allExercises={allExercises}
+            setMenu={setMenu}
+            setRestMenuFor={setRestMenuFor}
+            setSupersetMenuFor={setSupersetMenuFor}
+            setVal={setVal}
+            toggleSet={toggleSet}
+            addSet={addSet}
+            removeSet={removeSet}
+            setSetKind={setSetKind}
+            applyDropSet={applyDropSet}
+            removeExercise={removeExercise}
+            setRestDuration={setRestDuration}
+            pairSuperset={pairSuperset}
+            unpairSuperset={unpairSuperset}
+            openDetail={openDetail}
+            confirm={confirm}
+            startDrag={startDrag}
+            startKeyboardReorder={startKeyboardReorder}
+            moveKeyboardSlot={moveKeyboardSlot}
+            confirmKeyboardReorder={confirmKeyboardReorder}
+            cancelKeyboardReorder={cancelKeyboardReorder}
+          />
         );
       })}
       </div>

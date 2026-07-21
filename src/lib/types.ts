@@ -29,6 +29,12 @@ export interface SetEntry {
 export interface SessionEntry {
   exerciseId: string;
   sets: SetEntry[];
+  // Superset partner's exerciseId, set symmetrically on both sides of a
+  // pair (see pairSuperset/unpairSuperset). Kept as an exerciseId, not an
+  // entries-array index, for the same reason MenuState is — an index would
+  // go stale the moment a drag-reorder or exercise removal shifts what's at
+  // that position.
+  supersetWith?: string;
 }
 
 export interface Routine {

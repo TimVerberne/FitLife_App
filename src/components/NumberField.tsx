@@ -5,11 +5,13 @@ export function NumberField({
   onCommit,
   inputMode,
   ariaLabel,
+  step,
 }: {
   value: number;
   onCommit: (n: number) => void;
   inputMode: 'decimal' | 'numeric';
   ariaLabel?: string;
+  step?: number;
 }) {
   const [text, setText] = useState(String(value));
   const [focused, setFocused] = useState(false);
@@ -18,7 +20,7 @@ export function NumberField({
     if (!focused) setText(String(value));
   }, [value, focused]);
 
-  return (
+  const input = (
     <input
       type="number"
       inputMode={inputMode}
@@ -50,5 +52,37 @@ export function NumberField({
         }
       }}
     />
+  );
+
+  if (step === undefined) return input;
+
+  const current = focused ? parseFloat(text) : value;
+  const base = Number.isNaN(current) ? 0 : current;
+  function commitDelta(delta: number) {
+    const next = Math.max(0, Math.round((base + delta) * 100) / 100);
+    onCommit(next);
+    setText(String(next));
+  }
+
+  return (
+    <div className="number-stepper">
+      <button
+        type="button"
+        className="number-step-btn"
+        aria-label={`Decrease${ariaLabel ? ` ${ariaLabel}` : ''}`}
+        onClick={() => commitDelta(-step)}
+      >
+        −
+      </button>
+      {input}
+      <button
+        type="button"
+        className="number-step-btn"
+        aria-label={`Increase${ariaLabel ? ` ${ariaLabel}` : ''}`}
+        onClick={() => commitDelta(step)}
+      >
+        +
+      </button>
+    </div>
   );
 }

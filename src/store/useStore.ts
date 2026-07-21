@@ -90,7 +90,7 @@ function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
   return [];
 }
 
-interface StoreState {
+export interface StoreState {
   // data
   loaded: boolean;
   routines: Routine[];
@@ -167,6 +167,8 @@ interface StoreState {
   setSetKind(entryIdx: number, setIdx: number, kind: SetKind): void;
   applyDropSet(entryIdx: number, setIdx: number, rounds: number): void;
   removeExercise(entryIdx: number): void;
+  pairSuperset(exerciseId: string, partnerId: string): void;
+  unpairSuperset(exerciseId: string): void;
   reorderEntries(order: number[]): void;
   addExerciseToSession(exerciseId: string): void;
   addExercisesToSession(exerciseIds: string[]): void;
@@ -220,7 +222,7 @@ interface StoreState {
   updateSettings(patch: Partial<Settings>): void;
   exportData(): void;
   importData(file: File): void;
-  confirmImport(): void;
+  confirmImport(mode: 'replace' | 'merge'): void;
   cancelImportPreview(): void;
   clearAllData(): void;
   deleteAccount(): void;
@@ -310,6 +312,55 @@ function prepareImportedData(
   const remapped = remapLegacyIdsToUuid(routines, ownSessionsOnly);
   const settings = settingsPatch ? { ...currentSettings, ...settingsPatch } : currentSettings;
   return { ...remapped, settings };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Folds freshly-imported routines/sessions into what's already stored instead
+// of wiping it. FitFlow backup ids are stable, portable UUIDs that match the
+// live record's own id directly, so those dedup by id. Hevy CSV ids are just
+// positional placeholders regenerated fresh on every parse (see
+// convertHevyCsv) and never mean anything across separate imports, so those
+// dedup by name/start-time instead — the closest thing to a stable identity
+// a CSV export actually has.
+function mergeImportedData(
+  existingRoutines: Routine[],
+  existingSessions: WorkoutSession[],
+  importRoutines: Routine[],
+  importSessions: WorkoutSession[],
+  isCsv: boolean,
+): { routines: Routine[]; sessions: WorkoutSession[]; touchedRoutines: Routine[]; touchedSessions: WorkoutSession[] } {
+  const routines = [...existingRoutines];
+  const idMap = new Map<string, string>();
+  const touchedRoutines: Routine[] = [];
+  for (const r of importRoutines) {
+    const matchIdx = isCsv ? routines.findIndex((er) => er.name === r.name) : routines.findIndex((er) => er.id === r.id);
+    const finalId = matchIdx >= 0 ? routines[matchIdx].id : isCsv || !UUID_RE.test(r.id) ? crypto.randomUUID() : r.id;
+    idMap.set(r.id, finalId);
+    const merged = { ...r, id: finalId };
+    if (matchIdx >= 0) routines[matchIdx] = merged;
+    else routines.push(merged);
+    touchedRoutines.push(merged);
+  }
+
+  const sessions = [...existingSessions];
+  const touchedSessions: WorkoutSession[] = [];
+  for (const s of importSessions) {
+    const matchIdx = isCsv
+      ? sessions.findIndex((es) => es.person === 'You' && es.name === s.name && es.startedAt === s.startedAt)
+      : sessions.findIndex((es) => es.id === s.id);
+    const finalId = matchIdx >= 0 ? sessions[matchIdx].id : isCsv || !UUID_RE.test(s.id) ? crypto.randomUUID() : s.id;
+    const merged: WorkoutSession = {
+      ...s,
+      id: finalId,
+      routineId: s.routineId ? (idMap.get(s.routineId) ?? s.routineId) : null,
+    };
+    if (matchIdx >= 0) sessions[matchIdx] = merged;
+    else sessions.push(merged);
+    touchedSessions.push(merged);
+  }
+
+  return { routines, sessions, touchedRoutines, touchedSessions };
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -453,7 +504,18 @@ export const useStore = create<StoreState>((set, get) => ({
     if (turningOn && get().settings.hapticsOnSetComplete && 'vibrate' in navigator) {
       navigator.vibrate(15);
     }
-    const restSeconds = turningOn ? active.restTimers[entry.exerciseId] : undefined;
+    // Supersetted exercises share one rest boundary — you go straight from
+    // one exercise's set into its partner's, so finishing this exercise's
+    // set shouldn't start a timer on its own while the partner's matching
+    // set is still pending. Only completing the side that finishes the pair
+    // for this round starts the shared rest countdown (falling back to the
+    // partner's configured duration if this exercise has none of its own).
+    const partner = entry.supersetWith ? active.entries.find((e) => e.exerciseId === entry.supersetWith) : undefined;
+    const partnerSetPending = !!partner && !!partner.sets[setIdx] && !partner.sets[setIdx].done;
+    const restSeconds =
+      turningOn && !partnerSetPending
+        ? (active.restTimers[entry.exerciseId] ?? (partner ? active.restTimers[partner.exerciseId] : undefined))
+        : undefined;
     // A different exercise's rest timer already counting down would
     // otherwise get silently overwritten (only one restTimer can be shown
     // at a time) — supersetting between exercises made this easy to trigger
@@ -542,7 +604,41 @@ export const useStore = create<StoreState>((set, get) => ({
   removeExercise(entryIdx) {
     const active = get().active;
     if (!active) return;
-    set({ active: { ...active, entries: active.entries.filter((_, ei) => ei !== entryIdx) } });
+    const removedId = active.entries[entryIdx]?.exerciseId;
+    // Clears the removed exercise's own partner's `supersetWith` too — left
+    // alone, the partner would keep pointing at an exerciseId that's no
+    // longer in `entries`, silently pairing it with nothing (lookups just
+    // find no match) and leaving a stale "paired with X" badge showing.
+    const entries = active.entries.filter((_, ei) => ei !== entryIdx).map((e) => (e.supersetWith === removedId ? { ...e, supersetWith: undefined } : e));
+    set({ active: { ...active, entries } });
+  },
+
+  // Pairing is symmetric and exclusive — each exercise can have at most one
+  // partner at a time, so re-pairing either side first clears whatever it
+  // (or the new partner) was previously paired with, instead of leaving a
+  // stale one-directional link.
+  pairSuperset(exerciseId, partnerId) {
+    const active = get().active;
+    if (!active || exerciseId === partnerId) return;
+    const entries = active.entries.map((e) => {
+      if (e.exerciseId === exerciseId) return { ...e, supersetWith: partnerId };
+      if (e.exerciseId === partnerId) return { ...e, supersetWith: exerciseId };
+      if (e.supersetWith === exerciseId || e.supersetWith === partnerId) return { ...e, supersetWith: undefined };
+      return e;
+    });
+    set({ active: { ...active, entries } });
+  },
+
+  unpairSuperset(exerciseId) {
+    const active = get().active;
+    if (!active) return;
+    const entry = active.entries.find((e) => e.exerciseId === exerciseId);
+    const partnerId = entry?.supersetWith;
+    if (!partnerId) return;
+    const entries = active.entries.map((e) =>
+      e.exerciseId === exerciseId || e.exerciseId === partnerId ? { ...e, supersetWith: undefined } : e,
+    );
+    set({ active: { ...active, entries } });
   },
 
   // `order[i]` is the original entries-index that should end up at position
@@ -1101,9 +1197,34 @@ export const useStore = create<StoreState>((set, get) => ({
       .finally(() => set({ importing: false }));
   },
 
-  confirmImport() {
+  confirmImport(mode) {
     const preview = get().importPreview;
     if (!preview) return;
+
+    if (mode === 'merge') {
+      const { routines, sessions, touchedRoutines, touchedSessions } = mergeImportedData(
+        get().routines,
+        get().sessions,
+        preview.routines,
+        preview.sessions.filter((s) => s.person === 'You'),
+        preview.isCsv,
+      );
+      void db.routines.bulkPut(touchedRoutines);
+      void db.sessions.bulkPut(touchedSessions);
+      void Promise.all([...touchedRoutines.map((r) => cloudSync.pushRoutine(r)), ...touchedSessions.map((s) => cloudSync.pushSession(s))]);
+      let settings = get().settings;
+      set({ routines, sessions, sheet: null, importPreview: null });
+      if (preview.settingsPatch) {
+        settings = { ...settings, ...preview.settingsPatch };
+        set({ settings });
+        saveSettings(settings);
+        applyTheme(settings);
+        void cloudSync.pushSettings(settings);
+      }
+      get().showToast(preview.isCsv ? 'Workouts merged in' : 'Backup merged in');
+      return;
+    }
+
     const prevRoutines = get().routines;
     const prevSessions = get().sessions;
     const { routines, sessions, settings } = prepareImportedData(get().settings, preview.routines, preview.sessions, preview.settingsPatch);

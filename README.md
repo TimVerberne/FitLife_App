@@ -102,6 +102,29 @@ this is done.
 
 ## Update notes
 
+**Version 1.11.0**
+- Built the four items deliberately deferred from the 1.10.0 improvement
+  pass, each a real design decision rather than a mechanical fix:
+  - **Quick +/- steppers**: weight/reps/cardio fields in the active session
+    now have compact −/+ buttons flanking the number input (weight steps by
+    2.5kg/5lb, reps and cardio minutes by 1, distance by 0.1km), fit inside
+    the existing tight 5-column set-row grid without widening it further.
+  - **Import merge mode**: the import preview now offers Merge (default)
+    alongside Replace all. Merge dedups instead of wiping — FitFlow backups
+    match by their own stable id, Hevy CSV imports (whose ids are just
+    positional placeholders regenerated on every parse) match by exercise
+    name + start time instead, so re-importing a growing Hevy export no
+    longer creates duplicate workouts.
+  - **Active session render-splitting**: each exercise card is now its own
+    memoized component instead of one large inline render for the whole
+    list — editing or completing one exercise's set no longer re-renders
+    every other exercise card in the workout.
+  - **Real supersetting**: exercises can now be paired ("⛓ Pair superset"),
+    replacing the old cosmetic-only per-set badge. Paired exercises share
+    one rest boundary — completing a set doesn't start a rest timer while
+    the partner's matching set is still pending, only completing the side
+    that finishes the round for both starts the shared countdown.
+
 **Version 1.10.0**
 - Full app-wide improvement pass (opportunities and polish, not bugs — a
   separate review already covered those). Same page-by-page approach,

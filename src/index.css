@@ -1205,6 +1205,11 @@
   color: var(--accent-ink);
 }
 
+.superset-menu {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
 .set-head {
   display: grid;
   grid-template-columns: 36px 56px 1fr 1fr 40px;
@@ -1439,6 +1444,45 @@
   font-weight: 700;
   font-size: 16px;
   padding: 8px 0;
+}
+
+.number-stepper {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  width: 100%;
+}
+
+.number-stepper input {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+.number-step-btn {
+  flex: none;
+  width: 18px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--faint-2);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.number-step-btn:active {
+  background: var(--surface-3, rgba(255, 255, 255, 0.08));
+}
+
+.set-row.done .set-fld .number-step-btn {
+  color: var(--accent-ink);
 }
 
 .set-check {
