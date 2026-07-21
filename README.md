@@ -102,6 +102,13 @@ this is done.
 
 ## Update notes
 
+**Version 1.11.1**
+- The "Pair superset" control was showing on every exercise card regardless
+  of whether supersetting was actually in use. It now stays hidden until a
+  set is marked with the Superset kind (via the set-number menu), and stays
+  visible afterward while the exercise is actually paired so Unpair remains
+  reachable even if that set's kind later changes.
+
 **Version 1.11.0**
 - Built the four items deliberately deferred from the 1.10.0 improvement
   pass, each a real design decision rather than a mechanical fix:

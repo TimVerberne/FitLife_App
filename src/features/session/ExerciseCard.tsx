@@ -128,6 +128,11 @@ function ExerciseCardImpl({
   const prFlags = cardio ? [] : prFlagsFor(entry.sets, startingBest);
   const partnerEx = entry.supersetWith ? exerciseById(entry.supersetWith) : undefined;
   const partnerOptions = allExercises.filter((o) => o.exerciseId !== entry.exerciseId);
+  // Hidden until it's actually relevant — showing a "pair superset" control
+  // on every card would clutter the common (non-superset) workout. Marking
+  // any set as the Superset kind reveals it; staying visible while already
+  // paired (even if that set later changes kind) keeps Unpair reachable.
+  const showSupersetControl = partnerOptions.length > 0 && (!!partnerEx || entry.sets.some((s) => s.kind === 'superset'));
 
   function prevPerformance(setIdx: number): string | null {
     const set = priorEntry?.sets[setIdx];
@@ -253,7 +258,7 @@ function ExerciseCardImpl({
               </>
             )}
           </div>
-          {partnerOptions.length > 0 && (
+          {showSupersetControl && (
             <div className="rest-toggle-wrap">
               <button className="rest-toggle" onClick={() => setSupersetMenuFor(supersetMenuOpen ? null : entry.exerciseId)}>
                 ⛓ {partnerEx ? `Paired with ${partnerEx.name}` : 'Pair superset'}
@@ -333,6 +338,9 @@ function ExerciseCardImpl({
                               </button>
                               <button className="set-menu-item" onClick={() => pickKind('dropset')}>
                                 <span className="set-menu-badge dropset">D</span> Drop set
+                              </button>
+                              <button className="set-menu-item" onClick={() => pickKind('superset')}>
+                                <span className="set-menu-badge superset">S</span> Superset
                               </button>
                               <button className="set-menu-item danger" onClick={() => { removeSet(ei, si); closeMenu(); }}>
                                 <span className="set-menu-badge">✕</span> Remove set
