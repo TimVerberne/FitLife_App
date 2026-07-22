@@ -280,9 +280,15 @@ export function convertHevyCsv(text: string): HevyImportResult | null {
 
   for (const key of sessionOrder) {
     const rs = sessionRows.get(key)!;
-    const [title, startS, endS] = key.split(' ');
-    const startedAt = parseHevyDate(startS);
-    const endedAt = parseHevyDate(endS);
+    // Read title/start/end straight off the row rather than re-splitting the
+    // grouping key. The key packs these with a NUL ('\0') separator, which
+    // renders as a space in most tooling and has repeatedly been misread as
+    // key.split(' ') — an easy way to "accidentally fix" this into dropping
+    // every workout (Hevy dates/titles contain spaces). rs[0] carries the
+    // same values with no fragile parsing.
+    const title = rs[0].title;
+    const startedAt = parseHevyDate(rs[0].start_time);
+    const endedAt = parseHevyDate(rs[0].end_time);
     if (!Number.isFinite(startedAt) || !Number.isFinite(endedAt)) {
       droppedSessionCount++;
       continue;
@@ -316,12 +322,19 @@ export function convertHevyCsv(text: string): HevyImportResult | null {
       const kind: SetKind = (['normal', 'warmup', 'failure', 'dropset'] as string[]).includes(rawKind)
         ? (rawKind as SetKind)
         : 'normal';
+      // Guard every numeric cell: a malformed value ("abc") would otherwise
+      // become NaN and poison all downstream volume/records math. Blanks are
+      // already handled by the truthiness checks; this catches garbage.
+      const num = (s: string) => {
+        const n = Number(s);
+        return Number.isFinite(n) ? n : 0;
+      };
       const sets = setsByExerciseId.get(exerciseId) ?? [];
       sets.push({
-        reps: !cardio && repsStr ? Math.round(Number(repsStr)) : 0,
-        weight: !cardio && weightStr ? Number(weightStr) : 0,
-        durationSec: cardio && durationStr ? Math.round(Number(durationStr)) : 0,
-        distanceKm: cardio && distanceStr ? Number(distanceStr) : 0,
+        reps: !cardio && repsStr ? Math.round(num(repsStr)) : 0,
+        weight: !cardio && weightStr ? num(weightStr) : 0,
+        durationSec: cardio && durationStr ? Math.round(num(durationStr)) : 0,
+        distanceKm: cardio && distanceStr ? num(distanceStr) : 0,
         done: true,
         kind,
       });

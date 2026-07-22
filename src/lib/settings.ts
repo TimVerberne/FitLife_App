@@ -41,11 +41,37 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const STORAGE_KEY = 'fitflow-settings';
 
+const UNITS_VALUES: Units[] = ['kg', 'lb'];
+const WEEKSTART_VALUES: WeekStart[] = ['sun', 'mon'];
+const THEME_VALUES: ThemeMode[] = ['dark', 'light'];
+const ACCENT_VALUES: AccentPreset[] = ['mint', 'blue', 'orange', 'violet', 'red', 'yellow', 'teal', 'pink'];
+const TAB_VALUES: Tab[] = ['home', 'train', 'stats', 'life', 'you'];
+
+// Coerces a partial/untrusted settings object (from localStorage or an
+// imported backup) into a valid Settings. Enum fields are the important part:
+// a hand-edited or corrupt backup with e.g. accent:"foo" would otherwise
+// reach applyTheme and throw on ACCENT_PRESETS[accent].accent, white-screening
+// the whole app at module load / mid-import. Unknown enum values fall back to
+// the default rather than being trusted.
+export function sanitizeSettings(partial: Partial<Settings>): Settings {
+  const merged = { ...DEFAULT_SETTINGS, ...partial };
+  const valid = <T,>(value: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(value as T) ? (value as T) : fallback;
+  return {
+    ...merged,
+    units: valid(merged.units, UNITS_VALUES, DEFAULT_SETTINGS.units),
+    weekStart: valid(merged.weekStart, WEEKSTART_VALUES, DEFAULT_SETTINGS.weekStart),
+    theme: valid(merged.theme, THEME_VALUES, DEFAULT_SETTINGS.theme),
+    accent: valid(merged.accent, ACCENT_VALUES, DEFAULT_SETTINGS.accent),
+    defaultTab: valid(merged.defaultTab, TAB_VALUES, DEFAULT_SETTINGS.defaultTab),
+  };
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<Settings>) };
+    return sanitizeSettings(JSON.parse(raw) as Partial<Settings>);
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -72,8 +98,10 @@ export const ACCENT_PRESETS: Record<AccentPreset, { accent: string; accentInk: s
 
 export function applyTheme(settings: Settings): void {
   const root = document.documentElement;
-  root.dataset.theme = settings.theme;
-  const preset = ACCENT_PRESETS[settings.accent];
+  // Defensive fallbacks so an out-of-range value that somehow bypassed
+  // sanitizeSettings still can't throw and take down the whole app.
+  root.dataset.theme = settings.theme === 'light' ? 'light' : 'dark';
+  const preset = ACCENT_PRESETS[settings.accent] ?? ACCENT_PRESETS.mint;
   root.style.setProperty('--accent', preset.accent);
   root.style.setProperty('--accent-ink', preset.accentInk);
   root.style.setProperty('--accent-soft', preset.accentSoft);

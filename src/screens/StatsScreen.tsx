@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import type { Person, WorkoutSession } from '../lib/types';
+import type { Person, SessionEntry, WorkoutSession } from '../lib/types';
 import {
   MUSCLE_AXES,
   MUSCLE_GROUP,
@@ -120,11 +120,16 @@ export function StatsScreen() {
     // show up in this list, just always reading "0"/"—" once selected.
     const mineIds = new Set<string>();
     const rivalIds = new Set<string>();
+    // Only count an exercise as "trained" if it has at least one logged
+    // working set — an exercise merely added to a session (or warmup-only)
+    // otherwise shows up in the head-to-head list with every tile reading
+    // "—"/0, which isn't a real comparison.
+    const trained = (e: SessionEntry) => e.sets.some(isWorkingSet);
     sessions
       .filter((h) => h.startedAt >= cutoff)
       .forEach((h) => {
-        if (h.person === 'You') h.entries.forEach((e) => mineIds.add(e.exerciseId));
-        else if (h.person === rival.person) h.entries.forEach((e) => rivalIds.add(e.exerciseId));
+        if (h.person === 'You') h.entries.forEach((e) => trained(e) && mineIds.add(e.exerciseId));
+        else if (h.person === rival.person) h.entries.forEach((e) => trained(e) && rivalIds.add(e.exerciseId));
       });
     return Array.from(mineIds)
       .filter((id) => rivalIds.has(id))
@@ -152,12 +157,19 @@ export function StatsScreen() {
   const exerciseStatsById = useMemo(() => {
     const map = new Map<string, { you: ReturnType<typeof exerciseStatsFor>; rival: ReturnType<typeof exerciseStatsFor> }>();
     if (!muscle || !rival) return map;
+    // Filter each person's in-window sessions ONCE up front rather than
+    // re-scanning the full combined session list inside exerciseStatsFor for
+    // every shared exercise (which also runs exerciseHistory — a second
+    // scan+sort each). Passing the pre-narrowed lists keeps the same result
+    // with far less repeated work as history and shared-lift counts grow.
+    const youWindow = sessions.filter((h) => h.person === 'You' && h.startedAt >= cutoff);
+    const rivalWindow = sessions.filter((h) => h.person === rival.person && h.startedAt >= cutoff);
     sharedExercises
       .filter((ex) => MUSCLE_GROUP[ex.body_part] === muscle)
       .forEach((ex) => {
         map.set(ex.id, {
-          you: exerciseStatsFor(sessions, 'You', ex.id, cutoff),
-          rival: exerciseStatsFor(sessions, rival.person, ex.id, cutoff),
+          you: exerciseStatsFor(youWindow, 'You', ex.id, cutoff),
+          rival: exerciseStatsFor(rivalWindow, rival.person, ex.id, cutoff),
         });
       });
     return map;
@@ -190,8 +202,8 @@ export function StatsScreen() {
   // appended, instead of each tile inlining its own (previously
   // inconsistent — one used uppercase "K", the leaderboard used lowercase).
   function formatVolumeTile(v: number): string {
-    const { main, abbreviated } = formatTrainingVolume(v);
-    return `${main}${abbreviated ? 'k' : ''} ${units}`;
+    const { main, suffix } = formatTrainingVolume(v);
+    return `${main}${suffix} ${units}`;
   }
 
   return (
@@ -238,7 +250,7 @@ export function StatsScreen() {
         const colors = colorForPerson(row.person);
         const isTop = i === 0;
         const metricParts =
-          sortBy === 'volume' ? formatTrainingVolume(toDisplayWeight(row.volume, units)) : { main: String(row[sortBy]), abbreviated: false };
+          sortBy === 'volume' ? formatTrainingVolume(toDisplayWeight(row.volume, units)) : { main: String(row[sortBy]), suffix: '' as const };
         return (
           <div
             key={row.person}
@@ -265,7 +277,7 @@ export function StatsScreen() {
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 19, color: isTop ? 'var(--accent)' : 'var(--ink)', lineHeight: 1 }}>
               {metricParts.main}
-              {metricParts.abbreviated && <span style={{ fontSize: 10, color: 'var(--faint)' }}>k</span>}
+              {metricParts.suffix && <span style={{ fontSize: 10, color: 'var(--faint)' }}>{metricParts.suffix}</span>}
             </div>
           </div>
         );
@@ -288,6 +300,7 @@ export function StatsScreen() {
                 <button
                   key={f.person}
                   className={`chip${rival.person === f.person ? ' on' : ''}`}
+                  aria-pressed={rival.person === f.person}
                   onClick={() => setSelectedRival(f.person)}
                 >
                   vs {f.person}
@@ -297,18 +310,19 @@ export function StatsScreen() {
           )}
           <HeadToHeadLegend rivalName={rival.person} rivalColor={colorForPerson(rival.person).bg} />
           <div className="h2h-grid">
-            <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
+            <HeadToHeadTile label="Workouts" youVal={you.workouts} rivalVal={rival.workouts} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} rivalName={rival.person} />
             <HeadToHeadTile
               label="Volume"
               youVal={toDisplayWeight(you.volume, units)}
               rivalVal={toDisplayWeight(rival.volume, units)}
               format={formatVolumeTile}
               rivalColor={colorForPerson(rival.person).bg}
+              rivalName={rival.person}
             />
-            <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
-            <HeadToHeadTile label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} rivalColor={colorForPerson(rival.person).bg} />
-            <HeadToHeadTile label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
-            <HeadToHeadTile label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} />
+            <HeadToHeadTile label="Sets" youVal={you.sets} rivalVal={rival.sets} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} rivalName={rival.person} />
+            <HeadToHeadTile label="Time trained" youVal={you.totalMinutes} rivalVal={rival.totalMinutes} format={(v) => `${v}min`} rivalColor={colorForPerson(rival.person).bg} rivalName={rival.person} />
+            <HeadToHeadTile label="Records set" youVal={you.records} rivalVal={rival.records} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} rivalName={rival.person} />
+            <HeadToHeadTile label="Streak" youVal={you.streak} rivalVal={rival.streak} format={(v) => String(v)} rivalColor={colorForPerson(rival.person).bg} rivalName={rival.person} />
           </div>
 
           <div className="section-h">Exercise head to head</div>
@@ -323,6 +337,7 @@ export function StatsScreen() {
                   <button
                     key={g}
                     className={`chip${muscle === g ? ' on' : ''}`}
+                    aria-pressed={muscle === g}
                     onClick={() => {
                       setSelectedMuscle(g);
                       setSelectedExerciseId(null);
@@ -340,6 +355,7 @@ export function StatsScreen() {
                   <button
                     key={ex.id}
                     className={`ex-lead-row${active ? ' on' : ''}`}
+                    aria-pressed={active}
                     onClick={() => setSelectedExerciseId(ex.id)}
                   >
                     <span className="ex-lead-rank">{i + 1}</span>
@@ -376,6 +392,7 @@ export function StatsScreen() {
                       youDisplay={youExStats.maxWeight > 0 ? `${formatWeight(youExStats.maxWeight, units)}×${youExStats.maxWeightReps}` : '—'}
                       rivalDisplay={rivalExStats.maxWeight > 0 ? `${formatWeight(rivalExStats.maxWeight, units)}×${rivalExStats.maxWeightReps}` : '—'}
                       rivalColor={colorForPerson(rival.person).bg}
+                      rivalName={rival.person}
                     />
                     <HeadToHeadTile
                       label="Est. 1RM"
@@ -383,6 +400,7 @@ export function StatsScreen() {
                       rivalVal={toDisplayWeight(rivalExStats.best1RM, units)}
                       format={(v) => (v > 0 ? `${Math.round(v)}${units}` : '—')}
                       rivalColor={colorForPerson(rival.person).bg}
+                      rivalName={rival.person}
                     />
                     <HeadToHeadTile
                       label="Total volume"
@@ -390,6 +408,7 @@ export function StatsScreen() {
                       rivalVal={toDisplayWeight(rivalExStats.volume, units)}
                       format={formatVolumeTile}
                       rivalColor={colorForPerson(rival.person).bg}
+                      rivalName={rival.person}
                     />
                     <HeadToHeadTile
                       label="Times performed"
@@ -397,6 +416,7 @@ export function StatsScreen() {
                       rivalVal={rivalExStats.timesPerformed}
                       format={(v) => String(v)}
                       rivalColor={colorForPerson(rival.person).bg}
+                      rivalName={rival.person}
                     />
                   </div>
                 </>
@@ -426,6 +446,7 @@ function HeadToHeadTile({
   youDisplay,
   rivalDisplay,
   rivalColor,
+  rivalName,
 }: {
   label: string;
   youVal: number;
@@ -434,26 +455,36 @@ function HeadToHeadTile({
   youDisplay?: string;
   rivalDisplay?: string;
   rivalColor: string;
+  rivalName: string;
 }) {
   const max = Math.max(youVal, rivalVal, 1);
   const youPct = (youVal / max) * 100;
   const rivalPct = (rivalVal / max) * 100;
   const youWins = youVal > rivalVal;
   const rivalWins = rivalVal > youVal;
+  const youText = youDisplay ?? format(youVal);
+  const rivalText = rivalDisplay ?? format(rivalVal);
   return (
     <div className="h2h-tile">
       <div className="h2h-tile-label">{label}</div>
+      {/* aria-labels name the owner (bars are distinguished only by colour
+          and stack order visually, via the legend above) and call the
+          winner, which the `.win` class conveys with colour alone. */}
       <div className="h2h-bar">
         <div className="h2h-track">
           <div className="h2h-fill" style={{ width: `${youPct}%`, background: 'var(--accent)' }} />
         </div>
-        <span className={`h2h-bar-val${youWins ? ' win' : ''}`}>{youDisplay ?? format(youVal)}</span>
+        <span className={`h2h-bar-val${youWins ? ' win' : ''}`} aria-label={`You: ${youText}${youWins ? ' (winning)' : ''}`}>
+          {youText}
+        </span>
       </div>
       <div className="h2h-bar">
         <div className="h2h-track">
           <div className="h2h-fill" style={{ width: `${rivalPct}%`, background: rivalColor }} />
         </div>
-        <span className={`h2h-bar-val${rivalWins ? ' win' : ''}`}>{rivalDisplay ?? format(rivalVal)}</span>
+        <span className={`h2h-bar-val${rivalWins ? ' win' : ''}`} aria-label={`${rivalName}: ${rivalText}${rivalWins ? ' (winning)' : ''}`}>
+          {rivalText}
+        </span>
       </div>
     </div>
   );

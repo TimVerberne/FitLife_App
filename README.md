@@ -102,6 +102,54 @@ this is done.
 
 ## Update notes
 
+**Version 1.12.0**
+- Batch fix from a second full app-wide review (five parallel per-area audits
+  that both read the code and executed the logic). Fixed the items chosen
+  from that review:
+  - **Cross-cutting**: a friend whose display name resolves to "You" is now
+    disambiguated so their sessions can't merge into your own Workouts/
+    Volume/Streak/records; the weekly streak no longer resets to 0 at the
+    start of each week (the current in-progress week gets grace) and its
+    week boundaries are DST-safe.
+  - **Train / active session**: keyboard Enter/Space on a routine card's drag
+    handle or ⋯ button no longer also launches the workout (keyboard reorder
+    now works); the same fix applies to the picker's "i" button vs row
+    selection. Supersets done as straight sets (all of A, then B) now start
+    a rest timer instead of none. The 🏆 PR badge shows once per exercise,
+    matching the Finish screen's record count. Drop sets keep the base set's
+    done state and cardio duration/distance. The rest-timer bar stays
+    proportional after ±5s. Set/rest/superset menus expose expanded state,
+    close each other instead of stacking, and dismiss on Escape. The "Prev"
+    column aligns by working-set position, not raw index.
+  - **Home / Stats**: the Volume tile shows its kg/lb unit; volume
+    abbreviation is consistent everywhere (adds an "M" tier, no more bare
+    "1000"); period windows are calendar-day aligned (not time-of-day
+    sensitive); friend labels re-sync when the friend list changes; shared
+    head-to-head exercises require a real logged set; rival/muscle/exercise
+    selectors and head-to-head bars are screen-reader labelled; the exercise
+    head-to-head does far less repeated scanning.
+  - **Life**: "today" is now the local calendar day, not UTC, so logs land on
+    the right day and the ring resets at local midnight (the 7-day charts
+    match); re-saving an unchanged weight in lb no longer drifts the stored
+    kg; the on-track copy shows an unsigned rate with loss/gain; birth-year
+    entry is range-validated; tappable tiles no longer scroll the page on
+    Space.
+  - **You / Friends / Settings**: "Export data" now includes all Life-tab
+    data (weight/measurements/hydration/nutrition) and importing restores it;
+    a corrupt/hand-edited backup with a bad theme/accent can no longer
+    white-screen the app (settings are validated); deleting the account or
+    clearing data now also clears local storage so nothing resurrects into
+    the next account on the same device; a previously declined friend request
+    can be re-sent; emails with `_`/`%` search correctly; the browse "+"
+    reports failures; the import-mode toggle and "show all accounts"
+    disclosure expose proper ARIA state; the email-add path points you at an
+    incoming request instead of a misleading "already pending".
+  - Note: the review flagged the Hevy CSV import as broken, but that was a
+    false positive — the code uses a NUL-byte key separator that renders as a
+    space in tooling; verified by running the real importer end-to-end. The
+    invisible separator was replaced with a direct row read so it can't be
+    misread again.
+
 **Version 1.11.4**
 - Moved the "Minimize" button up into the mint session header (grouped with
   "End" in the top row) instead of sitting on the dark background just below

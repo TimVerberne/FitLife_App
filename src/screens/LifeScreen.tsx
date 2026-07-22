@@ -10,6 +10,7 @@ import { WeightMiniCard } from '../features/life/WeightMiniCard';
 import { RelativeStrengthCard } from '../features/life/RelativeStrengthCard';
 import { ProfileSummaryRows } from '../features/life/ProfileSummaryRows';
 import type { BodyProfile } from '../lib/types';
+import { activateOnKey } from '../lib/a11y';
 
 function isProfileComplete(profile: BodyProfile): boolean {
   return profile.heightCm != null && profile.birthYear != null && profile.sexAtBirth != null;
@@ -53,7 +54,7 @@ export function LifeScreen() {
             role="button"
             tabIndex={0}
             onClick={openProfileDetail}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openProfileDetail()}
+            onKeyDown={activateOnKey(openProfileDetail)}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div className="section-h" style={{ margin: 0 }}>

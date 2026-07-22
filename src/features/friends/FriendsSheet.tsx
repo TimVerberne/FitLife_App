@@ -3,12 +3,13 @@ import { useStore } from '../../store/useStore';
 import { colorForPerson } from '../../lib/colors';
 import { fetchAllProfiles, type FriendProfile } from '../../lib/friends';
 
-type SendStatus = 'idle' | 'sending' | 'sent' | 'not-found' | 'already-pending' | 'already-friends' | 'self' | 'error';
+type SendStatus = 'idle' | 'sending' | 'sent' | 'not-found' | 'already-pending' | 'incoming-pending' | 'already-friends' | 'self' | 'error';
 
 const STATUS_MESSAGE: Record<Exclude<SendStatus, 'idle' | 'sending'>, string> = {
   sent: 'Friend request sent.',
   'not-found': 'No FitFlow account with that email.',
   'already-pending': 'A request between you two is already pending.',
+  'incoming-pending': 'They\'ve already sent you a request — accept it below.',
   'already-friends': 'You\'re already friends.',
   self: 'That\'s your own email.',
   error: 'Something went wrong — try again.',
@@ -23,6 +24,7 @@ export function FriendsSheet() {
   const acceptFriendRequest = useStore((s) => s.acceptFriendRequest);
   const declineFriendRequest = useStore((s) => s.declineFriendRequest);
   const removeFriend = useStore((s) => s.removeFriend);
+  const showToast = useStore((s) => s.showToast);
 
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState<SendStatus>('idle');
@@ -42,6 +44,11 @@ export function FriendsSheet() {
       if (result.ok) {
         setStatus('sent');
         setEmail('');
+      } else if (result.reason === 'already-pending') {
+        // "Pending" is misleading when the pending request is theirs to you —
+        // point them at the incoming request they can actually act on.
+        const incoming = incomingRequests.some((r) => r.profile.email.toLowerCase() === email.trim().toLowerCase());
+        setStatus(incoming ? 'incoming-pending' : 'already-pending');
       } else {
         setStatus(result.reason === 'unknown' ? 'error' : result.reason);
       }
@@ -70,7 +77,21 @@ export function FriendsSheet() {
   async function sendTo(profile: FriendProfile) {
     setSentIds((s) => new Set(s).add(profile.id));
     const result = await sendFriendRequestToProfile(profile.id);
-    if (!result.ok) setSentIds((s) => { const next = new Set(s); next.delete(profile.id); return next; });
+    if (!result.ok) {
+      // Revert the optimistic "sent" pill AND say why — otherwise the button
+      // just silently reappears with no explanation.
+      setSentIds((s) => { const next = new Set(s); next.delete(profile.id); return next; });
+      const reason = result.reason;
+      showToast(
+        reason === 'already-friends'
+          ? 'Already friends'
+          : reason === 'already-pending'
+            ? 'Request already pending'
+            : reason === 'self'
+              ? "That's your own account"
+              : "Couldn't send request — try again",
+      );
+    }
   }
 
   // Rebuilt fresh every render otherwise, including renders triggered purely
@@ -115,7 +136,7 @@ export function FriendsSheet() {
           {STATUS_MESSAGE[status]}
         </div>
       )}
-      <button className="btn sec" style={{ marginTop: 10 }} onClick={toggleBrowse}>
+      <button className="btn sec" style={{ marginTop: 10 }} aria-expanded={browsing} onClick={toggleBrowse}>
         {browsing ? 'Hide all accounts' : 'Show all accounts'}
       </button>
 

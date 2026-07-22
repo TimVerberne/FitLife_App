@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { todayIso } from '../../lib/bodyMetrics';
+import { localDateKey, todayIso } from '../../lib/bodyMetrics';
 import { useNutritionPlan } from '../../lib/useNutritionPlan';
 import { ProgressRing } from '../../components/ProgressRing';
 import { BarChart } from '../../components/BarChart';
 import { TapIcon } from '../../components/TapIcon';
 import type { WeekBucket } from '../../lib/records';
+import { activateOnKey } from '../../lib/a11y';
 
 const GOAL_VERB: Record<'lose' | 'maintain' | 'gain', string> = {
   lose: 'keep losing',
@@ -27,7 +28,7 @@ function MacroTile({ label, grams, max, color, onOpen }: { label: string; grams:
       role="button"
       tabIndex={0}
       onClick={onOpen}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}
+      onKeyDown={activateOnKey(onOpen)}
     >
       <TapIcon size={10} style={{ top: 6, right: 6 }} />
       <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 18 }}>
@@ -82,7 +83,7 @@ export function TodayCard() {
     const days: WeekBucket[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = localDateKey(d);
       days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: totalsByDay.get(iso) ?? 0 });
     }
     return days;
@@ -127,7 +128,7 @@ export function TodayCard() {
         role="button"
         tabIndex={0}
         onClick={openNutritionDetail}
-        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openNutritionDetail()}
+        onKeyDown={activateOnKey(openNutritionDetail)}
       >
         <TapIcon />
         <div style={{ position: 'relative', width: 96, height: 96, flexShrink: 0 }}>
@@ -208,7 +209,11 @@ export function TodayCard() {
           </p>
         ) : calibration.onTrack ? (
           <p style={{ color: 'var(--faint)', fontSize: 12, margin: 0 }}>
-            The last {calibration.daysOfData} days track with your {predictedRateKgWeek === 0 ? 'maintain' : `${predictedRateKgWeek.toFixed(1)} kg/week`} goal.
+            The last {calibration.daysOfData} days track with your{' '}
+            {predictedRateKgWeek === 0
+              ? 'maintain'
+              : `${Math.abs(predictedRateKgWeek).toFixed(1)} kg/week ${predictedRateKgWeek < 0 ? 'loss' : 'gain'}`}{' '}
+            goal.
           </p>
         ) : (
           <p style={{ color: 'var(--accent)', fontSize: 12, margin: 0 }}>

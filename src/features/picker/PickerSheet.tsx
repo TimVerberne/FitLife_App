@@ -251,7 +251,14 @@ export function PickerSheet() {
               aria-pressed={isSelected}
               onClick={() => toggle(ex.id)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') toggle(ex.id);
+                // Ignore keys bubbled from the inner "i" (details) button —
+                // otherwise Enter on it both opens the detail sheet and
+                // toggles this exercise's selection.
+                if (e.target !== e.currentTarget) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggle(ex.id);
+                }
               }}
             >
               <Thumb className="pick-thumb" src={ex.image} alt={ex.name} />

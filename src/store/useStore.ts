@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { db, remapLegacyIdsToUuid, purgeDemoFriendRows, DEFAULT_BODY_PROFILE } from '../lib/db';
-import { applyTheme, loadSettings, saveSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
+import { applyTheme, loadSettings, saveSettings, sanitizeSettings, DEFAULT_SETTINGS, type Settings } from '../lib/settings';
 import { randomQuote } from '../lib/quotes';
 import * as cloudSync from '../lib/cloudSync';
 import * as friendsApi from '../lib/friends';
@@ -38,6 +38,13 @@ export interface ImportPreview {
   unmatchedNames: string[];
   isCsv: boolean;
   settingsPatch?: Partial<Settings>;
+  // Life-tab data carried by a full FitFlow JSON backup (never by a Hevy
+  // CSV). Restored on confirm so "Export data" is a complete backup, not
+  // just routines/sessions.
+  bodyProfile?: BodyProfile;
+  bodyLog?: BodyLogEntry[];
+  waterLog?: WaterLogEntry[];
+  calorieLog?: CalorieLogEntry[];
 }
 
 // Apply the persisted theme immediately on load, before the first paint.
@@ -310,7 +317,7 @@ function prepareImportedData(
   // current display label and silently blending into their stats.
   const ownSessionsOnly = sessions.filter((s) => s.person === 'You');
   const remapped = remapLegacyIdsToUuid(routines, ownSessionsOnly);
-  const settings = settingsPatch ? { ...currentSettings, ...settingsPatch } : currentSettings;
+  const settings = settingsPatch ? sanitizeSettings({ ...currentSettings, ...settingsPatch }) : currentSettings;
   return { ...remapped, settings };
 }
 
@@ -361,6 +368,58 @@ function mergeImportedData(
   }
 
   return { routines, sessions, touchedRoutines, touchedSessions };
+}
+
+// Restores the Life-tab data carried by a full FitFlow JSON backup into
+// Dexie + cloud (per-entry pushes retry via pendingSync on failure, same as
+// routines/sessions) and returns the new in-memory arrays for the caller to
+// set into state. Returns null when the backup carried no body data (e.g. a
+// Hevy CSV, or a backup made before this was included). Replace mode swaps
+// the stored data out entirely; merge mode upserts by key (bodyLog by day,
+// water/calorie by id).
+function persistImportedBodyData(
+  mode: 'merge' | 'replace',
+  current: { bodyProfile: BodyProfile; bodyLog: BodyLogEntry[]; waterLog: WaterLogEntry[]; calorieLog: CalorieLogEntry[] },
+  imported: Pick<ImportPreview, 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog'>,
+): { bodyProfile: BodyProfile; bodyLog: BodyLogEntry[]; waterLog: WaterLogEntry[]; calorieLog: CalorieLogEntry[] } | null {
+  if (!imported.bodyProfile && !imported.bodyLog && !imported.waterLog && !imported.calorieLog) return null;
+  const replace = mode === 'replace';
+  const bodyProfile = imported.bodyProfile ?? current.bodyProfile;
+  const mergeById = <T extends { id: string }>(cur: T[], imp: T[]): T[] => {
+    if (replace) return imp;
+    const map = new Map(cur.map((x) => [x.id, x]));
+    imp.forEach((x) => map.set(x.id, x));
+    return [...map.values()];
+  };
+  const bodyLog = imported.bodyLog
+    ? replace
+      ? imported.bodyLog
+      : (() => {
+          const map = new Map(current.bodyLog.map((x) => [x.loggedOn, x]));
+          imported.bodyLog.forEach((x) => map.set(x.loggedOn, x));
+          return [...map.values()];
+        })()
+    : current.bodyLog;
+  const waterLog = imported.waterLog ? mergeById(current.waterLog, imported.waterLog) : current.waterLog;
+  const calorieLog = imported.calorieLog ? mergeById(current.calorieLog, imported.calorieLog) : current.calorieLog;
+
+  if (imported.bodyProfile) {
+    void db.bodyProfile.put({ id: 'current', ...bodyProfile });
+    void bodySync.pushBodyProfile(bodyProfile);
+  }
+  if (imported.bodyLog) {
+    void (replace ? db.bodyLog.clear().then(() => db.bodyLog.bulkPut(bodyLog)) : db.bodyLog.bulkPut(bodyLog));
+    void Promise.all(imported.bodyLog.map((e) => bodySync.pushBodyLogEntry(e)));
+  }
+  if (imported.waterLog) {
+    void (replace ? db.waterLog.clear().then(() => db.waterLog.bulkPut(waterLog)) : db.waterLog.bulkPut(waterLog));
+    void Promise.all(imported.waterLog.map((e) => bodySync.pushWaterLogEntry(e)));
+  }
+  if (imported.calorieLog) {
+    void (replace ? db.calorieLog.clear().then(() => db.calorieLog.bulkPut(calorieLog)) : db.calorieLog.bulkPut(calorieLog));
+    void Promise.all(imported.calorieLog.map((e) => bodySync.pushCalorieLogEntry(e)));
+  }
+  return { bodyProfile, bodyLog, waterLog, calorieLog };
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -504,16 +563,24 @@ export const useStore = create<StoreState>((set, get) => ({
     if (turningOn && get().settings.hapticsOnSetComplete && 'vibrate' in navigator) {
       navigator.vibrate(15);
     }
-    // Supersetted exercises share one rest boundary — you go straight from
-    // one exercise's set into its partner's, so finishing this exercise's
-    // set shouldn't start a timer on its own while the partner's matching
-    // set is still pending. Only completing the side that finishes the pair
-    // for this round starts the shared rest countdown (falling back to the
-    // partner's configured duration if this exercise has none of its own).
+    // Supersetted exercises share one rest boundary — in strict alternation
+    // (A set, then straight into B's matching set) finishing A's set
+    // shouldn't start a timer while B's matching set is still pending; only
+    // the set that finishes the pair for that round starts the shared
+    // countdown. But some people do all of one exercise's sets before the
+    // other's ("grouping"); there the partner falls behind, and suppressing
+    // every time would mean no timer ever fires. So only suppress when the
+    // partner is *keeping pace* (has done at least as many sets as this
+    // exercise had before this one) — i.e. genuine alternation. entry is the
+    // pre-toggle state, and set `setIdx` is still not-done there, so
+    // counting its done sets gives this exercise's count before this one.
     const partner = entry.supersetWith ? active.entries.find((e) => e.exerciseId === entry.supersetWith) : undefined;
-    const partnerSetPending = !!partner && !!partner.sets[setIdx] && !partner.sets[setIdx].done;
+    const partnerSet = partner?.sets[setIdx];
+    const xDoneBefore = entry.sets.filter((s) => s.done).length;
+    const partnerDone = partner ? partner.sets.filter((s) => s.done).length : 0;
+    const suppressForSuperset = !!partnerSet && !partnerSet.done && partnerDone >= xDoneBefore;
     const restSeconds =
-      turningOn && !partnerSetPending
+      turningOn && !suppressForSuperset
         ? (active.restTimers[entry.exerciseId] ?? (partner ? active.restTimers[partner.exerciseId] : undefined))
         : undefined;
     // A different exercise's rest timer already counting down would
@@ -589,10 +656,12 @@ export const useStore = create<StoreState>((set, get) => ({
       if (ei !== entryIdx) return e;
       const base = e.sets[setIdx];
       if (!base) return e;
-      const dropRounds = Array.from({ length: Math.max(1, rounds) }, () => ({
-        reps: base.reps,
-        weight: base.weight,
-        done: false,
+      // Spread the whole base set so cardio fields (durationSec/distanceKm)
+      // survive, and keep the base set's done state on the first round
+      // instead of silently un-checking an already-completed set.
+      const dropRounds = Array.from({ length: Math.max(1, rounds) }, (_, i) => ({
+        ...base,
+        done: i === 0 ? base.done : false,
         kind: 'dropset' as SetKind,
       }));
       const sets = [...e.sets.slice(0, setIdx), ...dropRounds, ...e.sets.slice(setIdx + 1)];
@@ -1091,7 +1160,14 @@ export const useStore = create<StoreState>((set, get) => ({
   adjustRestTimer(deltaSeconds) {
     const rt = get().restTimer;
     if (!rt) return;
-    set({ restTimer: { ...rt, endsAt: Math.max(Date.now(), rt.endsAt + deltaSeconds * 1000) } });
+    const endsAt = Math.max(Date.now(), rt.endsAt + deltaSeconds * 1000);
+    // Grow/shrink `total` alongside `endsAt` so the progress bar (which
+    // fills by remaining / total) stays proportional — otherwise +5s pins
+    // the fill at 100% and -5s makes it jump. Never let total fall below the
+    // remaining time.
+    const remainingSec = Math.ceil((endsAt - Date.now()) / 1000);
+    const total = Math.max(remainingSec, 1, rt.total + deltaSeconds);
+    set({ restTimer: { ...rt, endsAt, total } });
   },
 
   skipRestTimer() {
@@ -1139,8 +1215,11 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   exportData() {
-    const { routines, sessions, settings } = get();
-    const blob = new Blob([JSON.stringify({ routines, sessions, settings }, null, 2)], { type: 'application/json' });
+    const { routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog } = get();
+    const blob = new Blob(
+      [JSON.stringify({ routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog }, null, 2)],
+      { type: 'application/json' },
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1169,7 +1248,15 @@ export const useStore = create<StoreState>((set, get) => ({
           return;
         }
 
-        const data = JSON.parse(text) as { routines?: unknown; sessions?: unknown; settings?: Partial<Settings> };
+        const data = JSON.parse(text) as {
+          routines?: unknown;
+          sessions?: unknown;
+          settings?: Partial<Settings>;
+          bodyProfile?: unknown;
+          bodyLog?: unknown;
+          waterLog?: unknown;
+          calorieLog?: unknown;
+        };
         if (!Array.isArray(data.routines) || !Array.isArray(data.sessions)) {
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
           return;
@@ -1180,13 +1267,28 @@ export const useStore = create<StoreState>((set, get) => ({
         // workouts" button — match exactly what actually gets imported,
         // instead of showing a higher count that silently shrinks on confirm.
         const validSessions = data.sessions.filter(isValidImportedSession).filter((s) => s.person === 'You');
-        if (validRoutines.length === 0 && validSessions.length === 0) {
+        const bodyProfile = data.bodyProfile && typeof data.bodyProfile === 'object' ? (data.bodyProfile as BodyProfile) : undefined;
+        const bodyLog = Array.isArray(data.bodyLog) ? (data.bodyLog as BodyLogEntry[]) : undefined;
+        const waterLog = Array.isArray(data.waterLog) ? (data.waterLog as WaterLogEntry[]) : undefined;
+        const calorieLog = Array.isArray(data.calorieLog) ? (data.calorieLog as CalorieLogEntry[]) : undefined;
+        const hasBody = !!(bodyProfile || bodyLog?.length || waterLog?.length || calorieLog?.length);
+        if (validRoutines.length === 0 && validSessions.length === 0 && !hasBody) {
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
           return;
         }
         const skipped = data.routines.length - validRoutines.length + (data.sessions.length - validSessions.length);
         set({
-          importPreview: { routines: validRoutines, sessions: validSessions, unmatchedNames: [], isCsv: false, settingsPatch: data.settings },
+          importPreview: {
+            routines: validRoutines,
+            sessions: validSessions,
+            unmatchedNames: [],
+            isCsv: false,
+            settingsPatch: data.settings,
+            bodyProfile,
+            bodyLog,
+            waterLog,
+            calorieLog,
+          },
           sheet: 'importPreview',
         });
         if (skipped > 0) {
@@ -1215,12 +1317,14 @@ export const useStore = create<StoreState>((set, get) => ({
       let settings = get().settings;
       set({ routines, sessions, sheet: null, importPreview: null });
       if (preview.settingsPatch) {
-        settings = { ...settings, ...preview.settingsPatch };
+        settings = sanitizeSettings({ ...settings, ...preview.settingsPatch });
         set({ settings });
         saveSettings(settings);
         applyTheme(settings);
         void cloudSync.pushSettings(settings);
       }
+      const body = persistImportedBodyData('merge', get(), preview);
+      if (body) set(body);
       get().showToast(preview.isCsv ? 'Workouts merged in' : 'Backup merged in');
       return;
     }
@@ -1249,6 +1353,8 @@ export const useStore = create<StoreState>((set, get) => ({
       applyTheme(settings);
       void cloudSync.pushSettings(settings);
     }
+    const body = persistImportedBodyData('replace', get(), preview);
+    if (body) set(body);
     get().showToast(preview.isCsv ? 'Workouts imported' : 'Backup imported');
   },
 
@@ -1618,6 +1724,13 @@ export const useStore = create<StoreState>((set, get) => ({
 // for whoever signs in next.
 onSignedOut(() => {
   useStore.setState({
+    // routines/sessions MUST be cleared here too. wipeLocalData() clears
+    // Dexie on sign-out, but these in-memory arrays would otherwise survive,
+    // and syncWithCloud's "remote is empty → seed from this device" branch
+    // would then upload the signed-out account's workouts into the *next*
+    // account signed in on this device (see deleteAccount, which signs out).
+    routines: [],
+    sessions: [],
     settings: DEFAULT_SETTINGS,
     friends: [],
     incomingRequests: [],

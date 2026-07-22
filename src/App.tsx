@@ -60,6 +60,18 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshFriends();
   }, [loaded, userId]);
 
+  // Re-fetch friends' sessions whenever the friend list itself changes.
+  // Friend sessions are tagged at fetch time with a display label that's
+  // disambiguated against the *current* friend set (see labelsForFriends);
+  // if a friend is later added/removed and that set changes, an already-
+  // fetched friend could be relabeled at render while their sessions still
+  // carry the old tag — making their stats read as zero until the next
+  // refetch. Re-tagging here keeps the labels in lockstep.
+  const friends = useStore((s) => s.friends);
+  useEffect(() => {
+    if (loaded && userId && friends.length) void useStore.getState().refreshFriendSessions();
+  }, [friends, loaded, userId]);
+
   useEffect(() => {
     if (loaded && userId) void useStore.getState().refreshBody();
   }, [loaded, userId]);

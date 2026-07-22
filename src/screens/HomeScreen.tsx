@@ -160,9 +160,9 @@ export function HomeScreen() {
         <div className="stat-tile">
           <div className="n" style={{ color: 'var(--accent)' }}>
             {volumeParts.main}
-            {volumeParts.abbreviated ? 'k' : ''}
+            {volumeParts.suffix}
           </div>
-          <div className="l">Volume</div>
+          <div className="l">Volume ({settings.units})</div>
         </div>
         <div className="stat-tile">
           <div className="n">{String(streak).padStart(2, '0')}</div>

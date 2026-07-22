@@ -42,9 +42,15 @@ export function BodyProfileSetup({ onSaved }: { onSaved?: () => void }) {
 
   function save() {
     const year = typeof birthYear === 'number' ? birthYear : parseInt(String(birthYear), 10);
+    // Only accept a birth year that yields a sane age (13–100). `> 1900`
+    // let a future year through (→ negative age → wrong BMR) and the current
+    // year through (→ age 0, which the `!age` guard then treats as "no
+    // profile", silently disabling the whole plan even with weight logged).
+    const currentYear = new Date().getFullYear();
+    const validYear = Number.isFinite(year) && year >= currentYear - 100 && year <= currentYear - 13;
     saveBodyProfile({
       heightCm: heightCm > 0 ? heightCm : null,
-      birthYear: Number.isFinite(year) && year > 1900 ? year : null,
+      birthYear: validYear ? year : null,
       sexAtBirth,
       activity,
       goal,

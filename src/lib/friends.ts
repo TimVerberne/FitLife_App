@@ -31,7 +31,12 @@ function toProfile(row: { id: string; email: string; display_name: string | null
 export async function searchProfileByEmail(email: string): Promise<FriendProfile | null> {
   const trimmed = email.trim();
   if (!trimmed) return null;
-  const { data, error } = await supabase.from('profiles').select('id, email, display_name').ilike('email', trimmed).maybeSingle();
+  // Escape LIKE wildcards so an email containing '_' or '%' (both legal in
+  // the local part) is matched literally instead of as a single-char / any
+  // wildcard — otherwise "tim_v@x.com" could match a different account, or
+  // match several and make .maybeSingle() throw.
+  const escaped = trimmed.replace(/[\\%_]/g, (c) => `\\${c}`);
+  const { data, error } = await supabase.from('profiles').select('id, email, display_name').ilike('email', escaped).maybeSingle();
   if (error) throw error;
   if (!data) return null;
   // Deliberately not excluding your own row here (unlike fetchAllProfiles) —
@@ -81,10 +86,20 @@ export async function sendFriendRequest(addresseeId: string): Promise<SendFriend
   if (error.code === '23505') {
     const { data } = await supabase
       .from('friendships')
-      .select('status')
+      .select('id, status')
       .or(`and(requester_id.eq.${userId},addressee_id.eq.${addresseeId}),and(requester_id.eq.${addresseeId},addressee_id.eq.${userId})`)
       .maybeSingle();
-    return { ok: false, reason: data?.status === 'accepted' ? 'already-friends' : 'already-pending' };
+    if (data?.status === 'accepted') return { ok: false, reason: 'already-friends' };
+    // A previously *declined* row is invisible in the UI (incoming/outgoing
+    // lists only show status 'pending'), but its unique constraint blocks
+    // every future request forever, so the two users could never reconnect.
+    // Clear the stale declined row and re-send a fresh pending request.
+    if (data?.status === 'declined' && data.id) {
+      await supabase.from('friendships').delete().eq('id', data.id);
+      const { error: reErr } = await supabase.from('friendships').insert({ requester_id: userId, addressee_id: addresseeId, status: 'pending' });
+      return reErr ? { ok: false, reason: 'unknown' } : { ok: true };
+    }
+    return { ok: false, reason: 'already-pending' };
   }
   return { ok: false, reason: 'unknown' };
 }
@@ -174,7 +189,13 @@ export function labelsForFriends(friendsList: Friend[]): Map<string, string> {
   const byId = new Map<string, string>();
   friendsList.forEach((f, i) => {
     const raw = rawLabels[i];
-    byId.set(f.profile.id, (counts.get(raw) ?? 0) > 1 ? `${raw} (${f.profile.id.slice(0, 4)})` : raw);
+    // 'You' is the reserved person-key for the signed-in user. A friend
+    // whose display name resolves to "You" (any casing) must be
+    // disambiguated with the id suffix too, not just friends who collide
+    // with each other — otherwise their session rows are tagged person:'You'
+    // and silently merge into your own Workouts/Volume/Streak/records.
+    const collides = (counts.get(raw) ?? 0) > 1 || raw.trim().toLowerCase() === 'you';
+    byId.set(f.profile.id, collides ? `${raw} (${f.profile.id.slice(0, 4)})` : raw);
   });
   return byId;
 }

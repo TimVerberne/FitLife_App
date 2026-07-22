@@ -5,6 +5,7 @@ import { hydrationTarget } from '../../lib/hydration';
 import { formatVolume } from '../../lib/units';
 import { ProgressRing } from '../../components/ProgressRing';
 import { TapIcon } from '../../components/TapIcon';
+import { activateOnKey } from '../../lib/a11y';
 
 const QUICK_ADD_ML = [250, 500];
 
@@ -39,7 +40,7 @@ export function HydrationMiniCard() {
       role="button"
       tabIndex={0}
       onClick={openHydrationDetail}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openHydrationDetail()}
+      onKeyDown={activateOnKey(openHydrationDetail)}
     >
       <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>

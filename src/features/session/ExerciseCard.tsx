@@ -8,17 +8,22 @@ import { NumberField } from '../../components/NumberField';
 import type { StoreState } from '../../store/useStore';
 import type { Exercise, SessionEntry, SetEntry, SetKind } from '../../lib/types';
 
+// Flags the single best PR set for this exercise (the highest estimated 1RM
+// that beats the pre-workout best), not every ascending set. Marking each
+// successively-heavier set made the count of 🏆 badges disagree with the
+// Finish screen, which counts one new record per exercise.
 function prFlagsFor(sets: SetEntry[], startingBest: number): boolean[] {
-  let best = startingBest;
-  return sets.map((s) => {
-    if (!isWorkingSet(s) || s.weight <= 0) return false;
+  let bestIdx = -1;
+  let bestOrm = startingBest;
+  sets.forEach((s, i) => {
+    if (!isWorkingSet(s) || s.weight <= 0) return;
     const oneRepMax = epley(s.weight, s.reps);
-    if (oneRepMax > best) {
-      best = oneRepMax;
-      return true;
+    if (oneRepMax > bestOrm) {
+      bestOrm = oneRepMax;
+      bestIdx = i;
     }
-    return false;
   });
+  return sets.map((_, i) => i === bestIdx);
 }
 
 function setLabelFor(sets: SetEntry[], index: number): { text: string; kind: SetKind } {
@@ -135,7 +140,22 @@ function ExerciseCardImpl({
   const showSupersetControl = partnerOptions.length > 0 && (!!partnerEx || entry.sets.some((s) => s.kind === 'superset'));
 
   function prevPerformance(setIdx: number): string | null {
-    const set = priorEntry?.sets[setIdx];
+    if (!priorEntry) return null;
+    let set = priorEntry.sets[setIdx];
+    // For strength working sets, align by working-set ordinal rather than raw
+    // index — otherwise an extra warmup this time (or a different set
+    // arrangement last time) shifts every "Prev" value onto the wrong row.
+    // Cardio and warmup rows keep positional lookup.
+    if (!cardio) {
+      const cur = entry.sets[setIdx];
+      if (cur && isWorkingSet(cur)) {
+        let ordinal = 0;
+        for (let i = 0; i <= setIdx; i++) {
+          if (isWorkingSet(entry.sets[i])) ordinal++;
+        }
+        set = priorEntry.sets.filter(isWorkingSet)[ordinal - 1];
+      }
+    }
     if (!set) return null;
     if (cardio) return `${Math.round((set.durationSec ?? 0) / 60)}m · ${(set.distanceKm ?? 0).toFixed(1)}km`;
     return `${formatWeight(set.weight, units)}×${set.reps}`;
@@ -223,13 +243,25 @@ function ExerciseCardImpl({
       {!compact && (
         <>
           <div className="rest-toggle-wrap">
-            <button className="rest-toggle" onClick={() => setRestMenuFor(restMenuOpen ? null : entry.exerciseId)}>
+            <button
+              className="rest-toggle"
+              aria-expanded={restMenuOpen}
+              onClick={() => {
+                const willOpen = !restMenuOpen;
+                setRestMenuFor(willOpen ? entry.exerciseId : null);
+                // Close the other two menus so they can't stack open at once.
+                if (willOpen) {
+                  setSupersetMenuFor(null);
+                  setMenu(null);
+                }
+              }}
+            >
               ⏱ Rest timer: {restSeconds ? formatRest(restSeconds) : 'Off'}
             </button>
             {restMenuOpen && (
               <>
                 <div className="set-menu-scrim" onClick={() => setRestMenuFor(null)} />
-                <div className="rest-menu">
+                <div className="rest-menu" onKeyDown={(e) => e.key === 'Escape' && setRestMenuFor(null)}>
                   <div className="set-menu-title">Rest timer</div>
                   <div className="rest-menu-grid">
                     {REST_PRESETS.map((s) => (
@@ -260,13 +292,24 @@ function ExerciseCardImpl({
           </div>
           {showSupersetControl && (
             <div className="rest-toggle-wrap">
-              <button className="rest-toggle" onClick={() => setSupersetMenuFor(supersetMenuOpen ? null : entry.exerciseId)}>
+              <button
+                className="rest-toggle"
+                aria-expanded={supersetMenuOpen}
+                onClick={() => {
+                  const willOpen = !supersetMenuOpen;
+                  setSupersetMenuFor(willOpen ? entry.exerciseId : null);
+                  if (willOpen) {
+                    setRestMenuFor(null);
+                    setMenu(null);
+                  }
+                }}
+              >
                 ⛓ {partnerEx ? `Paired with ${partnerEx.name}` : 'Pair superset'}
               </button>
               {supersetMenuOpen && (
                 <>
                   <div className="set-menu-scrim" onClick={() => setSupersetMenuFor(null)} />
-                  <div className="rest-menu superset-menu">
+                  <div className="rest-menu superset-menu" onKeyDown={(e) => e.key === 'Escape' && setSupersetMenuFor(null)}>
                     <div className="set-menu-title">Superset partner</div>
                     {partnerOptions.map((o) => (
                       <button
@@ -317,14 +360,22 @@ function ExerciseCardImpl({
                     <button
                       className={`set-idx${label.kind !== 'normal' ? ` kind-${label.kind}` : ''}`}
                       aria-label={`Set ${si + 1} type: ${label.kind}. Tap to change.`}
-                      onClick={() => setMenu(menuOpen ? null : { exerciseId: entry.exerciseId, setIdx: si, step: 'options', dropCount: 3 })}
+                      aria-expanded={menuOpen}
+                      onClick={() => {
+                        const willOpen = !menuOpen;
+                        setMenu(willOpen ? { exerciseId: entry.exerciseId, setIdx: si, step: 'options', dropCount: 3 } : null);
+                        if (willOpen) {
+                          setRestMenuFor(null);
+                          setSupersetMenuFor(null);
+                        }
+                      }}
                     >
                       {label.text}
                     </button>
                     {menuOpen && (
                       <>
                         <div className="set-menu-scrim" onClick={closeMenu} />
-                        <div className="set-menu">
+                        <div className="set-menu" onKeyDown={(e) => e.key === 'Escape' && closeMenu()}>
                           {menu!.step === 'options' ? (
                             <>
                               <button className="set-menu-item" onClick={() => pickKind('warmup')}>

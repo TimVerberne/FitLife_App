@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { latestValue, seriesFor } from '../../lib/bodyMetrics';
 import { bmi, bmiLabel, waistToHeightRatio } from '../../lib/bodyComposition';
 import { TapIcon } from '../../components/TapIcon';
+import { activateOnKey } from '../../lib/a11y';
 
 // `onOpen`, when given, makes the whole card tappable to open a bigger
 // detail sheet showing this same content — the sheet's own instance omits
@@ -29,7 +30,7 @@ export function BodyCompositionCard({ onOpen }: { onOpen?: () => void } = {}) {
       role={onOpen ? 'button' : undefined}
       tabIndex={onOpen ? 0 : undefined}
       onClick={onOpen}
-      onKeyDown={onOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && onOpen() : undefined}
+      onKeyDown={onOpen ? activateOnKey(onOpen) : undefined}
     >
       {onOpen && <TapIcon />}
       <div className="section-h" style={{ margin: 0 }}>

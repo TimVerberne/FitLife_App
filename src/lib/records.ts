@@ -344,9 +344,13 @@ export const STAT_PERIOD_LABEL: Record<StatPeriod, string> = {
   all: 'All time',
 };
 
+// Aligned to the start of the local day so the window is a whole number of
+// calendar days (today + N-1 prior), not a rolling exact-N×24h span. Without
+// this the same "This week" chip would drop or keep a session ~7 days ago
+// purely based on the current time of day.
 export function periodCutoff(period: StatPeriod, now = Date.now()): number {
   const days = STAT_PERIOD_DAYS[period];
-  return days === null ? -Infinity : now - days * DAY;
+  return days === null ? -Infinity : startOfDay(now) - (days - 1) * DAY;
 }
 
 export function periodTotal(
@@ -366,8 +370,8 @@ export function periodTotal(
   if (days === null) {
     return { current: metricOf(mine), previous: null };
   }
-  const cutoff = now - days * DAY;
-  const prevCutoff = now - days * 2 * DAY;
+  const cutoff = startOfDay(now) - (days - 1) * DAY;
+  const prevCutoff = cutoff - days * DAY;
   return {
     current: metricOf(mine.filter((h) => h.startedAt >= cutoff)),
     previous: metricOf(mine.filter((h) => h.startedAt >= prevCutoff && h.startedAt < cutoff)),
@@ -413,13 +417,26 @@ function startOfWeek(ts: number, weekStart: WeekStart): number {
 // would silently disagree with the week grid rendered right next to it.
 export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = Date.now(), weekStart: WeekStart = 'sun'): number {
   const mine = sessions.filter((h) => h.person === person);
+  if (mine.length === 0) return 0;
   const currentWeekStart = startOfWeek(now, weekStart);
+  // Each week window is derived with calendar-day arithmetic (setDate),
+  // not a fixed i*7*DAY subtraction, so a DST transition inside the range
+  // can't shift a boundary by ±1h and mis-bucket a late-night session.
+  const hasSessionInWeek = (weekStartTs: number) => {
+    const end = new Date(weekStartTs);
+    end.setDate(end.getDate() + 7);
+    return mine.some((h) => h.startedAt >= weekStartTs && h.startedAt < end.getTime());
+  };
+  // The current, in-progress week having no session *yet* must not reset the
+  // streak — you still have the rest of the week to train. So if this week is
+  // empty, start counting from last week; otherwise a long-standing streak
+  // would read 0 every Monday until the first workout of the week.
+  let i = hasSessionInWeek(currentWeekStart) ? 0 : 1;
   let streak = 0;
-  for (let i = 0; ; i++) {
-    const start = currentWeekStart - i * 7 * DAY;
-    const end = start + 7 * DAY;
-    const hasSession = mine.some((h) => h.startedAt >= start && h.startedAt < end);
-    if (!hasSession) break;
+  for (; ; i++) {
+    const wd = new Date(currentWeekStart);
+    wd.setDate(wd.getDate() - i * 7);
+    if (!hasSessionInWeek(wd.getTime())) break;
     streak += 1;
   }
   return streak;

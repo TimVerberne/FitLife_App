@@ -105,7 +105,16 @@ export function TrainScreen() {
             style={positionStyle}
             onClick={() => !drag && startSession(r.id)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') startSession(r.id);
+              // Only start the session for a key press on the card itself.
+              // Enter/Space on the inner drag handle or ⋯ button bubbles up
+              // here too; without this guard, keyboard-picking-up a routine
+              // (or opening its options) would also launch the workout, and
+              // the reorder was effectively unusable by keyboard.
+              if (e.target !== e.currentTarget) return;
+              if (!drag && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                startSession(r.id);
+              }
             }}
           >
             <div className="routine-top">

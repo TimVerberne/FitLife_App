@@ -35,10 +35,10 @@ export function ImportPreviewSheet() {
       </p>
 
       <div className="seg" role="radiogroup" aria-label="Import mode" style={{ maxWidth: 'none', marginBottom: 16 }}>
-        <button className={mode === 'merge' ? 'on' : ''} aria-pressed={mode === 'merge'} onClick={() => setMode('merge')}>
+        <button className={mode === 'merge' ? 'on' : ''} role="radio" aria-checked={mode === 'merge'} onClick={() => setMode('merge')}>
           Merge
         </button>
-        <button className={mode === 'replace' ? 'on' : ''} aria-pressed={mode === 'replace'} onClick={() => setMode('replace')}>
+        <button className={mode === 'replace' ? 'on' : ''} role="radio" aria-checked={mode === 'replace'} onClick={() => setMode('replace')}>
           Replace all
         </button>
       </div>

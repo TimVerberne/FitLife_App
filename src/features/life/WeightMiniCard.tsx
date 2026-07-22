@@ -4,6 +4,7 @@ import { latestValue, rollingAverage, seriesFor, todayIso } from '../../lib/body
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { MiniSparkline } from '../../components/MiniSparkline';
 import { TapIcon } from '../../components/TapIcon';
+import { activateOnKey } from '../../lib/a11y';
 
 // Compact companion to the full WeightCard further down the screen — same
 // underlying data, condensed to number + 7-day avg + a tiny trend + a
@@ -46,7 +47,7 @@ export function WeightMiniCard() {
       role="button"
       tabIndex={0}
       onClick={openWeightDetail}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && openWeightDetail()}
+      onKeyDown={activateOnKey(openWeightDetail)}
     >
       <TapIcon />
       <div className="section-h" style={{ margin: 0 }}>

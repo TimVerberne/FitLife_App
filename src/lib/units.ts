@@ -73,9 +73,12 @@ export function fromDisplayVolume(value: number, units: Units): number {
 // keeps the "how big is this number" reading consistent across screens the
 // user moves between in one tap. Caller decides whether/how to render the
 // `k` suffix (inline, smaller font, with a unit label, etc.).
-export function formatTrainingVolume(displayValue: number): { main: string; abbreviated: boolean } {
-  if (displayValue >= 1000) return { main: (displayValue / 1000).toFixed(1), abbreviated: true };
-  return { main: String(Math.round(displayValue)), abbreviated: false };
+export function formatTrainingVolume(displayValue: number): { main: string; suffix: '' | 'k' | 'M' } {
+  if (displayValue >= 1_000_000) return { main: (displayValue / 1_000_000).toFixed(1), suffix: 'M' };
+  // Threshold at 999.5 (not 1000) so a value that rounds up to 1000 shows as
+  // "1.0k" instead of a bare "1000" with no suffix.
+  if (displayValue >= 999.5) return { main: (displayValue / 1000).toFixed(1), suffix: 'k' };
+  return { main: String(Math.round(displayValue)), suffix: '' };
 }
 
 export function formatVolume(ml: number, units: Units): string {

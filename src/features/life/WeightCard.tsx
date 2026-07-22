@@ -34,7 +34,14 @@ export function WeightCard() {
   function save() {
     const parsed = Number(inputValue);
     if (!Number.isFinite(parsed) || parsed <= 0) return;
-    logBodyMetrics({ loggedOn: logDate, weightKg: fromDisplayWeight(parsed, units) });
+    // Avoid lb→kg→lb rounding drift: if the entered display value matches
+    // what the existing entry for this date already shows (an unchanged
+    // re-save), keep the original stored kg instead of round-tripping it back
+    // through the conversion (80 kg → 176.4 lb → 80.014 kg).
+    const existing = bodyLog.find((e) => e.loggedOn === logDate);
+    const unchanged = existing?.weightKg != null && Math.abs(toDisplayWeight(existing.weightKg, units) - parsed) < 0.05;
+    const weightKg = unchanged ? existing!.weightKg! : fromDisplayWeight(parsed, units);
+    logBodyMetrics({ loggedOn: logDate, weightKg });
     setLogging(false);
   }
 

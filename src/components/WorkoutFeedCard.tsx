@@ -3,6 +3,7 @@ import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
 import { formatDuration, isWorkingSet, relativeDate, setsCountOf, volumeOf } from '../lib/records';
 import { colorForPerson } from '../lib/colors';
+import { activateOnKey } from '../lib/a11y';
 import { toDisplayWeight } from '../lib/units';
 import { useStore } from '../store/useStore';
 import { Thumb } from './Thumb';
@@ -39,7 +40,7 @@ export function WorkoutFeedCard({
   const remaining = validEntries.length - shown.length;
 
   return (
-    <div className="feed-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
+    <div className="feed-card" role="button" tabIndex={0} onClick={onOpen} onKeyDown={activateOnKey(onOpen)}>
       <div className="feed-head">
         <div className="av round" style={{ background: colors.bg, color: colors.ink }}>
           {session.person.slice(0, 1)}

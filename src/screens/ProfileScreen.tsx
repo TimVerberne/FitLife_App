@@ -16,7 +16,7 @@ import {
   type StatPeriod,
   type WeeklyMetric,
 } from '../lib/records';
-import { formatWeight, toDisplayWeight } from '../lib/units';
+import { formatTrainingVolume, formatWeight, toDisplayWeight } from '../lib/units';
 import { useAuthState } from '../lib/auth';
 import { useCollapsedList } from '../lib/useCollapsedList';
 import { BarChart } from '../components/BarChart';
@@ -107,7 +107,10 @@ export function ProfileScreen() {
           <div className="l">Workouts</div>
         </div>
         <div className="stat-tile">
-          <div className="n">{Math.round(toDisplayWeight(totalVolume, units) / 1000)}k</div>
+          <div className="n">
+            {formatTrainingVolume(toDisplayWeight(totalVolume, units)).main}
+            {formatTrainingVolume(toDisplayWeight(totalVolume, units)).suffix}
+          </div>
           <div className="l">{units} lifted</div>
         </div>
         <div className="stat-tile">

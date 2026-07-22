@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, seriesFor, todayIso, todaysTrainingMinutes } from '../../lib/bodyMetrics';
+import { latestValue, localDateKey, seriesFor, todayIso, todaysTrainingMinutes } from '../../lib/bodyMetrics';
 import { hydrationTarget, sweatRateMlPerHour } from '../../lib/hydration';
 import { formatVolume, fromDisplayVolume, fromDisplayWeight, toDisplayVolume } from '../../lib/units';
 import { BarChart } from '../../components/BarChart';
@@ -121,7 +121,7 @@ export function HydrationCard() {
     const days: WeekBucket[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(Date.now() - i * 86_400_000);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = localDateKey(d);
       days.push({ label: d.toLocaleDateString('en-US', { weekday: 'short' }), value: toDisplayVolume(totalsByDay.get(iso) ?? 0, units) });
     }
     return days;

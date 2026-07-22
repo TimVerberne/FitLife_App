@@ -6,6 +6,7 @@ import { personalRecords } from '../../lib/records';
 import { exerciseById } from '../../lib/exercises';
 import { formatWeight } from '../../lib/units';
 import { TapIcon } from '../../components/TapIcon';
+import { activateOnKey } from '../../lib/a11y';
 
 const TOP_LIFTS = 3;
 
@@ -56,7 +57,7 @@ export function RelativeStrengthCard({
       role={onOpen ? 'button' : undefined}
       tabIndex={onOpen ? 0 : undefined}
       onClick={onOpen}
-      onKeyDown={onOpen ? (e) => (e.key === 'Enter' || e.key === ' ') && onOpen() : undefined}
+      onKeyDown={onOpen ? activateOnKey(onOpen) : undefined}
     >
       {onOpen && <TapIcon />}
       <div className="section-h" style={{ margin: 0 }}>

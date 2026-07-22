@@ -7,10 +7,22 @@ export interface DatedValue {
 
 const DAY = 86_400_000;
 
+// Local calendar date as YYYY-MM-DD. Must be LOCAL, not UTC — a UTC date
+// (toISOString) rolls over at the wrong wall-clock time for anyone off UTC,
+// so evening logs in the Americas would land on tomorrow and the "today"
+// ring would reset mid-afternoon. Also matches toTs() below, which parses
+// loggedOn at *local* midnight, so keys and lookups agree.
+export function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // Shared by every Life-tab card that logs "today" — was copy-pasted
 // verbatim in 7 different feature files before being hoisted here.
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey(new Date());
 }
 
 function toTs(loggedOn: string): number {
