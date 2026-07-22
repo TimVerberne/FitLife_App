@@ -102,6 +102,12 @@ this is done.
 
 ## Update notes
 
+**Version 1.11.4**
+- Moved the "Minimize" button up into the mint session header (grouped with
+  "End" in the top row) instead of sitting on the dark background just below
+  it. Now that the header pins to the top on scroll-up, Minimize rides along
+  with it and stays reachable without scrolling back to the very top.
+
 **Version 1.11.3**
 - Actually fixed the active session header pinning. The previous attempts
   only toggled a CSS class that did nothing, because the header's

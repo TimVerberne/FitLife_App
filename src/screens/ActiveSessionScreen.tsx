@@ -180,9 +180,14 @@ export function ActiveSessionScreen() {
       <div className={`sess-bar${headerHidden ? ' hidden' : ''}`}>
         <div className="sess-top">
           <span className="sess-live">Recording · live</span>
-          <button className="sess-end" onClick={cancelSession}>
-            ✕ END
-          </button>
+          <div className="sess-top-actions">
+            <button className="sess-min" onClick={minimizeSession}>
+              ▾ Minimize
+            </button>
+            <button className="sess-end" onClick={cancelSession}>
+              ✕ END
+            </button>
+          </div>
         </div>
         <div className="sess-stats">
           <div className="sess-clock">{mins}m</div>
@@ -210,25 +215,6 @@ export function ActiveSessionScreen() {
           }}
         />
       </div>
-
-      <button
-        onClick={minimizeSession}
-        style={{
-          marginTop: 12,
-          background: 'none',
-          border: 'none',
-          color: 'var(--faint)',
-          fontFamily: 'var(--font-display)',
-          fontWeight: 700,
-          fontSize: 13,
-          letterSpacing: '.04em',
-          textTransform: 'uppercase',
-          cursor: 'pointer',
-          padding: '4px 2px',
-        }}
-      >
-        ▾ Minimize
-      </button>
 
       <div
         className={`s-ex-list${drag ? ' reordering' : ''}`}

@@ -1006,6 +1006,16 @@
   text-transform: uppercase;
 }
 
+/* Minimize + End grouped at the top-right of the header, so both stay
+   reachable whenever the header itself is pinned/revealed. */
+.sess-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: -8px;
+}
+
+.sess-min,
 .sess-end {
   font-family: var(--font-mono);
   font-weight: 700;
@@ -1015,7 +1025,7 @@
   color: inherit;
   cursor: pointer;
   padding: 12px 8px;
-  margin: -12px -8px;
+  margin: -12px 0;
 }
 
 .sess-stats {
