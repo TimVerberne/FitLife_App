@@ -102,6 +102,17 @@ this is done.
 
 ## Update notes
 
+**Version 1.11.2**
+- Fixed the active session header (Recording/Live, timer, volume, session
+  name) not reliably reappearing on scroll-up — it required scrolling all
+  the way back to the very top, rather than reacting to a small upward
+  scroll like it was meant to. The hide/reveal logic required a single
+  scroll event's delta to exceed a few px before reacting; that's fine for
+  a fast downward flick but real touch/momentum scrolling fires many small
+  events, so a small deliberate upward correction rarely cleared the
+  threshold. Now it reacts to scroll direction on every event, no minimum
+  distance required — down hides it, up (even slightly) brings it back.
+
 **Version 1.11.1**
 - The "Pair superset" control was showing on every exercise card regardless
   of whether supersetting was actually in use. It now stays hidden until a

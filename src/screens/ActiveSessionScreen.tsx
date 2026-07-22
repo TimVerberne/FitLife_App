@@ -85,28 +85,31 @@ export function ActiveSessionScreen() {
   const [headerHidden, setHeaderHidden] = useState(false);
   const lastScrollTop = useRef(0);
 
-  // Hides the sticky mint header while scrolling down (so more of the
-  // exercise list is visible) and slides it back the instant scroll
-  // direction reverses, even by a few pixels — no need to scroll all the
-  // way back to the top just to see the clock or hit Minimize.
+  // Hides the sticky mint header on any downward scroll and slides it back
+  // on any upward scroll, however small — no dead zone, since real
+  // touch/momentum scrolling fires many small 'scroll' events (often just a
+  // few px each) rather than one big jump. An earlier version required a
+  // single event's delta to exceed a few px before reacting, which made the
+  // "hide" direction fire fine (a fast downward flick easily clears it in
+  // one frame) but the "reveal" direction rarely did for a small deliberate
+  // upward correction, so the header only ever came back once you scrolled
+  // all the way back to the very top. Comparing sign only, every event,
+  // fixes that without needing a magnitude threshold at all.
   //
-  // 'scroll' events don't bubble, so a listener on window only fires for
-  // the window/document itself — it stays silent if some other element
-  // ends up being the one that actually scrolls (which depends on how a
-  // given browser resolves .app-shell's min-height: 100dvh flex column,
-  // and isn't the same in every environment). Using the capture phase
-  // instead catches a 'scroll' fired by *any* descendant, not just window,
-  // so this keeps working regardless of which element is the real
-  // scrolling container. e.target is that element (or the Document, for a
-  // window-level scroll).
+  // .screen has overflow-y: auto in CSS, but .app-shell only sets
+  // min-height (a floor, not a ceiling) with nothing above it capping the
+  // page's height — so in practice the whole document grows and it's
+  // window/document that actually scrolls, not .screen. A capture-phase
+  // listener on window catches a 'scroll' fired by either one, so this
+  // keeps working if that ever changes.
   useEffect(() => {
     function onAnyScroll(e: Event) {
       const el = e.target as Document | HTMLElement;
       const top = el instanceof Document ? window.scrollY : el.scrollTop;
       const delta = top - lastScrollTop.current;
       if (top <= 0) setHeaderHidden(false);
-      else if (delta > 4) setHeaderHidden(true);
-      else if (delta < -4) setHeaderHidden(false);
+      else if (delta > 0) setHeaderHidden(true);
+      else if (delta < 0) setHeaderHidden(false);
       lastScrollTop.current = top;
     }
     window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
