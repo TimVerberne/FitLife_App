@@ -23,6 +23,21 @@
   padding-bottom: 168px;
 }
 
+/* During an active session, pin the shell to the viewport so .screen
+   scrolls internally rather than the whole document growing. This is what
+   gives the sticky .sess-bar a real scroll container to pin against (see
+   the comment in App.tsx). min-height: 0 is the standard flexbox unlock so
+   the flex child .screen can actually shrink below its content height and
+   scroll, instead of expanding the shell. */
+.app-shell.is-session {
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.app-shell.is-session .screen {
+  min-height: 0;
+}
+
 .top {
   position: sticky;
   top: 0;

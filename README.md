@@ -102,6 +102,19 @@ this is done.
 
 ## Update notes
 
+**Version 1.11.3**
+- Actually fixed the active session header pinning. The previous attempts
+  only toggled a CSS class that did nothing, because the header's
+  `position: sticky` had no real scroll container to pin against: `.screen`
+  had `overflow-y: auto` (making it the sticky context) but never actually
+  scrolled — the whole document grew and scrolled instead — so the header
+  just scrolled off the top with the page and only reappeared at the very
+  top. Now, during a session, the app-shell is pinned to the viewport
+  height so `.screen` scrolls internally, giving the sticky header a real
+  container. Scrolling down hides it; any upward scroll brings it straight
+  back, pinned to the top. Scoped to session mode only (there's no bottom
+  nav during a session), so every other screen's scrolling is untouched.
+
 **Version 1.11.2**
 - Fixed the active session header (Recording/Live, timer, volume, session
   name) not reliably reappearing on scroll-up — it required scrolling all

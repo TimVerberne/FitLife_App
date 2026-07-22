@@ -128,6 +128,17 @@ function AuthedApp() {
   }, []);
 
   const hasMiniActive = !!active && mode === 'tabs';
+  // During an active session the app-shell is pinned to a fixed viewport
+  // height so the .screen inside it scrolls *internally* instead of the
+  // whole document growing and scrolling. That's what makes the mint
+  // session header's `position: sticky` actually pin to the top: sticky
+  // resolves against the nearest scrollable ancestor (.screen, which has
+  // overflow-y: auto), and if .screen never actually scrolls — which is
+  // the case in the normal min-height layout where the document scrolls
+  // instead — the header just scrolls away with the page. There's no
+  // bottom nav during a session (BottomNav returns null in session/finish
+  // mode), so nothing else depends on the document-scroll model here.
+  const isSession = mode === 'session';
 
   if (!loaded) {
     return (
@@ -138,7 +149,7 @@ function AuthedApp() {
   }
 
   return (
-    <div className={`app-shell${hasMiniActive ? ' has-mini-active' : ''}`}>
+    <div className={`app-shell${hasMiniActive ? ' has-mini-active' : ''}${isSession ? ' is-session' : ''}`}>
       <CurrentScreen />
       <RestTimerWatcher />
       <MiniBar />

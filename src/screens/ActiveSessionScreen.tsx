@@ -84,6 +84,7 @@ export function ActiveSessionScreen() {
   );
   const [headerHidden, setHeaderHidden] = useState(false);
   const lastScrollTop = useRef(0);
+  const screenRef = useRef<HTMLDivElement>(null);
 
   // Hides the sticky mint header on any downward scroll and slides it back
   // on any upward scroll, however small — no dead zone, since real
@@ -96,24 +97,25 @@ export function ActiveSessionScreen() {
   // all the way back to the very top. Comparing sign only, every event,
   // fixes that without needing a magnitude threshold at all.
   //
-  // .screen has overflow-y: auto in CSS, but .app-shell only sets
-  // min-height (a floor, not a ceiling) with nothing above it capping the
-  // page's height — so in practice the whole document grows and it's
-  // window/document that actually scrolls, not .screen. A capture-phase
-  // listener on window catches a 'scroll' fired by either one, so this
-  // keeps working if that ever changes.
+  // Listens on the .screen element itself, which during a session is a real
+  // internal scroll container (the .app-shell.is-session rule pins the shell
+  // to the viewport height so .screen's overflow-y: auto actually engages —
+  // see App.tsx). This is also what makes the header's `position: sticky`
+  // pin correctly: sticky resolves against .screen, so .screen has to be the
+  // thing that scrolls, not the document.
   useEffect(() => {
-    function onAnyScroll(e: Event) {
-      const el = e.target as Document | HTMLElement;
-      const top = el instanceof Document ? window.scrollY : el.scrollTop;
+    const el = screenRef.current;
+    if (!el) return;
+    function onScroll() {
+      const top = el!.scrollTop;
       const delta = top - lastScrollTop.current;
       if (top <= 0) setHeaderHidden(false);
       else if (delta > 0) setHeaderHidden(true);
       else if (delta < 0) setHeaderHidden(false);
       lastScrollTop.current = top;
     }
-    window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true });
-    return () => window.removeEventListener('scroll', onAnyScroll, true);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
   useEffect(() => {
@@ -174,7 +176,7 @@ export function ActiveSessionScreen() {
   const liveVolume = Math.round(toDisplayWeight(volumeOf(active.entries), settings.units));
 
   return (
-    <div className="screen" style={{ padding: '0 18px 24px' }}>
+    <div className="screen" ref={screenRef} style={{ padding: '0 18px 24px' }}>
       <div className={`sess-bar${headerHidden ? ' hidden' : ''}`}>
         <div className="sess-top">
           <span className="sess-live">Recording · live</span>
