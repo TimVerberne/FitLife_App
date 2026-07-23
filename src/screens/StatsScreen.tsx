@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
 import type { Person, SessionEntry, WorkoutSession } from '../lib/types';
 import {
@@ -20,6 +20,9 @@ import { labelsForFriends } from '../lib/friends';
 import { exerciseById } from '../lib/exercises';
 import { formatTrainingVolume, formatWeight, toDisplayWeight } from '../lib/units';
 import { Thumb } from '../components/Thumb';
+import { BadgeStrip } from '../components/BadgeIcon';
+import { BADGE_BY_ID } from '../lib/badges';
+import { useShowcaseByPerson } from '../lib/useShowcase';
 
 // Only 3 of records.ts's 4 StatPeriod values are offered here — 'week',
 // 'month', 'all' are this screen's own picker, kept as a subset of the
@@ -74,6 +77,9 @@ export function StatsScreen() {
   const friendSessionsRaw = useStore((s) => s.friendSessions);
   const acceptedFriends = useStore((s) => s.friends);
   const openFriends = useStore((s) => s.openFriends);
+  const openBadges = useStore((s) => s.openBadges);
+  const markFirstComparison = useStore((s) => s.markFirstComparison);
+  const showcaseByPerson = useShowcaseByPerson();
   const sessions = useMemo(() => [...ownSessions, ...friendSessionsRaw], [ownSessions, friendSessionsRaw]);
   const units = useStore((s) => s.settings.units);
   const weekStart = useStore((s) => s.settings.weekStart);
@@ -110,6 +116,12 @@ export function StatsScreen() {
   const you = board.find((b) => b.person === 'You')!;
   const friends = board.filter((b) => b.person !== 'You');
   const rival = friends.find((f) => f.person === selectedRival) ?? friends[0];
+
+  // Seeing the head-to-head section (which requires a friend) is "running a
+  // comparison" — credits the Rivalry one-off the first time it happens.
+  useEffect(() => {
+    if (rival) markFirstComparison();
+  }, [rival, markFirstComparison]);
 
   const sharedExercises = useMemo(() => {
     if (!rival) return [];
@@ -254,6 +266,12 @@ export function StatsScreen() {
         return (
           <div
             key={row.person}
+            role="button"
+            tabIndex={0}
+            onClick={() => openBadges(row.person)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') openBadges(row.person);
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -263,6 +281,7 @@ export function StatsScreen() {
               borderRadius: 13,
               padding: '11px 12px',
               marginBottom: 8,
+              cursor: 'pointer',
             }}
           >
             <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, color: isTop ? 'var(--accent)' : 'var(--faint-2)', width: 16 }}>
@@ -272,7 +291,10 @@ export function StatsScreen() {
               {row.person.slice(0, 1)}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="crew-name" style={{ fontSize: 16 }}>{row.person}</div>
+              <div className="crew-name" style={{ fontSize: 16, display: 'flex', alignItems: 'center', gap: 5 }}>
+                {row.person}
+                <BadgeStrip ids={showcaseByPerson.get(row.person) ?? []} byId={BADGE_BY_ID} size={16} />
+              </div>
               <div className="crew-meta">{row.workouts} WORKOUTS</div>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: 19, color: isTop ? 'var(--accent)' : 'var(--ink)', lineHeight: 1 }}>

@@ -26,6 +26,9 @@ import { PeriodPicker } from '../components/PeriodPicker';
 import { ShowMoreButton } from '../components/ShowMoreButton';
 import { Thumb } from '../components/Thumb';
 import { InstallCard } from '../components/InstallCard';
+import { BadgeStrip } from '../components/BadgeIcon';
+import { BADGE_BY_ID } from '../lib/badges';
+import { useShowcaseByPerson } from '../lib/useShowcase';
 
 export function ProfileScreen() {
   const sessions = useStore((s) => s.sessions);
@@ -33,6 +36,9 @@ export function ProfileScreen() {
   const openSettings = useStore((s) => s.openSettings);
   const openFriends = useStore((s) => s.openFriends);
   const openDetail = useStore((s) => s.openDetail);
+  const openBadges = useStore((s) => s.openBadges);
+  const showcaseByPerson = useShowcaseByPerson();
+  const myShowcase = showcaseByPerson.get('You') ?? [];
   const units = useStore((s) => s.settings.units);
   const METRICS: { id: WeeklyMetric; label: string; unit: string }[] = [
     { id: 'volume', label: 'Volume', unit: units },
@@ -94,11 +100,32 @@ export function ProfileScreen() {
           Y
         </div>
         <div>
-          <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, lineHeight: 1 }}>Your account</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 22, lineHeight: 1 }}>Your account</div>
+            <BadgeStrip ids={myShowcase} byId={BADGE_BY_ID} size={22} />
+          </div>
           <div style={{ fontSize: 12, color: '#8b8e94', marginTop: 2 }}>
             Member since {memberSinceYear} · {mySessions.length} workouts
           </div>
         </div>
+      </div>
+
+      <div
+        className="rec"
+        style={{ marginTop: 14 }}
+        role="button"
+        tabIndex={0}
+        onClick={() => openBadges('You')}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') openBadges('You');
+        }}
+      >
+        <div style={{ fontSize: 22, width: 44, textAlign: 'center' }}>🏅</div>
+        <div className="rec-b">
+          <div className="rec-name">Achievements</div>
+          <div className="rec-sub">Your badge collection &amp; showcase</div>
+        </div>
+        <span className="go-arrow">›</span>
       </div>
 
       <div className="stat-grid" style={{ marginTop: 16 }}>

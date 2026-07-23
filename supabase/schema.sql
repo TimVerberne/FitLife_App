@@ -328,3 +328,14 @@ alter table public.routines add column sort_order bigint;
 -- reopening the app.
 alter table public.body_profile add column goal_mode text not null default 'rate' check (goal_mode in ('rate', 'kcal'));
 alter table public.body_profile add column manual_kcal_target int;
+
+-- Phase 11: Achievements / badge system. Badges are derived entirely from
+-- existing workout history, so almost nothing new needs storing. The two
+-- private bits (which badges are already credited, so a celebration fires
+-- once; and the two Social one-off timestamps) live in the per-user settings
+-- jsonb blob. The ONE field friends must be able to see — the <=3 showcase
+-- badges shown next to a name — goes here on the already-friend-readable
+-- profiles table. Additive, safe to run on a live DB; the app degrades
+-- gracefully (falls back to badges derived from a friend's visible history)
+-- until this is run, so there's no hard ordering requirement.
+alter table public.profiles add column showcase_badges text[] not null default '{}';

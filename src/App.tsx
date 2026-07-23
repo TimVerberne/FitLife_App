@@ -13,6 +13,7 @@ import { RestTimerWatcher } from './components/RestTimerWatcher';
 import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
+import { BadgeCelebration } from './components/BadgeCelebration';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuthState } from './lib/auth';
 import { throttleOnFocus } from './lib/focusThrottle';
@@ -169,6 +170,7 @@ function AuthedApp() {
       <SheetContainer />
       <ConfirmDialog />
       <Toast />
+      <BadgeCelebration />
     </div>
   );
 }

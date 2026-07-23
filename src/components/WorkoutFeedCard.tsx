@@ -7,6 +7,8 @@ import { activateOnKey } from '../lib/a11y';
 import { toDisplayWeight } from '../lib/units';
 import { useStore } from '../store/useStore';
 import { Thumb } from './Thumb';
+import { BadgeStrip } from './BadgeIcon';
+import { BADGE_BY_ID } from '../lib/badges';
 
 const COLLAPSED_COUNT = 3;
 
@@ -17,6 +19,7 @@ function doneCount(entry: SessionEntry): number {
 export function WorkoutFeedCard({
   session,
   records,
+  showcaseIds,
   onOpen,
 }: {
   session: WorkoutSession;
@@ -25,6 +28,9 @@ export function WorkoutFeedCard({
   // recomputing per-session records from scratch on every card, on every
   // render, doesn't scale with feed length. See HomeScreen.tsx.
   records: number;
+  // The person's <=3 showcase badge ids, resolved once by the caller and
+  // shared across all of that person's cards.
+  showcaseIds?: string[];
   onOpen: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -46,7 +52,10 @@ export function WorkoutFeedCard({
           {session.person.slice(0, 1)}
         </div>
         <div>
-          <div className="crew-name">{session.person}</div>
+          <div className="crew-name" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {session.person}
+            {showcaseIds && showcaseIds.length > 0 && <BadgeStrip ids={showcaseIds} byId={BADGE_BY_ID} size={18} />}
+          </div>
           <div className="feed-when">{relativeDate(session.startedAt)}</div>
         </div>
       </div>

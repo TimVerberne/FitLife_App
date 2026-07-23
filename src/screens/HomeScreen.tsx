@@ -3,6 +3,7 @@ import { useStore } from '../store/useStore';
 import { daysSinceLastWorkout, primaryMuscleGroup, recentWeeksTrained, recordsPerSession, volumeOf, weeklyStreak } from '../lib/records';
 import { formatTrainingVolume, toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
+import { useShowcaseByPerson } from '../lib/useShowcase';
 
 export function HomeScreen() {
   // The date/time header, and anything memoized off Date.now() below (the
@@ -78,6 +79,7 @@ export function HomeScreen() {
   const CREW_PAGE_SIZE = 4;
   const crewAll = useMemo(() => [...sessions].sort((a, b) => b.startedAt - a.startedAt), [sessions]);
   const crewRecords = useMemo(() => recordsPerSession(sessions), [sessions]);
+  const showcaseByPerson = useShowcaseByPerson();
   const [crewVisibleCount, setCrewVisibleCount] = useState(CREW_PAGE_SIZE);
   const crew = useMemo(() => crewAll.slice(0, crewVisibleCount), [crewAll, crewVisibleCount]);
   const hasMoreCrew = crewVisibleCount < crewAll.length;
@@ -228,7 +230,13 @@ export function HomeScreen() {
       </div>
       {crew.length === 0 && <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>No activity from your crew yet.</p>}
       {crew.map((h) => (
-        <WorkoutFeedCard key={h.id} session={h} records={crewRecords.get(h.id) ?? 0} onOpen={() => openWorkoutSheet(h.id)} />
+        <WorkoutFeedCard
+          key={h.id}
+          session={h}
+          records={crewRecords.get(h.id) ?? 0}
+          showcaseIds={showcaseByPerson.get(h.person)}
+          onOpen={() => openWorkoutSheet(h.id)}
+        />
       ))}
       {hasMoreCrew && <div ref={crewSentinelRef} style={{ height: 1 }} />}
     </div>

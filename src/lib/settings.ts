@@ -20,6 +20,17 @@ export interface Settings {
   accent: AccentPreset;
   notifyActiveWorkout: boolean;
   notifyActiveWorkoutRepeat: boolean;
+  // Achievements — the only new state the badge system remembers. `badgesKnown`
+  // is every badge id already credited, so a celebration fires exactly once
+  // (and existing history is credited quietly on first run); undefined means
+  // "never baselined yet". `showcaseBadges` is the <=3 ids the user pinned to
+  // show next to their name (empty/undefined → default to 3 most recent).
+  // `firstComparisonAt`/`firstFriendAt` back the two Social one-offs, which
+  // aren't otherwise derivable from stored data.
+  badgesKnown?: string[];
+  showcaseBadges?: string[];
+  firstComparisonAt?: number | null;
+  firstFriendAt?: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

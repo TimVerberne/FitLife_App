@@ -102,6 +102,39 @@ this is done.
 
 ## Update notes
 
+**Version 1.14.0**
+- **Achievements / badge system.** 48 badges across 11 tracks, using the
+  FitFlow Badge System crest design (one banner-shield reused across every
+  track, stepping up in colour + ornament — dots → gem → star → crown/wings
+  at the platinum apex).
+  - **Everything is derived from what you already do** — no new logging.
+    Badges (and their real unlock dates) are computed by replaying your
+    workout history: Workouts, Volume lifted, Training streak, Personal
+    records, Consistency (last-30-days), Variety, Session length, Timing
+    (Early Bird / Night Owl), Weekend Warrior, Routines (Planner / Architect /
+    Creature of Habit), Set types (failure / drop / superset) and Social
+    (first friend, first head-to-head). Warm-up sets don't count toward
+    volume or PRs, streaks respect your week-start setting, and only finished
+    workouts count — matching the rest of the app.
+  - **Celebrated exactly once.** Finishing a workout pops an "Achievement
+    unlocked" celebration for anything newly earned (a couple in sequence,
+    the rest folded into a "+N more" note). Existing history is credited
+    quietly on first run, so nobody gets flooded for milestones passed months
+    ago; a celebration never re-shows.
+  - **Showcase up to 3.** From your collection (reachable from Profile) you
+    pin up to 3 badges to show next to your name — on your profile, the Home
+    feed, and the Stats leaderboard. Trying to pin a 4th prompts you to unpin
+    one first. If you haven't picked any, it defaults to your 3 most recently
+    unlocked. Friends' showcases show next to their names too, and tapping a
+    name opens their (read-only) collection.
+  - **Collection view** groups badges by theme, showing your current badge +
+    the next one to work toward with a progress readout ("60 of 100
+    workouts"); tap to reveal the full ladder with unlock dates.
+  - **Schema:** adds one additive, friend-readable column
+    (`profiles.showcase_badges`) — see `supabase/schema.sql` Phase 11. The app
+    degrades gracefully until it's run (friends fall back to badges derived
+    from their visible history), so there's no hard deploy ordering.
+
 **Version 1.13.0**
 - Batch 1 of the "turn logged data into feedback" + "streaks as a feature"
   product push:

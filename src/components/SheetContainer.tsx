@@ -14,6 +14,7 @@ import { MacrosDetailSheet } from '../features/life/MacrosDetailSheet';
 import { StrengthDetailSheet } from '../features/life/StrengthDetailSheet';
 import { ProfileDetailSheet } from '../features/life/ProfileDetailSheet';
 import { BodyCompositionDetailSheet } from '../features/life/BodyCompositionDetailSheet';
+import { BadgeCollectionSheet } from '../features/badges/BadgeCollectionSheet';
 
 const DISMISS_THRESHOLD = 90;
 // A quick flick doesn't always travel far enough to cross DISMISS_THRESHOLD
@@ -176,6 +177,7 @@ export function SheetContainer() {
           {sheet === 'strengthDetail' && <StrengthDetailSheet />}
           {sheet === 'profileDetail' && <ProfileDetailSheet />}
           {sheet === 'bodyCompositionDetail' && <BodyCompositionDetailSheet />}
+          {sheet === 'badges' && <BadgeCollectionSheet />}
         </div>
       </div>
     </>

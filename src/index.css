@@ -2420,6 +2420,37 @@
   }
 }
 
+/* Pin/unpin control on a badge in the collection (showcase management). */
+.pin-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 7px;
+  background: var(--surface-2);
+  color: var(--faint);
+  cursor: pointer;
+}
+.pin-btn[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Soft glow pulse for the platinum max-tier badge crest (BadgeIcon). */
+@keyframes badgePulse {
+  0%,
+  100% {
+    opacity: 0.72;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .mini-b {
   flex: 1;
   min-width: 0;

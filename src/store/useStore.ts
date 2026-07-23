@@ -12,7 +12,9 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
 import { sortRoutines } from '../lib/records';
+import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
+import type { Person } from '../lib/types';
 import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
@@ -31,6 +33,7 @@ export type SheetKind =
   | 'strengthDetail'
   | 'profileDetail'
   | 'bodyCompositionDetail'
+  | 'badges'
   | null;
 
 export interface ImportPreview {
@@ -153,6 +156,15 @@ export interface StoreState {
   outgoingRequests: FriendRequest[];
   friendsLoaded: boolean;
   friendSessions: WorkoutSession[];
+  // profileId → their <=3 showcase badge ids (friend-readable, best-effort;
+  // empty/missing → fall back to badges derived from their session history).
+  friendShowcase: Map<string, string[]>;
+
+  // Achievements. `badgeCelebration` holds the badges just unlocked this
+  // moment (drives the one-time celebration overlay); `viewingBadgesPerson`
+  // is whose collection the badges sheet is showing ('You' or a friend label).
+  badgeCelebration: BadgeDef[] | null;
+  viewingBadgesPerson: Person;
 
   // Life tab — body measurements, nutrition, hydration. Strictly private:
   // never shared with friends, never in the crew feed or Stats head-to-head.
@@ -240,6 +252,13 @@ export interface StoreState {
   openFriends(): void;
   refreshFriends(): Promise<void>;
   refreshFriendSessions(): Promise<void>;
+  refreshFriendShowcase(): Promise<void>;
+
+  openBadges(person?: Person): void;
+  dismissBadgeCelebration(): void;
+  setShowcaseBadges(ids: string[]): void;
+  toggleShowcaseBadge(id: string): 'added' | 'removed' | 'full';
+  markFirstComparison(): void;
   sendFriendRequest(email: string): Promise<friendsApi.SendFriendRequestResult | { ok: false; reason: 'not-found' }>;
   sendFriendRequestToProfile(profileId: string): Promise<friendsApi.SendFriendRequestResult>;
   acceptFriendRequest(friendshipId: string): Promise<void>;
@@ -423,6 +442,66 @@ function persistImportedBodyData(
   return { bodyProfile, bodyLog, waterLog, calorieLog };
 }
 
+// Builds the badge-computation context for the signed-in user from current
+// store state (own routines and the two Social signals are only available for
+// 'You').
+function ownBadgeContext(s: StoreState, firstFriendAt: number | null, now: number): BadgeContext {
+  return {
+    sessions: s.sessions,
+    person: 'You',
+    routines: s.routines,
+    weekStart: s.settings.weekStart,
+    now,
+    social: {
+      hasFriend: s.friends.length > 0,
+      firstFriendAt,
+      firstComparisonAt: s.settings.firstComparisonAt ?? null,
+    },
+  };
+}
+
+// Recomputes the signed-in user's earned badges and folds any not-yet-known
+// ones into settings.badgesKnown (so each celebrates at most once). When
+// `celebrate` is true, newly-earned badges also trigger the celebration
+// overlay — but never on the very first baseline (badgesKnown undefined),
+// which quietly credits all of a user's pre-existing history the day this
+// ships. Passive callers (init, friend refresh) pass celebrate=false: they
+// keep the known set in sync without ever popping a celebration for something
+// earned before the app was looking.
+function reconcileOwnBadges(
+  get: () => StoreState,
+  set: (partial: Partial<StoreState>) => void,
+  celebrate: boolean,
+): void {
+  const s = get();
+  const now = Date.now();
+  let firstFriendAt = s.settings.firstFriendAt ?? null;
+  if (s.friends.length > 0 && firstFriendAt == null) firstFriendAt = now;
+
+  const earned = computeEarnedBadges(ownBadgeContext(s, firstFriendAt, now));
+  const isFirstBaseline = s.settings.badgesKnown === undefined;
+  const known = new Set(s.settings.badgesKnown ?? []);
+  const newlyEarned: BadgeDef[] = [];
+  earned.forEach((_ts, id) => {
+    if (!known.has(id)) {
+      known.add(id);
+      const def = BADGE_BY_ID.get(id);
+      if (def) newlyEarned.push(def);
+    }
+  });
+
+  const grew = known.size !== (s.settings.badgesKnown?.length ?? -1);
+  const friendChanged = firstFriendAt !== (s.settings.firstFriendAt ?? null);
+  if (grew || friendChanged) {
+    get().updateSettings({ badgesKnown: [...known], firstFriendAt });
+  }
+
+  if (celebrate && !isFirstBaseline && newlyEarned.length > 0) {
+    newlyEarned.sort((a, b) => (earned.get(a.id) ?? 0) - (earned.get(b.id) ?? 0));
+    set({ badgeCelebration: newlyEarned });
+  }
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   loaded: false,
   routines: [],
@@ -458,6 +537,10 @@ export const useStore = create<StoreState>((set, get) => ({
   outgoingRequests: [],
   friendsLoaded: false,
   friendSessions: [],
+  friendShowcase: new Map(),
+
+  badgeCelebration: null,
+  viewingBadgesPerson: 'You',
 
   bodyProfile: DEFAULT_BODY_PROFILE,
   bodyLog: [],
@@ -496,6 +579,9 @@ export const useStore = create<StoreState>((set, get) => ({
       } else {
         set({ routines, sessions, loaded: true, bodyProfile, bodyLog, waterLog, calorieLog });
       }
+      // Credit badges earned by existing history quietly on first run — no
+      // flood of celebrations for milestones passed before this shipped.
+      reconcileOwnBadges(get, set, false);
     } catch (err) {
       // IndexedDB unavailable (private browsing, restrictive webview, etc.) —
       // fall back to an empty in-memory session so the app still works, just without persistence.
@@ -857,6 +943,9 @@ export const useStore = create<StoreState>((set, get) => ({
         routineChanged,
       },
     }));
+    // Session is now in state — check whether finishing it just unlocked
+    // anything, and celebrate it (once).
+    reconcileOwnBadges(get, set, true);
   },
 
   saveRoutineFromFinish(name, exerciseIds) {
@@ -1523,6 +1612,11 @@ export const useStore = create<StoreState>((set, get) => ({
       if (getCurrentUserId() !== userId) return;
       set({ friends: friendsList, incomingRequests, outgoingRequests, friendsLoaded: true });
       void get().refreshFriendSessions();
+      void get().refreshFriendShowcase();
+      // Keep the Social badges' known-state in sync as the friend list changes
+      // (credited silently — a friend added on another device, or before this
+      // shipped, shouldn't pop a celebration on a passive refresh).
+      reconcileOwnBadges(get, set, false);
     } catch (err) {
       console.error('Failed to refresh friends', err);
     }
@@ -1538,6 +1632,46 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch (err) {
       console.error('Failed to refresh friend sessions', err);
     }
+  },
+
+  async refreshFriendShowcase() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    const ids = get().friends.map((f) => f.profile.id);
+    const friendShowcase = await friendsApi.fetchShowcaseBadges(ids);
+    if (getCurrentUserId() !== userId) return;
+    set({ friendShowcase });
+  },
+
+  openBadges(person = 'You') {
+    set({ sheet: 'badges', viewingBadgesPerson: person });
+    if (person !== 'You') void get().refreshFriendShowcase();
+  },
+
+  dismissBadgeCelebration() {
+    set({ badgeCelebration: null });
+  },
+
+  setShowcaseBadges(ids) {
+    get().updateSettings({ showcaseBadges: ids });
+    void friendsApi.pushOwnShowcase(ids);
+  },
+
+  toggleShowcaseBadge(id) {
+    const current = get().settings.showcaseBadges ?? [];
+    if (current.includes(id)) {
+      get().setShowcaseBadges(current.filter((x) => x !== id));
+      return 'removed';
+    }
+    if (current.length >= 3) return 'full';
+    get().setShowcaseBadges([...current, id]);
+    return 'added';
+  },
+
+  markFirstComparison() {
+    if (get().settings.firstComparisonAt != null) return;
+    get().updateSettings({ firstComparisonAt: Date.now() });
+    reconcileOwnBadges(get, set, true);
   },
 
   async sendFriendRequest(email) {

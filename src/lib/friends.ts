@@ -200,6 +200,40 @@ export function labelsForFriends(friendsList: Friend[]): Map<string, string> {
   return byId;
 }
 
+// Showcase badge picks are the one badge-system field friends need to see, so
+// they live on the friend-readable `profiles` table (unlike badgesKnown, which
+// stays private in settings). Both reads and writes degrade gracefully: if the
+// `showcase_badges` column doesn't exist yet (Phase 11 migration not run) or
+// the network is down, callers fall back to badges derived from the friend's
+// visible session history.
+export async function fetchShowcaseBadges(profileIds: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (profileIds.length === 0) return map;
+  try {
+    const { data, error } = await supabase.from('profiles').select('id, showcase_badges').in('id', profileIds);
+    if (error) throw error;
+    (data ?? []).forEach((r) => {
+      const row = r as { id: string; showcase_badges: string[] | null };
+      map.set(row.id, row.showcase_badges ?? []);
+    });
+  } catch {
+    // Column missing / offline — return whatever we have (possibly empty).
+  }
+  return map;
+}
+
+export async function pushOwnShowcase(badgeIds: string[]): Promise<void> {
+  const userId = getCurrentUserId();
+  if (!userId) return;
+  try {
+    const { error } = await supabase.from('profiles').update({ showcase_badges: badgeIds }).eq('id', userId);
+    if (error) throw error;
+  } catch {
+    // Best-effort — picks still persist locally (in settings) and propagate
+    // to friends once the migration is run / connectivity returns.
+  }
+}
+
 async function fetchFriendSessions(friend: Friend, label: string): Promise<WorkoutSession[]> {
   const { data, error } = await supabase.from('sessions').select('*').eq('user_id', friend.profile.id);
   if (error) throw error;
