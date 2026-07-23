@@ -102,6 +102,11 @@ this is done.
 
 ## Update notes
 
+**Version 1.14.1**
+- Removed the 6-week streak dot row under the Home stat grid (added in
+  1.13.0) — it read as visual noise and didn't earn its place. The streak
+  number itself stays in the stat tile.
+
 **Version 1.14.0**
 - **Achievements / badge system.** 48 badges across 11 tracks, using the
   FitFlow Badge System crest design (one banner-shield reused across every
