@@ -29,6 +29,22 @@ function toTs(loggedOn: string): number {
   return new Date(`${loggedOn}T00:00:00`).getTime();
 }
 
+// Consecutive-day logging streak, e.g. for "logged weight 12 days running".
+// `loggedDates` is the set of local date keys (YYYY-MM-DD) that have an
+// entry. Today not being logged YET doesn't break the streak (the day isn't
+// over) — it only breaks once a full day is skipped, same grace as
+// weeklyStreak gives the current in-progress week.
+export function loggingStreakDays(loggedDates: Set<string>, now = new Date()): number {
+  const cursor = new Date(now);
+  if (!loggedDates.has(localDateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (loggedDates.has(localDateKey(cursor))) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
 type NumericBodyLogField = {
   [K in keyof BodyLogEntry]: BodyLogEntry[K] extends number | null ? K : never;
 }[keyof BodyLogEntry];

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { daysSinceLastWorkout, primaryMuscleGroup, recordsPerSession, volumeOf, weeklyStreak } from '../lib/records';
+import { daysSinceLastWorkout, primaryMuscleGroup, recentWeeksTrained, recordsPerSession, volumeOf, weeklyStreak } from '../lib/records';
 import { formatTrainingVolume, toDisplayWeight } from '../lib/units';
 import { WorkoutFeedCard } from '../components/WorkoutFeedCard';
 
@@ -39,6 +39,13 @@ export function HomeScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessions, settings.weekStart, nowTick],
   );
+  const STREAK_WEEKS = 6;
+  const recentWeeks = useMemo(
+    () => recentWeeksTrained(sessions, 'You', Date.now(), settings.weekStart, STREAK_WEEKS),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sessions, settings.weekStart, nowTick],
+  );
+  const currentWeekTrained = recentWeeks[recentWeeks.length - 1];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const daysSince = useMemo(() => daysSinceLastWorkout(sessions, 'You', Date.now()), [sessions, nowTick]);
 
@@ -169,6 +176,39 @@ export function HomeScreen() {
           <div className="l">Streak</div>
         </div>
       </div>
+
+      {mySessions.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 10 }}>
+          {recentWeeks.map((trained, i) => (
+            <div
+              key={i}
+              title={i === recentWeeks.length - 1 ? 'This week' : `${recentWeeks.length - 1 - i} week${recentWeeks.length - 1 - i === 1 ? '' : 's'} ago`}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: trained ? 'var(--accent)' : 'transparent',
+                border: trained ? 'none' : '1px solid var(--line-dash)',
+              }}
+            />
+          ))}
+          {streak > 0 && !currentWeekTrained && (
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10,
+                fontWeight: 700,
+                color: 'var(--accent)',
+                marginLeft: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '.04em',
+              }}
+            >
+              Train this week to keep it
+            </span>
+          )}
+        </div>
+      )}
 
       {mySessions.length === 0 ? (
         <p style={{ color: 'var(--faint)', fontSize: 13, marginTop: 8 }}>

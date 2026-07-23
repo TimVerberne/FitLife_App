@@ -60,6 +60,8 @@ export function TodayCard() {
   const confirm = useStore((s) => s.confirm);
   const openNutritionDetail = useStore((s) => s.openNutritionDetail);
   const openMacrosDetail = useStore((s) => s.openMacrosDetail);
+  const saveBodyProfile = useStore((s) => s.saveBodyProfile);
+  const showToast = useStore((s) => s.showToast);
 
   const today = todayIso();
   const [inputValue, setInputValue] = useState('');
@@ -115,6 +117,13 @@ export function TodayCard() {
 
   const { calories, macroResult, calibration, predictedRateKgWeek } = plan;
   const pct = todayKcal / calories.target;
+  const remaining = calories.target - todayKcal;
+  // Averaged only over days that actually have an entry — a 0-value day in
+  // last7 means "nothing logged yet," not "ate zero calories," so counting
+  // it as a 0 would silently drag the average down.
+  const loggedDays7 = last7.filter((d) => d.value > 0);
+  const loggedDaysCount = loggedDays7.length;
+  const last7Avg = loggedDaysCount > 0 ? loggedDays7.reduce((a, d) => a + d.value, 0) / loggedDaysCount : 0;
   const maxMacroG = Math.max(macroResult.proteinG, macroResult.fatG, macroResult.carbsG);
 
   return (
@@ -146,6 +155,9 @@ export function TodayCard() {
           <p style={{ fontSize: 14, marginTop: 4, marginBottom: 0 }}>
             Aim for {Math.round(calories.target)} kcal today
             {calories.effectiveGoal !== 'maintain' ? ` to ${GOAL_VERB[calories.effectiveGoal]}` : ' to hold steady'}.
+          </p>
+          <p style={{ fontSize: 13, marginTop: 4, marginBottom: 0, color: remaining >= 0 ? 'var(--faint)' : 'var(--accent)' }}>
+            {remaining >= 0 ? `${Math.round(remaining)} kcal left today` : `${Math.round(-remaining)} kcal over today`}
           </p>
         </div>
       </div>
@@ -199,6 +211,11 @@ export function TodayCard() {
       {last7.some((d) => d.value > 0) && (
         <div style={{ marginTop: 12 }}>
           <BarChart weeks={last7} />
+          {loggedDaysCount > 0 && (
+            <p style={{ color: 'var(--faint)', fontSize: 12, marginTop: 6, marginBottom: 0 }}>
+              {loggedDaysCount}-day avg {Math.round(last7Avg)} kcal · target {Math.round(calories.target)}
+            </p>
+          )}
         </div>
       )}
 
@@ -216,11 +233,24 @@ export function TodayCard() {
             goal.
           </p>
         ) : (
-          <p style={{ color: 'var(--accent)', fontSize: 12, margin: 0 }}>
-            You've averaged {calibration.actualRateKgWeek >= 0 ? '+' : ''}
-            {calibration.actualRateKgWeek.toFixed(1)} kg/week over the last {calibration.daysOfData} days. Try ~
-            {Math.round(calibration.suggestedCalorieTarget!)} kcal instead.
-          </p>
+          <>
+            <p style={{ color: 'var(--accent)', fontSize: 12, margin: 0 }}>
+              You've averaged {calibration.actualRateKgWeek >= 0 ? '+' : ''}
+              {calibration.actualRateKgWeek.toFixed(1)} kg/week over the last {calibration.daysOfData} days. Try ~
+              {Math.round(calibration.suggestedCalorieTarget!)} kcal instead.
+            </p>
+            <button
+              className="btn sec"
+              style={{ width: 'auto', padding: '5px 14px', fontSize: 12, marginTop: 8 }}
+              onClick={() => {
+                const target = Math.round(calibration.suggestedCalorieTarget!);
+                saveBodyProfile({ goalMode: 'kcal', manualKcalTarget: target });
+                showToast(`Target updated to ${target} kcal`);
+              }}
+            >
+              Apply {Math.round(calibration.suggestedCalorieTarget!)} kcal
+            </button>
+          </>
         )}
       </div>
 

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { newRecordsInWorkout, setsCountOf, volumeOf } from '../lib/records';
+import { newRecordExerciseIdsInWorkout, previousComparableSession, setsCountOf, volumeOf } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
+import { exerciseById } from '../lib/exercises';
 
 export function FinishScreen() {
   const result = useStore((s) => s.finishResult);
@@ -16,10 +17,20 @@ export function FinishScreen() {
   // finishSession() already pushed the finished session into `sessions`
   // before switching to this screen, so it's already there to check against
   // everything before it.
-  const records = useMemo(() => {
-    if (!result) return 0;
+  const { records, prNames, delta } = useMemo(() => {
+    if (!result) return { records: 0, prNames: [] as string[], delta: null as { volumePct: number | null; durationDeltaMin: number } | null };
     const session = sessions.find((s) => s.id === result.sessionId);
-    return session ? newRecordsInWorkout(sessions, session) : 0;
+    if (!session) return { records: 0, prNames: [] as string[], delta: null };
+    const prIds = newRecordExerciseIdsInWorkout(sessions, session);
+    const prNames = prIds.map((id) => exerciseById(id)?.name).filter((n): n is string => !!n);
+    const prev = previousComparableSession(sessions, session);
+    const delta = prev
+      ? {
+          volumePct: volumeOf(prev.entries) > 0 ? ((volumeOf(session.entries) - volumeOf(prev.entries)) / volumeOf(prev.entries)) * 100 : null,
+          durationDeltaMin: session.durationMin - prev.durationMin,
+        }
+      : null;
+    return { records: prIds.length, prNames, delta };
   }, [sessions, result]);
 
   if (!result) return null;
@@ -34,7 +45,25 @@ export function FinishScreen() {
       </div>
       {records > 0 && (
         <div style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: 14, marginTop: 6 }}>
-          🏆 {records} new record{records === 1 ? '' : 's'} this workout
+          {/* Named when there are few enough to read as a sentence; a long
+              list reads better as just a count. */}
+          {prNames.length > 0 && prNames.length <= 3
+            ? `🏆 New record: ${prNames.join(', ')}`
+            : `🏆 ${records} new record${records === 1 ? '' : 's'} this workout`}
+        </div>
+      )}
+      {delta && (
+        <div style={{ color: 'var(--faint)', fontSize: 13, marginTop: records > 0 ? 4 : 6 }}>
+          {(() => {
+            const parts: string[] = [];
+            if (delta.volumePct != null && Math.abs(delta.volumePct) >= 1) {
+              parts.push(`${delta.volumePct > 0 ? '▲' : '▼'} ${Math.abs(Math.round(delta.volumePct))}% volume`);
+            }
+            if (delta.durationDeltaMin !== 0) {
+              parts.push(`${Math.abs(delta.durationDeltaMin)} min ${delta.durationDeltaMin > 0 ? 'longer' : 'shorter'}`);
+            }
+            return parts.length > 0 ? `${parts.join(' · ')} vs last time` : 'About the same as last time';
+          })()}
         </div>
       )}
       <div className="summary">

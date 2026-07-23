@@ -194,17 +194,37 @@ export function exercisePR(history: ExercisePoint[]): ExercisePR {
   );
 }
 
-export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {
+// Which exercises in `target` set a new estimated-1RM PR compared to
+// everything logged before it — the Finish screen names these instead of
+// just showing a bare count.
+export function newRecordExerciseIdsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): string[] {
   const priorSessions = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt);
   const priorBest = new Map(personalRecords(priorSessions, target.person).map((r) => [r.exerciseId, r.estOneRepMax]));
-  let count = 0;
+  const ids: string[] = [];
   target.entries.forEach((entry) => {
     const bestInSession = entry.sets
       .filter((s) => isWorkingSet(s) && s.weight > 0)
       .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
-    if (bestInSession > 0 && bestInSession > (priorBest.get(entry.exerciseId) ?? 0)) count++;
+    if (bestInSession > 0 && bestInSession > (priorBest.get(entry.exerciseId) ?? 0)) ids.push(entry.exerciseId);
   });
-  return count;
+  return ids;
+}
+
+export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {
+  return newRecordExerciseIdsInWorkout(sessions, target).length;
+}
+
+// The most recent earlier session that's a fair "last time" comparison for
+// the Finish screen — same routine if `target` came from one, otherwise the
+// most recent same-named freeform session. Falls back to null (nothing to
+// compare against) rather than picking an unrelated workout.
+export function previousComparableSession(sessions: WorkoutSession[], target: WorkoutSession): WorkoutSession | null {
+  const candidates = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt && h.id !== target.id);
+  const matches = target.routineId
+    ? candidates.filter((h) => h.routineId === target.routineId)
+    : candidates.filter((h) => h.name.trim().toLowerCase() === target.name.trim().toLowerCase());
+  if (matches.length === 0) return null;
+  return matches.reduce((latest, h) => (h.startedAt > latest.startedAt ? h : latest));
 }
 
 // Same "new record" definition as newRecordsInWorkout, but for every session
@@ -440,6 +460,33 @@ export function weeklyStreak(sessions: WorkoutSession[], person = 'You', now = D
     streak += 1;
   }
   return streak;
+}
+
+// Oldest-to-newest "did you train this week" flags for the last `weeks`
+// calendar weeks, ending at the current (in-progress) week — the data
+// behind a streak-dots widget. Same week-boundary math as weeklyStreak so
+// the two never disagree about where a week starts.
+export function recentWeeksTrained(
+  sessions: WorkoutSession[],
+  person = 'You',
+  now = Date.now(),
+  weekStart: WeekStart = 'sun',
+  weeks = 6,
+): boolean[] {
+  const mine = sessions.filter((h) => h.person === person);
+  const currentWeekStart = startOfWeek(now, weekStart);
+  const hasSessionInWeek = (weekStartTs: number) => {
+    const end = new Date(weekStartTs);
+    end.setDate(end.getDate() + 7);
+    return mine.some((h) => h.startedAt >= weekStartTs && h.startedAt < end.getTime());
+  };
+  const flags: boolean[] = [];
+  for (let i = weeks - 1; i >= 0; i--) {
+    const wd = new Date(currentWeekStart);
+    wd.setDate(wd.getDate() - i * 7);
+    flags.push(hasSessionInWeek(wd.getTime()));
+  }
+  return flags;
 }
 
 export const MUSCLE_AXES = ['Chest', 'Back', 'Legs', 'Shoulders', 'Arms', 'Core'];

@@ -102,6 +102,26 @@ this is done.
 
 ## Update notes
 
+**Version 1.13.0**
+- Batch 1 of the "turn logged data into feedback" + "streaks as a feature"
+  product push:
+  - **Today card**: shows "N kcal left/over today" next to the ring, and a
+    "N-day avg X kcal · target Y" line under the 7-day chart (averaged only
+    over days actually logged, not padded with unlogged zero-days).
+  - **Calibration suggestion is now actionable**: an "Apply" button on both
+    the Today card and the Nutrition sheet sets the goal to the suggested
+    kcal target in one tap, instead of requiring a manual mode switch + retype.
+  - **Weight card**: shows a "🔥 N-day logging streak" once you've logged 2+
+    days running (with the same "today not logged yet" grace as other
+    streaks in the app — a day only breaks it once it's actually skipped).
+  - **Finish screen**: names which exercise(s) hit a new record instead of
+    just a count (for 3 or fewer), and shows "▲ N% volume · N min longer/
+    shorter vs last time" by comparing against the most recent session from
+    the same routine (or same name, for freeform workouts).
+  - **Home streak**: the bare number is now backed by a 6-week dot row (this
+    week is included, filled once trained) and a "Train this week to keep
+    it" nudge when the current week is still open with an active streak.
+
 **Version 1.12.1**
 - Fixed a UTC/local-date gap the previous pass missed: `addWater`,
   `addCalories`, `clearWaterToday`, and `clearCaloriesToday` still keyed

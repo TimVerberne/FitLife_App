@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, rollingAverage, seriesFor, todayIso, trendDelta } from '../../lib/bodyMetrics';
+import { latestValue, loggingStreakDays, rollingAverage, seriesFor, todayIso, trendDelta } from '../../lib/bodyMetrics';
 import { periodCutoff, type StatPeriod } from '../../lib/records';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { PeriodPicker } from '../../components/PeriodPicker';
@@ -22,6 +22,10 @@ export function WeightCard() {
   const latestKg = latestValue(fullSeries);
   const deltaKg = trendDelta(fullSeries);
   const avgKg = latestValue(rollingAverage(fullSeries));
+  const loggingStreak = useMemo(() => {
+    const dates = new Set(bodyLog.filter((e) => e.weightKg != null).map((e) => e.loggedOn));
+    return loggingStreakDays(dates);
+  }, [bodyLog]);
 
   const cutoff = periodCutoff(period);
   const inRange = useMemo(() => fullSeries.filter((p) => p.ts >= cutoff), [fullSeries, cutoff]);
@@ -80,6 +84,9 @@ export function WeightCard() {
           )}
           {avgKg != null && (
             <div style={{ color: 'var(--faint)', fontSize: 12, marginTop: 2 }}>7-day avg: {formatWeight(avgKg, units)} {units}</div>
+          )}
+          {loggingStreak >= 2 && (
+            <div style={{ color: 'var(--accent)', fontSize: 12, marginTop: 2 }}>🔥 {loggingStreak}-day logging streak</div>
           )}
         </div>
         <button className="btn sec" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={toggleLogging}>

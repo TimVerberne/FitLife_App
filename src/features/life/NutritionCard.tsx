@@ -49,6 +49,7 @@ function KcalTargetInput({ currentTarget, onCommit }: { currentTarget: number; o
 export function NutritionCard() {
   const bodyProfile = useStore((s) => s.bodyProfile);
   const saveBodyProfile = useStore((s) => s.saveBodyProfile);
+  const showToast = useStore((s) => s.showToast);
 
   // goalMode/manualKcalTarget live on the profile itself (not local state) —
   // otherwise reopening this card (a sheet, which remounts) would forget
@@ -105,9 +106,22 @@ export function NutritionCard() {
               already shows on the Today card this sheet was opened from, no
               need to restate it verbatim here. */}
           {calibration?.suggestedCalorieTarget != null && (
-            <p style={{ color: 'var(--accent)', fontSize: 12, marginTop: 8 }}>
-              Based on the last {calibration.daysOfData} days, try ~{Math.round(calibration.suggestedCalorieTarget)} kcal to hit your goal.
-            </p>
+            <>
+              <p style={{ color: 'var(--accent)', fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+                Based on the last {calibration.daysOfData} days, try ~{Math.round(calibration.suggestedCalorieTarget)} kcal to hit your goal.
+              </p>
+              <button
+                className="btn sec"
+                style={{ width: 'auto', padding: '5px 14px', fontSize: 12, marginTop: 8 }}
+                onClick={() => {
+                  const target = Math.round(calibration.suggestedCalorieTarget!);
+                  saveBodyProfile({ goalMode: 'kcal', manualKcalTarget: target });
+                  showToast(`Target updated to ${target} kcal`);
+                }}
+              >
+                Apply {Math.round(calibration.suggestedCalorieTarget)} kcal
+              </button>
+            </>
           )}
 
           <p style={{ color: 'var(--faint)', fontSize: 11, marginTop: 8, marginBottom: 0 }}>
