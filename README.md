@@ -102,6 +102,14 @@ this is done.
 
 ## Update notes
 
+**Version 1.12.1**
+- Fixed a UTC/local-date gap the previous pass missed: `addWater`,
+  `addCalories`, `clearWaterToday`, and `clearCaloriesToday` still keyed
+  "today" off `new Date().toISOString()` (UTC) instead of the shared local
+  `todayIso()` helper. For anyone off UTC, an evening log could land on the
+  wrong calendar day and drop out of that day's ring/list. Now consistent
+  with the rest of the Life tab.
+
 **Version 1.12.0**
 - Batch fix from a second full app-wide review (five parallel per-area audits
   that both read the code and executed the logic). Fixed the items chosen

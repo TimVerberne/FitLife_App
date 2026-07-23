@@ -12,6 +12,7 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
 import { sortRoutines } from '../lib/records';
+import { todayIso } from '../lib/bodyMetrics';
 import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
@@ -1661,7 +1662,7 @@ export const useStore = create<StoreState>((set, get) => ({
   addWater(ml) {
     const entry: WaterLogEntry = {
       id: crypto.randomUUID(),
-      loggedOn: new Date().toISOString().slice(0, 10),
+      loggedOn: todayIso(),
       amountMl: ml,
       loggedAt: Date.now(),
     };
@@ -1671,7 +1672,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   clearWaterToday() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
     const todayIds = get().waterLog.filter((e) => e.loggedOn === today).map((e) => e.id);
     if (todayIds.length === 0) return;
     set((s) => ({ waterLog: s.waterLog.filter((e) => e.loggedOn !== today) }));
@@ -1690,7 +1691,7 @@ export const useStore = create<StoreState>((set, get) => ({
   addCalories(kcal) {
     const entry: CalorieLogEntry = {
       id: crypto.randomUUID(),
-      loggedOn: new Date().toISOString().slice(0, 10),
+      loggedOn: todayIso(),
       amountKcal: kcal,
       loggedAt: Date.now(),
     };
@@ -1700,7 +1701,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   clearCaloriesToday() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
     const todayIds = get().calorieLog.filter((e) => e.loggedOn === today).map((e) => e.id);
     if (todayIds.length === 0) return;
     set((s) => ({ calorieLog: s.calorieLog.filter((e) => e.loggedOn !== today) }));
