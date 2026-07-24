@@ -102,6 +102,25 @@ this is done.
 
 ## Update notes
 
+**Version 1.14.2**
+- **Fixed: achievement celebration sometimes never showed** (the collection
+  count would go up but no pop-up). Root cause: `syncWithCloud` replaced local
+  settings wholesale with the account's cloud blob; if that blob was written by
+  a client without `badgesKnown` (older version, or a first-run race), it reset
+  the "already celebrated" set to empty, so the next finished workout was
+  treated as a silent first-time baseline instead of a celebration. Cloud
+  settings are now *merged* (`badgesKnown` is unioned and never shrinks, the
+  two Social timestamps take the earliest, showcase picks still sync), and the
+  merged result is pushed back so the cloud blob heals itself. Also runs a
+  silent badge reconcile after pulling history from the cloud, so a second
+  device doesn't fire a burst of celebrations for old workouts.
+- **Achievements now celebrate the moment they're earned — mid-session, not
+  just on the finish screen.** Completing a set evaluates the in-progress
+  workout as if finished, so crossing a volume tier, hitting a PR, or logging
+  your first failure/drop/superset pops the celebration right there. Discarding
+  the workout afterwards cleanly un-credits anything that wasn't really earned,
+  so it can celebrate for real next time.
+
 **Version 1.14.1**
 - Removed the 6-week streak dot row under the Home stat grid (added in
   1.13.0) — it read as visual noise and didn't earn its place. The streak

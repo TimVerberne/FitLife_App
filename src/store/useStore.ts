@@ -444,10 +444,12 @@ function persistImportedBodyData(
 
 // Builds the badge-computation context for the signed-in user from current
 // store state (own routines and the two Social signals are only available for
-// 'You').
-function ownBadgeContext(s: StoreState, firstFriendAt: number | null, now: number): BadgeContext {
+// 'You'). `extraSession` lets an in-progress workout be evaluated as if it were
+// already finished, so achievements can celebrate the moment they're earned
+// mid-session — not only at the finish screen.
+function ownBadgeContext(s: StoreState, firstFriendAt: number | null, now: number, extraSession?: WorkoutSession): BadgeContext {
   return {
-    sessions: s.sessions,
+    sessions: extraSession ? [...s.sessions, extraSession] : s.sessions,
     person: 'You',
     routines: s.routines,
     weekStart: s.settings.weekStart,
@@ -457,6 +459,24 @@ function ownBadgeContext(s: StoreState, firstFriendAt: number | null, now: numbe
       firstFriendAt,
       firstComparisonAt: s.settings.firstComparisonAt ?? null,
     },
+  };
+}
+
+// The in-progress workout as it would look if finished right now (only its
+// checked-off sets), or null if nothing's been logged yet. Used to celebrate
+// achievements mid-session.
+function activeAsFinishedSession(active: ActiveSession | null): WorkoutSession | null {
+  if (!active) return null;
+  const entries = active.entries.map((e) => ({ ...e, sets: e.sets.filter((sset) => sset.done) })).filter((e) => e.sets.length > 0);
+  if (entries.length === 0) return null;
+  return {
+    id: '__active__',
+    person: 'You',
+    name: active.name || 'Workout',
+    routineId: active.routineId,
+    startedAt: active.startedAt,
+    durationMin: Math.max(1, Math.round((Date.now() - active.startedAt) / 60000)),
+    entries,
   };
 }
 
@@ -472,13 +492,14 @@ function reconcileOwnBadges(
   get: () => StoreState,
   set: (partial: Partial<StoreState>) => void,
   celebrate: boolean,
+  extraSession?: WorkoutSession,
 ): void {
   const s = get();
   const now = Date.now();
   let firstFriendAt = s.settings.firstFriendAt ?? null;
   if (s.friends.length > 0 && firstFriendAt == null) firstFriendAt = now;
 
-  const earned = computeEarnedBadges(ownBadgeContext(s, firstFriendAt, now));
+  const earned = computeEarnedBadges(ownBadgeContext(s, firstFriendAt, now, extraSession));
   const isFirstBaseline = s.settings.badgesKnown === undefined;
   const known = new Set(s.settings.badgesKnown ?? []);
   const newlyEarned: BadgeDef[] = [];
@@ -500,6 +521,43 @@ function reconcileOwnBadges(
     newlyEarned.sort((a, b) => (earned.get(a.id) ?? 0) - (earned.get(b.id) ?? 0));
     set({ badgeCelebration: newlyEarned });
   }
+}
+
+// Merges the account's cloud settings onto local without losing badge state.
+// `badgesKnown` is cumulative "already celebrated" state — it must be UNIONed,
+// never replaced, or adopting a cloud blob written by a client that lacks the
+// field (older version, or a first-run race) would reset it to undefined and
+// make every subsequent finish silently re-baseline instead of celebrating.
+// The two Social timestamps take the earliest known value; showcase picks are
+// a synced user choice so the cloud wins when it has them.
+function mergeCloudSettings(local: Settings, remote: Settings): Settings {
+  const localKnown = local.badgesKnown;
+  const remoteKnown = remote.badgesKnown;
+  const badgesKnown = localKnown || remoteKnown ? [...new Set([...(localKnown ?? []), ...(remoteKnown ?? [])])] : undefined;
+  const earliest = (a?: number | null, b?: number | null): number | null => {
+    const vals = [a, b].filter((v): v is number => typeof v === 'number');
+    return vals.length ? Math.min(...vals) : null;
+  };
+  return sanitizeSettings({
+    ...remote,
+    badgesKnown,
+    showcaseBadges: remote.showcaseBadges ?? local.showcaseBadges,
+    firstComparisonAt: earliest(local.firstComparisonAt, remote.firstComparisonAt),
+    firstFriendAt: earliest(local.firstFriendAt, remote.firstFriendAt),
+  });
+}
+
+// Drops any badge from `badgesKnown` that isn't actually earned from finished
+// history — used after discarding a workout, so a badge that celebrated
+// mid-session (against the in-progress workout) but wasn't truly earned can
+// celebrate again for real next time.
+function pruneBadgesKnownToEarned(get: () => StoreState): void {
+  const s = get();
+  const known = s.settings.badgesKnown;
+  if (!known || known.length === 0) return;
+  const earned = computeEarnedBadges(ownBadgeContext(s, s.settings.firstFriendAt ?? null, Date.now()));
+  const pruned = known.filter((id) => earned.has(id));
+  if (pruned.length !== known.length) get().updateSettings({ badgesKnown: pruned });
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -686,6 +744,14 @@ export const useStore = create<StoreState>((set, get) => ({
     });
     if (replacingOtherTimer) {
       get().showToast('Rest timer switched to this exercise');
+    }
+    // Celebrate achievements the instant they're earned, mid-session — not
+    // only at the finish screen. Evaluates the in-progress workout as if
+    // finished right now; a discard later prunes anything that turns out not
+    // to be really earned (see cancelSession).
+    if (turningOn) {
+      const synthetic = activeAsFinishedSession(get().active);
+      if (synthetic) reconcileOwnBadges(get, set, true, synthetic);
     }
   },
 
@@ -886,6 +952,9 @@ export const useStore = create<StoreState>((set, get) => ({
     get().confirm('Discard this workout? Your progress will be lost.', 'Yes, discard', () => {
       set({ active: null, mode: 'tabs', restTimer: null });
       void disarmNudge();
+      // Any badge that celebrated against this now-discarded workout isn't
+      // really earned — drop it from "known" so it can celebrate for real later.
+      pruneBadgesKnownToEarned(get);
       get().showToast('Workout discarded');
     }, true, 'Keep training');
   },
@@ -1513,9 +1582,15 @@ export const useStore = create<StoreState>((set, get) => ({
       const remoteSettings = await cloudSync.fetchSettings();
       if (!stillCurrent()) return;
       if (remoteSettings) {
-        set({ settings: remoteSettings });
-        saveSettings(remoteSettings);
-        applyTheme(remoteSettings);
+        // Merge (don't replace) so cumulative badge state survives — see
+        // mergeCloudSettings. Push the merged result back so the cloud blob
+        // gains any fields it was missing (e.g. badgesKnown from this device's
+        // baseline), instead of handing the same lossy blob back next launch.
+        const merged = mergeCloudSettings(get().settings, remoteSettings);
+        set({ settings: merged });
+        saveSettings(merged);
+        applyTheme(merged);
+        void cloudSync.pushSettings(merged);
       } else {
         await cloudSync.pushSettings(get().settings);
       }
@@ -1581,6 +1656,10 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ routines: remote.routines, sessions: remote.sessions });
       }
       if (stillCurrent()) localStorage.setItem(linkedKey, '1');
+      // History may have been pulled from the cloud (a second device, or
+      // freshly linked) — credit any badges it earned silently, so those
+      // don't all fire as "new" celebrations on the next finish.
+      if (stillCurrent()) reconcileOwnBadges(get, set, false);
     } catch (err) {
       console.error('Cloud sync failed, will retry next load', err);
     } finally {
