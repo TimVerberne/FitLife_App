@@ -32,8 +32,19 @@ const TONES: { freq: number; at: number; len: number }[] = [
   { freq: 1175, at: 0.32, len: 0.22 },
 ];
 
-export function playBeep(): void {
+// Peak gain at full volume. The user's setting scales this; the phone's own
+// media volume then scales the result, so this can only ever make the chime
+// quieter than the device is already playing.
+const PEAK_GAIN = 0.25;
+// exponentialRampToValueAtTime can't target zero, and ramping to something
+// below the 0.001 floor we start from is pointless — anything this quiet is
+// treated as silent instead.
+const MIN_AUDIBLE_GAIN = 0.002;
+
+export function playBeep(volume = 1): void {
   try {
+    const peak = PEAK_GAIN * Math.min(1, Math.max(0, volume));
+    if (peak < MIN_AUDIBLE_GAIN) return;
     const c = audioContext();
     if (!c) return;
     // The context can be suspended again by the OS (backgrounding the PWA,
@@ -47,7 +58,7 @@ export function playBeep(): void {
       osc.frequency.value = t.freq;
       const t0 = start + t.at;
       gain.gain.setValueAtTime(0.001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
       gain.gain.exponentialRampToValueAtTime(0.001, t0 + t.len);
       osc.connect(gain);
       gain.connect(c.destination);

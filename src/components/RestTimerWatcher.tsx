@@ -16,13 +16,14 @@ export function RestTimerWatcher() {
   const restTimer = useStore((s) => s.restTimer);
   const skipRestTimer = useStore((s) => s.skipRestTimer);
   const soundEnabled = useStore((s) => s.settings.restTimerSound);
+  const volume = useStore((s) => s.settings.restTimerVolume);
   const hapticsEnabled = useStore((s) => s.settings.hapticsOnRestEnd);
 
   useEffect(() => {
     if (!restTimer) return;
     const msLeft = restTimer.endsAt - Date.now();
     const fire = () => {
-      if (soundEnabled) playBeep();
+      if (soundEnabled) playBeep(volume);
       if (hapticsEnabled) vibrate(REST_END_PATTERN);
       skipRestTimer();
     };
@@ -32,7 +33,7 @@ export function RestTimerWatcher() {
     }
     const id = setTimeout(fire, msLeft);
     return () => clearTimeout(id);
-  }, [restTimer, soundEnabled, hapticsEnabled, skipRestTimer]);
+  }, [restTimer, soundEnabled, volume, hapticsEnabled, skipRestTimer]);
 
   return null;
 }

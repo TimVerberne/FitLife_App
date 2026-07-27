@@ -16,6 +16,10 @@ export interface Settings {
   hapticsOnSetComplete: boolean;
   hapticsOnRestEnd: boolean;
   restTimerSound: boolean;
+  // 0..1, multiplied into the rest-timer chime's peak gain. Note this scales
+  // *within* whatever the phone's own media volume already is — it can make
+  // the chime quieter, never louder than the device allows.
+  restTimerVolume: number;
   theme: ThemeMode;
   accent: AccentPreset;
   notifyActiveWorkout: boolean;
@@ -44,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hapticsOnSetComplete: true,
   hapticsOnRestEnd: true,
   restTimerSound: true,
+  restTimerVolume: 0.7,
   theme: 'dark',
   accent: 'mint',
   notifyActiveWorkout: false,
@@ -68,8 +73,14 @@ export function sanitizeSettings(partial: Partial<Settings>): Settings {
   const merged = { ...DEFAULT_SETTINGS, ...partial };
   const valid = <T,>(value: unknown, allowed: readonly T[], fallback: T): T =>
     allowed.includes(value as T) ? (value as T) : fallback;
+  // Volume is the one free-form number here, and it's multiplied straight
+  // into an audio gain — a corrupt or hand-edited backup carrying e.g. 50
+  // would otherwise play the chime at 20x and hurt. Clamp to 0..1.
+  const clamp01 = (value: unknown, fallback: number): number =>
+    typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
   return {
     ...merged,
+    restTimerVolume: clamp01(merged.restTimerVolume, DEFAULT_SETTINGS.restTimerVolume),
     units: valid(merged.units, UNITS_VALUES, DEFAULT_SETTINGS.units),
     weekStart: valid(merged.weekStart, WEEKSTART_VALUES, DEFAULT_SETTINGS.weekStart),
     theme: valid(merged.theme, THEME_VALUES, DEFAULT_SETTINGS.theme),

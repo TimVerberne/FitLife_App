@@ -250,6 +250,38 @@ export function SettingsSheet() {
         checked={settings.restTimerSound}
         onChange={(v) => updateSettings({ restTimerSound: v })}
       />
+      {settings.restTimerSound && (
+        <div className="settings-row">
+          <div>
+            <div className="settings-row-label">Chime volume</div>
+            <div className="settings-row-desc">
+              {settings.restTimerVolume === 0 ? 'Muted' : `${Math.round(settings.restTimerVolume * 100)}% of your phone's volume`}
+            </div>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            aria-label="Rest timer chime volume"
+            value={settings.restTimerVolume}
+            onChange={(e) => updateSettings({ restTimerVolume: Number(e.target.value) })}
+            // Previewed on release rather than on every change: dragging the
+            // slider would otherwise fire a chime per step. Both events are
+            // wired because a pointer drag ends with pointerup while a
+            // keyboard adjustment only ever produces keyup.
+            onPointerUp={() => {
+              unlockAudio();
+              playBeep(settings.restTimerVolume);
+            }}
+            onKeyUp={() => {
+              unlockAudio();
+              playBeep(settings.restTimerVolume);
+            }}
+            style={{ width: 110 }}
+          />
+        </div>
+      )}
       {vibrateCapable && (
         <SettingsSwitchRow
           label="Vibrate when rest timer ends"
@@ -266,7 +298,7 @@ export function SettingsSheet() {
         style={{ marginTop: 8 }}
         onClick={() => {
           unlockAudio();
-          if (settings.restTimerSound) playBeep();
+          if (settings.restTimerSound) playBeep(settings.restTimerVolume);
           if (settings.hapticsOnRestEnd) vibrate(REST_END_PATTERN);
           if (!settings.restTimerSound && !(settings.hapticsOnRestEnd && vibrateCapable)) {
             showToast('Turn on the sound or vibration above first');

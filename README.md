@@ -102,6 +102,19 @@ this is done.
 
 ## Update notes
 
+**Version 1.20.0**
+- **Chime volume slider** for the rest-timer alert, in Settings just under the
+  sound toggle (and only shown while that's on). Releasing the slider — or
+  tapping "Test rest timer alert" — plays the chime at the chosen level so you
+  can set it by ear; it previews on release rather than on every step, so
+  dragging doesn't machine-gun the sound.
+- Sliding to 0 is a genuine mute: the chime is skipped entirely rather than
+  played at an inaudible gain.
+- The setting scales the chime *within* your phone's own media volume — it can
+  make the alert quieter, never louder than the device is already playing.
+- The value is clamped to 0–100% when loaded, so a hand-edited or corrupt
+  backup can't set a gain multiplier that plays it painfully loud.
+
 **Version 1.19.0**
 - Fixes from a full review of everything added since 1.12.0 (~3,150 lines).
 - **Badge progress now agrees with the Home screen.** Streak and Consistency
