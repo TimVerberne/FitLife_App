@@ -102,6 +102,28 @@ this is done.
 
 ## Update notes
 
+**Version 1.17.0**
+- **Fixed: the rest-timer alert never actually fired on iPhone.** The feature
+  and its settings toggles already existed, but neither channel worked on iOS:
+  - *Sound* — `playBeep()` created its `AudioContext` lazily inside the rest
+    timer's `setTimeout` callback, which isn't a user gesture. iOS creates a
+    context that way in the `suspended` state and nothing ever resumed it, so
+    the oscillator played into a dead context. There's now an `unlockAudio()`
+    called from the set-toggle tap (a real gesture, and the same tap that
+    starts the timer), plus a `resume()` guard on every play since the OS can
+    re-suspend the context when the app is backgrounded.
+  - *Vibration* — iOS/WebKit doesn't implement the Vibration API at all, so
+    both vibrate toggles were dead switches with no explanation. Vibration
+    now goes through `lib/haptics.ts`, and Settings hides those rows on a
+    device that can't vibrate, showing a one-line explanation instead
+    (mirroring how the push section already handles an incapable device).
+- The rest-timer chime is now a **three-tone rising pattern** rather than a
+  single blip — easier to pick out in a gym, and on iPhone it's the only
+  alert channel available.
+- **New "Test rest timer alert" button** in Settings, so you can check the
+  alert without starting a workout and waiting out a timer. Tapping it also
+  serves as the iOS audio unlock.
+
 **Version 1.16.0**
 - **Animated celebration overlays**, transcribed from the FitFlow Badge
   System design (via the standalone "Full flow" export). Both share a set of

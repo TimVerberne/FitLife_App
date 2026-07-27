@@ -5,6 +5,8 @@ import { REST_PRESETS, formatRest } from '../../lib/rest';
 import { useAuthState, signOut } from '../../lib/auth';
 import { enableNudges, disableNudges, isPushCapable } from '../../lib/pushNudges';
 import { fetchOwnProfile, updateOwnDisplayName } from '../../lib/friends';
+import { playBeep, unlockAudio } from '../../lib/beep';
+import { canVibrate, vibrate, REST_END_PATTERN } from '../../lib/haptics';
 
 const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -61,6 +63,10 @@ export function SettingsSheet() {
 
   const pushCapable = isPushCapable();
   const pushBlocked = pushCapable && typeof Notification !== 'undefined' && Notification.permission === 'denied';
+  // iPhone has no Vibration API at all, so both vibration toggles below are
+  // dead switches there — say so rather than letting them look functional.
+  const vibrateCapable = canVibrate();
+  const noVibrateNote = "Vibration isn't available on iPhone — iOS doesn't offer it to web apps, so the rest timer uses sound instead.";
 
   // `settings.notifyActiveWorkout` is only ever written by this sheet's own
   // toggle, so it can drift from reality — the actual push subscription can
@@ -231,21 +237,44 @@ export function SettingsSheet() {
         checked={settings.keepScreenAwake}
         onChange={(v) => updateSettings({ keepScreenAwake: v })}
       />
-      <SettingsSwitchRow
-        label="Vibrate when a set is checked off"
-        checked={settings.hapticsOnSetComplete}
-        onChange={(v) => updateSettings({ hapticsOnSetComplete: v })}
-      />
+      {vibrateCapable && (
+        <SettingsSwitchRow
+          label="Vibrate when a set is checked off"
+          checked={settings.hapticsOnSetComplete}
+          onChange={(v) => updateSettings({ hapticsOnSetComplete: v })}
+        />
+      )}
       <SettingsSwitchRow
         label="Sound when rest timer ends"
+        desc="Plays a three-tone chime — test it below"
         checked={settings.restTimerSound}
         onChange={(v) => updateSettings({ restTimerSound: v })}
       />
-      <SettingsSwitchRow
-        label="Vibrate when rest timer ends"
-        checked={settings.hapticsOnRestEnd}
-        onChange={(v) => updateSettings({ hapticsOnRestEnd: v })}
-      />
+      {vibrateCapable && (
+        <SettingsSwitchRow
+          label="Vibrate when rest timer ends"
+          checked={settings.hapticsOnRestEnd}
+          onChange={(v) => updateSettings({ hapticsOnRestEnd: v })}
+        />
+      )}
+      {!vibrateCapable && <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>{noVibrateNote}</div>}
+      {/* Testing the alert shouldn't require starting a workout and waiting
+          out a rest timer — and tapping this is also a user gesture, so it
+          doubles as the iOS audio unlock. */}
+      <button
+        className="btn sec"
+        style={{ marginTop: 8 }}
+        onClick={() => {
+          unlockAudio();
+          if (settings.restTimerSound) playBeep();
+          if (settings.hapticsOnRestEnd) vibrate(REST_END_PATTERN);
+          if (!settings.restTimerSound && !(settings.hapticsOnRestEnd && vibrateCapable)) {
+            showToast('Turn on the sound or vibration above first');
+          }
+        }}
+      >
+        Test rest timer alert
+      </button>
 
       <div className="section-h">Notifications</div>
       {!pushCapable ? (

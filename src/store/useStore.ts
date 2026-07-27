@@ -12,6 +12,8 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
 import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
+import { unlockAudio } from '../lib/beep';
+import { vibrate } from '../lib/haptics';
 import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
 import type { Person } from '../lib/types';
@@ -712,9 +714,12 @@ export const useStore = create<StoreState>((set, get) => ({
       const sets = e.sets.map((s, si) => (si === setIdx ? { ...s, done: !s.done } : s));
       return { ...e, sets };
     });
-    if (turningOn && get().settings.hapticsOnSetComplete && 'vibrate' in navigator) {
-      navigator.vibrate(15);
-    }
+    if (turningOn && get().settings.hapticsOnSetComplete) vibrate(15);
+    // Checking off a set is a real user gesture, and it's the same tap that
+    // starts the rest timer — the one chance to take the AudioContext out of
+    // the suspended state iOS creates it in. Without this the timer's own
+    // beep, fired from a setTimeout callback, is inaudible on iPhone.
+    if (turningOn && get().settings.restTimerSound) unlockAudio();
     // Supersetted exercises share one rest boundary — in strict alternation
     // (A set, then straight into B's matching set) finishing A's set
     // shouldn't start a timer while B's matching set is still pending; only

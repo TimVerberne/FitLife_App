@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { playBeep } from '../lib/beep';
+import { REST_END_PATTERN, vibrate } from '../lib/haptics';
 
 // RestTimerBar only renders on ActiveSessionScreen, so minimizing the
 // session (or just switching tabs) unmounts it — and with it, the beep/
@@ -22,10 +23,7 @@ export function RestTimerWatcher() {
     const msLeft = restTimer.endsAt - Date.now();
     const fire = () => {
       if (soundEnabled) playBeep();
-      // A short-short-long pattern is noticeably different from the single
-      // 15ms tap on checking off a set — meant to be felt through a pocket,
-      // not just glanced at.
-      if (hapticsEnabled && 'vibrate' in navigator) navigator.vibrate([120, 80, 120, 80, 240]);
+      if (hapticsEnabled) vibrate(REST_END_PATTERN);
       skipRestTimer();
     };
     if (msLeft <= 0) {
