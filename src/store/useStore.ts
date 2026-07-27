@@ -11,7 +11,7 @@ import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, isCardioExercise } from '../lib/exercises';
 import { disarmNudge } from '../lib/pushNudges';
-import { sortRoutines } from '../lib/records';
+import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
 import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
 import type { Person } from '../lib/types';
@@ -166,6 +166,11 @@ export interface StoreState {
   badgeCelebration: BadgeDef[] | null;
   viewingBadgesPerson: Person;
 
+  // The in-session "new personal record" celebration. `line` picks which of
+  // the four rotating headline pairs to show (chosen once at fire time so it
+  // doesn't reshuffle on re-render).
+  prCelebration: (LiveRecord & { line: number }) | null;
+
   // Life tab — body measurements, nutrition, hydration. Strictly private:
   // never shared with friends, never in the crew feed or Stats head-to-head.
   bodyProfile: BodyProfile;
@@ -256,6 +261,7 @@ export interface StoreState {
 
   openBadges(person?: Person): void;
   dismissBadgeCelebration(): void;
+  dismissPrCelebration(): void;
   setShowcaseBadges(ids: string[]): void;
   toggleShowcaseBadge(id: string): 'added' | 'removed' | 'full';
   markFirstComparison(): void;
@@ -599,6 +605,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   badgeCelebration: null,
   viewingBadgesPerson: 'You',
+  prCelebration: null,
 
   bodyProfile: DEFAULT_BODY_PROFILE,
   bodyLog: [],
@@ -752,6 +759,11 @@ export const useStore = create<StoreState>((set, get) => ({
     if (turningOn) {
       const synthetic = activeAsFinishedSession(get().active);
       if (synthetic) reconcileOwnBadges(get, set, true, synthetic);
+      // ...and celebrate a lift that just beat this exercise's all-time best.
+      // `entries` is the post-toggle state (the set is now done), which is
+      // what liveRecordForSet needs to judge it.
+      const record = liveRecordForSet(get().sessions, entries, entryIdx, setIdx);
+      if (record) set({ prCelebration: { ...record, line: Math.floor(Math.random() * 4) } });
     }
   },
 
@@ -950,7 +962,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   cancelSession() {
     get().confirm('Discard this workout? Your progress will be lost.', 'Yes, discard', () => {
-      set({ active: null, mode: 'tabs', restTimer: null });
+      set({ active: null, mode: 'tabs', restTimer: null, prCelebration: null });
       void disarmNudge();
       // Any badge that celebrated against this now-discarded workout isn't
       // really earned — drop it from "known" so it can celebrate for real later.
@@ -1001,6 +1013,9 @@ export const useStore = create<StoreState>((set, get) => ({
       active: null,
       mode: 'finish',
       restTimer: null,
+      // A PR popup left open when the workout ends belongs to a session
+      // that's now finished — the Finish screen takes over from here.
+      prCelebration: null,
       finishResult: {
         sessionId: newSession.id,
         entries,
@@ -1729,6 +1744,10 @@ export const useStore = create<StoreState>((set, get) => ({
 
   dismissBadgeCelebration() {
     set({ badgeCelebration: null });
+  },
+
+  dismissPrCelebration() {
+    set({ prCelebration: null });
   },
 
   setShowcaseBadges(ids) {

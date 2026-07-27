@@ -102,6 +102,34 @@ this is done.
 
 ## Update notes
 
+**Version 1.16.0**
+- **Animated celebration overlays**, transcribed from the FitFlow Badge
+  System design (via the standalone "Full flow" export). Both share a set of
+  primitives in `CelebrationFx.tsx` — a radial rays wash, an expanding ring,
+  and a fan of sparks thrown outward by rotating each spark's parent so its
+  "upward" flight becomes an outward arc — plus the design's own keyframes
+  (`raysIn`, `ringOut`, `sparkFly`, `riseIn`, `crestPop`, `crestFloat`,
+  `wipeIn`, `barGrow`, `streakUp`, `fadeIn`) at their original timings.
+  - **Achievement unlocked** — replaces the old plain dialog. Cool-white rays
+    and ring, 12 sparks, the crest popping in then floating, and the copy
+    rising in beneath it. Renders the badge's *real* crest, so a max-tier
+    unlock shows the platinum/crowned/winged version.
+  - **New personal record (in-session)** — new. Mint light-streaks rising up
+    a blurred backdrop, gold rays/ring, 10 sparks, the gold trophy crest, one
+    of the design's four rotating headlines, and a card breaking the lift
+    down: weight × reps, the delta, a gradient bar, previous best and e1RM.
+  - Both honour `prefers-reduced-motion` (same layout, no flying parts).
+- **PRs are now detected live, mid-set.** Completing a set checks it against
+  your all-time best e1RM for that exercise — counting both finished history
+  *and* earlier sets in the current workout, so a ramp-up only celebrates a
+  set that genuinely raises the bar again. Warm-ups and 0-weight sets are
+  excluded, as everywhere else.
+  - If a set both sets a PR and unlocks a badge, the achievement plays first
+    and the PR follows once dismissed.
+  - A PR popup left open when a workout is finished or discarded is cleared.
+- The PR overlay's Share button uses the OS share sheet where available,
+  falling back to the clipboard.
+
 **Version 1.15.0**
 - **Workout detail now shows *which* sets were the records.** The crew feed
   already showed a 🏆 count on each workout, but opening it gave no way to see

@@ -231,6 +231,70 @@ export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutS
   return newRecordExerciseIdsInWorkout(sessions, target).length;
 }
 
+// Everything the in-session "new personal record" celebration needs about
+// the set that just beat the record.
+export interface LiveRecord {
+  exerciseId: string;
+  weight: number;
+  reps: number;
+  oneRm: number;
+  // The set that previously held the record (null on a first-ever PR).
+  prevWeight: number | null;
+  prevReps: number | null;
+  prevOneRm: number;
+}
+
+// Does the just-completed set at [entryIdx][setIdx] of the in-progress
+// workout beat this person's all-time best est-1RM for that exercise?
+// `history` is every finished session; `liveEntries` is the active workout,
+// whose own earlier completed sets also count as prior — so a ramp-up only
+// celebrates a set that genuinely raises the bar again, not every set above
+// the old record.
+export function liveRecordForSet(
+  history: WorkoutSession[],
+  liveEntries: SessionEntry[],
+  entryIdx: number,
+  setIdx: number,
+  person = 'You',
+): LiveRecord | null {
+  const entry = liveEntries[entryIdx];
+  const set = entry?.sets[setIdx];
+  if (!entry || !set || !isWorkingSet(set) || set.weight <= 0) return null;
+  const oneRm = epley(set.weight, set.reps);
+
+  // Best from finished history.
+  let prevOneRm = 0;
+  let prevWeight: number | null = null;
+  let prevReps: number | null = null;
+  const consider = (w: number, r: number) => {
+    const e = epley(w, r);
+    if (e > prevOneRm) {
+      prevOneRm = e;
+      prevWeight = w;
+      prevReps = r;
+    }
+  };
+  history
+    .filter((h) => h.person === person)
+    .forEach((h) =>
+      h.entries
+        .filter((e) => e.exerciseId === entry.exerciseId)
+        .forEach((e) => e.sets.filter((s) => isWorkingSet(s) && s.weight > 0).forEach((s) => consider(s.weight, s.reps))),
+    );
+  // Plus earlier completed sets of this same exercise in the live workout.
+  liveEntries
+    .filter((e) => e.exerciseId === entry.exerciseId)
+    .forEach((e) =>
+      e.sets.forEach((s, si) => {
+        if (e === entry && si === setIdx) return; // the set being judged
+        if (isWorkingSet(s) && s.weight > 0) consider(s.weight, s.reps);
+      }),
+    );
+
+  if (oneRm <= prevOneRm) return null;
+  return { exerciseId: entry.exerciseId, weight: set.weight, reps: set.reps, oneRm, prevWeight, prevReps, prevOneRm };
+}
+
 // The most recent earlier session that's a fair "last time" comparison for
 // the Finish screen — same routine if `target` came from one, otherwise the
 // most recent same-named freeform session. Falls back to null (nothing to

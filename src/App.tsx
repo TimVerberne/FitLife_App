@@ -14,6 +14,7 @@ import { SheetContainer } from './components/SheetContainer';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { Toast } from './components/Toast';
 import { BadgeCelebration } from './components/BadgeCelebration';
+import { PrCelebration } from './components/PrCelebration';
 import { AuthGate } from './features/auth/AuthGate';
 import { useAuthState } from './lib/auth';
 import { throttleOnFocus } from './lib/focusThrottle';
@@ -171,6 +172,7 @@ function AuthedApp() {
       <ConfirmDialog />
       <Toast />
       <BadgeCelebration />
+      <PrCelebration />
     </div>
   );
 }

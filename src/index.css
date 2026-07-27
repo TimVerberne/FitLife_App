@@ -2451,6 +2451,142 @@
   }
 }
 
+/* -------- celebration overlays (achievement unlock + new PR) --------
+   Transcribed from the FitFlow Badge System design: a rays wash, an
+   expanding ring, radial sparks, and a crest that pops then floats, with
+   the copy rising in behind it. Names and timings match the design 1:1. */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes wipeIn {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes barGrow {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes streakUp {
+  0% {
+    opacity: 0;
+    transform: translateY(60px) scaleY(0.4);
+  }
+  40% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-260px) scaleY(1);
+  }
+}
+
+@keyframes raysIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ringOut {
+  0% {
+    transform: scale(0.28);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* The spark's parent is rotated, so flying "up" here throws it outward
+   along that angle — that's what fans the burst around the crest. */
+@keyframes sparkFly {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.3);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-165px) scale(0.85);
+  }
+}
+
+@keyframes riseIn {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes crestPop {
+  0% {
+    opacity: 0;
+    transform: scale(0.18) rotate(-16deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.14) rotate(4deg);
+  }
+  72% {
+    transform: scale(0.96) rotate(-2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes crestFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+/* The celebration is a big motion moment — honour a reduced-motion
+   preference by showing the same layout, just without the flying parts. */
+@media (prefers-reduced-motion: reduce) {
+  .celebration-fx * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .celebration-fx .celebration-spark,
+  .celebration-fx .celebration-ring,
+  .celebration-fx .celebration-streak {
+    display: none;
+  }
+}
+
 .mini-b {
   flex: 1;
   min-width: 0;
