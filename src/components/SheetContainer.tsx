@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
+import { prefersReducedMotion } from '../lib/useReducedMotion';
 import { PickerSheet } from '../features/picker/PickerSheet';
 import { ExerciseDetailSheet } from '../features/picker/ExerciseDetailSheet';
 import { WorkoutDetailSheet } from '../features/history/WorkoutDetailSheet';
@@ -44,6 +45,11 @@ export function SheetContainer() {
 
   const [dragY, setDragY] = useState(0);
   const [dragging, setDragging] = useState(false);
+  // Brief springy return after a drag that didn't earn a dismiss — the sheet
+  // overshoots slightly and settles, instead of sliding flatly back.
+  const [snapping, setSnapping] = useState(false);
+  const snapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(snapTimer.current), []);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // .sheet-scroll is one persistent element shared by every sheet type below,
@@ -61,7 +67,18 @@ export function SheetContainer() {
     const elapsedMs = Math.max(1, performance.now() - track.startTime);
     const velocity = track.dy / elapsedMs;
     const isFlick = track.dy > FLICK_MIN_DISTANCE && velocity > FLICK_MIN_VELOCITY;
-    if (track.dy > DISMISS_THRESHOLD || isFlick) closeSheet();
+    if (track.dy > DISMISS_THRESHOLD || isFlick) {
+      closeSheet();
+      return;
+    }
+    // Didn't earn a dismiss — spring back. Skipped entirely when the drag
+    // never really moved (a tap on the handle), so a stray press doesn't
+    // trigger a visible bounce out of nowhere.
+    if (track.dy > 2 && !prefersReducedMotion()) {
+      setSnapping(true);
+      clearTimeout(snapTimer.current);
+      snapTimer.current = setTimeout(() => setSnapping(false), 340);
+    }
   }
 
   // The small grab handle is always draggable regardless of scroll
@@ -150,7 +167,7 @@ export function SheetContainer() {
     <>
       <div className={`scrim${show ? ' show' : ''}`} onClick={closeSheet} />
       <div
-        className={`sheet${show ? ' show' : ''}${fixedHeight ? ' sheet-fixed' : ''}`}
+        className={`sheet${show ? ' show' : ''}${fixedHeight ? ' sheet-fixed' : ''}${snapping ? ' snapping' : ''}`}
         style={dragging ? { transform: `translateX(-50%) translateY(${dragY}px)`, transition: 'none' } : undefined}
       >
         <div

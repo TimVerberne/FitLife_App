@@ -77,7 +77,7 @@ export function ActiveSessionScreen() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<string | null>(null);
   const [supersetMenuFor, setSupersetMenuFor] = useState<string | null>(null);
-  const { drag, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
+  const { drag, settling, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
     active?.entries.length ?? 0,
     COMPACT_ROW_HEIGHT,
     reorderEntries,
@@ -233,7 +233,9 @@ export function ActiveSessionScreen() {
               left: 0,
               right: 0,
               top: isDraggingThis ? drag.startSlot * COMPACT_ROW_HEIGHT + drag.dy : slot * COMPACT_ROW_HEIGHT,
-              transition: isDraggingThis ? 'none' : 'top 0.18s ease',
+              // Tracks the finger with no transition while held; eases into
+              // its landing slot once released (see .settling).
+              transition: isDraggingThis && !settling ? 'none' : 'top 0.18s ease',
               zIndex: isDraggingThis ? 20 : 1,
             }
           : undefined;
@@ -251,6 +253,7 @@ export function ActiveSessionScreen() {
             confirmRemoveExercise={settings.confirmRemoveExercise}
             compact={!!drag}
             isDraggingThis={isDraggingThis}
+            settling={isDraggingThis && settling}
             positionStyle={positionStyle}
             menu={menu?.exerciseId === en.exerciseId ? menu : null}
             restMenuOpen={restMenuFor === en.exerciseId}

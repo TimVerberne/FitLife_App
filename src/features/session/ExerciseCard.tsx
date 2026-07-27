@@ -65,6 +65,8 @@ export interface ExerciseCardProps {
   confirmRemoveExercise: boolean;
   compact: boolean;
   isDraggingThis: boolean;
+  /** True only while this card is easing into its landing slot after a drop. */
+  settling: boolean;
   positionStyle: React.CSSProperties | undefined;
   menu: MenuState | null;
   restMenuOpen: boolean;
@@ -104,6 +106,7 @@ function ExerciseCardImpl({
   confirmRemoveExercise,
   compact,
   isDraggingThis,
+  settling,
   positionStyle,
   menu,
   restMenuOpen,
@@ -182,7 +185,7 @@ function ExerciseCardImpl({
   }
 
   return (
-    <div className={`s-ex${compact ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}`} style={positionStyle}>
+    <div className={`s-ex${compact ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}${settling ? ' settling' : ''}`} style={positionStyle}>
       <div className="s-top">
         <div
           className="s-info-btn"

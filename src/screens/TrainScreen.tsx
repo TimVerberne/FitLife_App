@@ -34,7 +34,7 @@ export function TrainScreen() {
     return map;
   }, [sessions]);
 
-  const { drag, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
+  const { drag, settling, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
     routines.length,
     COMPACT_ROW_HEIGHT,
     reorderRoutines,
@@ -92,13 +92,17 @@ export function TrainScreen() {
               left: 0,
               right: 0,
               top: isDraggingThis ? drag.startSlot * COMPACT_ROW_HEIGHT + drag.dy : slot * COMPACT_ROW_HEIGHT,
-              transition: isDraggingThis ? 'none' : 'top 0.18s ease',
+              // The dragged card tracks the finger with no transition, but
+              // once released it eases into its landing slot (see .settling).
+              transition: isDraggingThis && !settling ? 'none' : 'top 0.18s ease',
               zIndex: isDraggingThis ? 20 : 1,
             }
           : undefined;
         return (
           <div
-            className={`routine-card${drag ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}`}
+            className={`routine-card${drag ? ' compact' : ''}${isDraggingThis ? ' dragging' : ''}${
+              isDraggingThis && settling ? ' settling' : ''
+            }`}
             key={r.id}
             role="button"
             tabIndex={0}

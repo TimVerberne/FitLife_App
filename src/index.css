@@ -2573,9 +2573,123 @@
   }
 }
 
-/* The celebration is a big motion moment — honour a reduced-motion
-   preference by showing the same layout, just without the flying parts. */
+/* -------- transition polish --------
+   Four constantly-repeated moments that should move rather than cut. Every
+   one of them degrades to instant under the reduced-motion block at the end
+   of this section. */
+
+/* 1. Tab switches — a light cross-fade with a few px of lift. Deliberately
+   short: this is the most repeated action in the app, so anything that
+   announces itself becomes irritating fast. The wrapper is keyed on the
+   screen, so a rapid back-and-forth just restarts the animation on a fresh
+   element — the newest tap always wins and nothing stacks up. */
+/* Takes over .screen's place as the app-shell flex child so wrapping it
+   changes nothing about the layout — .screen still fills and scrolls, and
+   the existing `.app-shell.is-session .screen` descendant rules still match.
+   Deliberately no `both` fill-mode: this class never gets removed, and a
+   lingering transform would make the wrapper a containing block for any
+   position:fixed descendant. */
+.screen-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-fade {
+  animation: tabIn 0.16s ease-out;
+}
+
+@keyframes tabIn {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 2. Minimise / restore — the session screen shrinks toward the bar at the
+   bottom and grows back out of it, so it reads as one object changing size
+   rather than two unrelated screens swapping. Origin is bottom-centre, which
+   is where the MiniBar sits. */
+.session-morph-out {
+  animation: sessionShrink 0.2s cubic-bezier(0.4, 0, 0.7, 0.2) both;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+}
+
+.session-morph-in {
+  animation: sessionGrow 0.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  transform-origin: 50% 100%;
+}
+
+@keyframes sessionShrink {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.88) translateY(6%);
+  }
+}
+
+@keyframes sessionGrow {
+  0% {
+    opacity: 0;
+    transform: scale(0.88) translateY(6%);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* The bar itself rises into place as the screen lands on it. */
+.mini-bar-in {
+  animation: miniBarIn 0.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes miniBarIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 3. Drag reorder — a lifted item scales up and casts a shadow so there's no
+   doubt it's been picked up, and eases home on release instead of snapping.
+   The non-dragged rows already slide via their own `top` transition. */
+.routine-card.dragging,
+.s-ex.dragging {
+  transform: scale(1.03);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+  transition: transform 0.14s ease-out, box-shadow 0.14s ease-out;
+}
+
+.routine-card.settling,
+.s-ex.settling {
+  transition: top 0.18s cubic-bezier(0.2, 0.8, 0.3, 1), transform 0.18s cubic-bezier(0.2, 0.8, 0.3, 1),
+    box-shadow 0.18s ease-out;
+}
+
+/* 4. Sheet snap-back — see SheetContainer. A drag that doesn't earn a
+   dismiss returns with a slight overshoot so it feels sprung rather than
+   teleported back. */
+.sheet.snapping {
+  transition: transform 0.34s cubic-bezier(0.18, 0.89, 0.32, 1.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  /* The celebration is a big motion moment — same layout, no flying parts. */
   .celebration-fx * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
@@ -2584,6 +2698,32 @@
   .celebration-fx .celebration-ring,
   .celebration-fx .celebration-streak {
     display: none;
+  }
+
+  /* All four transitions above collapse to instant rather than being left
+     half-applied. The JS side (drag settle, sheet spring, session morph)
+     checks the same preference, so these agree with each other. */
+  .tab-fade,
+  .session-morph-out,
+  .session-morph-in,
+  .mini-bar-in {
+    animation: none !important;
+  }
+  .session-morph-out,
+  .session-morph-in {
+    opacity: 1;
+    transform: none;
+  }
+  .routine-card.dragging,
+  .s-ex.dragging {
+    transform: none;
+    transition: none;
+  }
+  .routine-card.settling,
+  .s-ex.settling,
+  .sheet.snapping,
+  .sheet {
+    transition: none !important;
   }
 }
 

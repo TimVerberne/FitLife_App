@@ -102,6 +102,32 @@ this is done.
 
 ## Update notes
 
+**Version 1.18.0**
+- **Transition polish** across the four most-repeated moments in the app.
+  Every one of them collapses to instant under `prefers-reduced-motion` — the
+  CSS and the JS both check it, so they can't disagree.
+  - **Sheets** already tracked the finger and already dismissed on a fast
+    flick as well as on distance (one shared `SheetContainer` drives every
+    sheet, so that was never per-sheet). What was missing was the return: a
+    drag that doesn't earn a dismiss now springs back with a slight overshoot
+    instead of sliding flatly home.
+  - **Tab switches** get a 0.16s cross-fade with a few px of lift. The
+    wrapper is keyed on the screen, so rapid tapping restarts the animation
+    on a fresh element rather than stacking — the newest tap always wins.
+  - **Minimise / restore** is no longer an instant mode flip: the session
+    screen shrinks toward the bar and grows back out of it, with the bar
+    rising to meet it, so it reads as one object changing size. The mode
+    change is held back until the shrink has played. The rest timer carries
+    over untouched (it was always absolute-time state in the store, so there
+    was nothing to reset).
+  - **Drag reorder** now takes a 6px slop before a press becomes a drag, so a
+    tap stays a tap and a scroll stays a scroll — that ambiguity was most of
+    what made it feel wonky. A lifted item scales up and casts a shadow, and
+    on release it eases into its landing slot instead of snapping: the drag
+    view (and the reorder commit) is held for the length of that motion, so
+    the list can't reshuffle underneath the animation. Same behaviour in both
+    places, since both already share `useDragReorder`.
+
 **Version 1.17.0**
 - **Fixed: the rest-timer alert never actually fired on iPhone.** The feature
   and its settings toggles already existed, but neither channel worked on iOS:

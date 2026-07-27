@@ -31,7 +31,9 @@ function MiniBarInner({
   const mins = useElapsedMinutes(startedAt);
   return (
     <div id="mini">
-      <div className="mini">
+      {/* Rises into place as the session screen shrinks onto it, so the two
+          halves of the minimise read as one motion. */}
+      <div className="mini mini-bar-in">
         <span className="mini-dot" />
         <button
           className="mini-b"

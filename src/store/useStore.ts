@@ -14,6 +14,7 @@ import { disarmNudge } from '../lib/pushNudges';
 import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
 import { unlockAudio } from '../lib/beep';
 import { vibrate } from '../lib/haptics';
+import { prefersReducedMotion } from '../lib/useReducedMotion';
 import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
 import type { Person } from '../lib/types';
@@ -112,6 +113,10 @@ export interface StoreState {
   // navigation
   tab: Tab;
   mode: 'tabs' | 'session' | 'finish';
+
+  // Non-null only while the minimise/restore morph is playing — drives the
+  // shrink-to-bar / grow-from-bar animation (see App.tsx).
+  sessionMorph: 'minimizing' | 'restoring' | null;
 
   // active session
   active: ActiveSession | null;
@@ -286,6 +291,12 @@ export interface StoreState {
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let cloudSyncUserId: string | null = null;
+let morphTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Duration of the minimise/restore morph. Kept short — this happens many
+// times in a workout, so it has to stay snappy. Must match the
+// sessionShrink/sessionGrow animation durations in index.css.
+export const SESSION_MORPH_MS = 200;
 
 // Guards a JSON backup import against malformed items — the top-level
 // array check alone (routines/sessions being arrays at all) doesn't catch a
@@ -575,6 +586,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   tab: 'home',
   mode: 'tabs',
+  sessionMorph: null,
   active: null,
   finishResult: null,
   restTimer: null,
@@ -957,12 +969,31 @@ export const useStore = create<StoreState>((set, get) => ({
     get().closeSheet();
   },
 
+  // Minimise/restore are deliberately not instant mode flips: the session
+  // screen shrinks toward the bar (and expands back out of it) so it reads as
+  // the same thing changing size rather than one screen replacing another.
+  // The mode change is held back until the shrink has played; the expand runs
+  // after the mode change, on the way in. `sessionMorph` is what the CSS
+  // hangs off — see App.tsx. Reduced motion skips straight to the flip.
   minimizeSession() {
-    set((s) => ({ mode: 'tabs', tab: s.tab === 'train' ? 'home' : s.tab }));
+    const done = () => set((s) => ({ mode: 'tabs', tab: s.tab === 'train' ? 'home' : s.tab, sessionMorph: null }));
+    if (prefersReducedMotion()) {
+      done();
+      return;
+    }
+    set({ sessionMorph: 'minimizing' });
+    clearTimeout(morphTimer);
+    morphTimer = setTimeout(done, SESSION_MORPH_MS);
   },
 
   restoreSession() {
-    set({ mode: 'session' });
+    clearTimeout(morphTimer);
+    if (prefersReducedMotion()) {
+      set({ mode: 'session', sessionMorph: null });
+      return;
+    }
+    set({ mode: 'session', sessionMorph: 'restoring' });
+    morphTimer = setTimeout(() => set({ sessionMorph: null }), SESSION_MORPH_MS);
   },
 
   cancelSession() {

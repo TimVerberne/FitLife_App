@@ -21,10 +21,7 @@ import { throttleOnFocus } from './lib/focusThrottle';
 import { armNudge, disarmNudge } from './lib/pushNudges';
 import { setsCountOf } from './lib/records';
 
-function CurrentScreen() {
-  const mode = useStore((s) => s.mode);
-  const tab = useStore((s) => s.tab);
-
+function ScreenForMode(mode: string, tab: string) {
   if (mode === 'session') return <ActiveSessionScreen />;
   if (mode === 'finish') return <FinishScreen />;
   if (tab === 'train') return <TrainScreen />;
@@ -32,6 +29,32 @@ function CurrentScreen() {
   if (tab === 'life') return <LifeScreen />;
   if (tab === 'you') return <ProfileScreen />;
   return <HomeScreen />;
+}
+
+function CurrentScreen() {
+  const mode = useStore((s) => s.mode);
+  const tab = useStore((s) => s.tab);
+  const sessionMorph = useStore((s) => s.sessionMorph);
+
+  // Keying the wrapper on the screen identity restarts the entrance
+  // animation on a genuinely fresh element every switch, so tapping rapidly
+  // between tabs can't stack or half-play — the newest one simply wins.
+  // Switching tabs already swaps component types (and so remounts), so this
+  // costs no state that wasn't being discarded anyway.
+  const screenKey = mode === 'tabs' ? `tab:${tab}` : `mode:${mode}`;
+
+  // The session screen owns the morph while minimising/restoring; ordinary
+  // tab switches get the light cross-fade instead. They're mutually
+  // exclusive — a morph is not a tab change.
+  let cls = 'tab-fade';
+  if (sessionMorph === 'minimizing') cls = 'session-morph-out';
+  else if (sessionMorph === 'restoring') cls = 'session-morph-in';
+
+  return (
+    <div key={screenKey} className={`screen-wrap ${cls}`}>
+      {ScreenForMode(mode, tab)}
+    </div>
+  );
 }
 
 function App() {
