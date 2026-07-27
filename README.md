@@ -102,6 +102,25 @@ this is done.
 
 ## Update notes
 
+**Version 1.15.0**
+- **Workout detail now shows *which* sets were the records.** The crew feed
+  already showed a 🏆 count on each workout, but opening it gave no way to see
+  which set earned it. The record-setting set is now marked with a gold-
+  outlined 🏆 pill, and its exercise gets a "🏆 NEW PR" flag — for your own
+  workouts and friends' alike.
+  - The marked set is the one with the highest estimated 1RM in that exercise,
+    which is what the record is actually measured on — so the top set gets the
+    trophy even when a different set was heavier or had more reps.
+  - Warm-ups and bodyweight (0-weight) sets are never marked, matching how the
+    rest of the app treats records.
+  - `newRecordExerciseIdsInWorkout` is now derived from the same set-level
+    function (`recordSetIndexesInWorkout`), so the number of marked sets can
+    never disagree with the 🏆 count shown on the feed card or the names on
+    the Finish screen.
+  - Added `--gold` / `--gold-soft` theme tokens (with a darker light-mode
+    value, since the dark-theme gold fails contrast on white) and pointed the
+    feed's existing trophy colour at them, so PR gold is defined in one place.
+
 **Version 1.14.2**
 - **Fixed: achievement celebration sometimes never showed** (the collection
   count would go up but no pop-up). Root cause: `syncWithCloud` replaced local

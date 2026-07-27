@@ -195,19 +195,36 @@ export function exercisePR(history: ExercisePoint[]): ExercisePR {
 }
 
 // Which exercises in `target` set a new estimated-1RM PR compared to
-// everything logged before it — the Finish screen names these instead of
-// just showing a bare count.
-export function newRecordExerciseIdsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): string[] {
+// everything logged before it, and *which set* did it — the single set with
+// the highest est-1RM in that entry, i.e. the one the record is actually for.
+// Keyed by exerciseId → index into that entry's `sets`.
+//
+// This is the one source of truth for "what counted as a record in this
+// workout": newRecordExerciseIdsInWorkout (and so the Finish screen's names
+// and the feed's 🏆 count) is derived from it, so a set marked as the record
+// in the workout detail can never disagree with the count shown next to it.
+export function recordSetIndexesInWorkout(sessions: WorkoutSession[], target: WorkoutSession): Map<string, number> {
   const priorSessions = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt);
   const priorBest = new Map(personalRecords(priorSessions, target.person).map((r) => [r.exerciseId, r.estOneRepMax]));
-  const ids: string[] = [];
+  const result = new Map<string, number>();
   target.entries.forEach((entry) => {
-    const bestInSession = entry.sets
-      .filter((s) => isWorkingSet(s) && s.weight > 0)
-      .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
-    if (bestInSession > 0 && bestInSession > (priorBest.get(entry.exerciseId) ?? 0)) ids.push(entry.exerciseId);
+    let best = 0;
+    let bestIdx = -1;
+    entry.sets.forEach((s, si) => {
+      if (!isWorkingSet(s) || s.weight <= 0) return;
+      const oneRm = epley(s.weight, s.reps);
+      if (oneRm > best) {
+        best = oneRm;
+        bestIdx = si;
+      }
+    });
+    if (best > 0 && bestIdx >= 0 && best > (priorBest.get(entry.exerciseId) ?? 0)) result.set(entry.exerciseId, bestIdx);
   });
-  return ids;
+  return result;
+}
+
+export function newRecordExerciseIdsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): string[] {
+  return [...recordSetIndexesInWorkout(sessions, target).keys()];
 }
 
 export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {

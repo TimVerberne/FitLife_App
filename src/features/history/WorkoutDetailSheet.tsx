@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { exerciseById, isCardioExercise } from '../../lib/exercises';
-import { relativeDate, setsCountOf, volumeOf } from '../../lib/records';
+import { recordSetIndexesInWorkout, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { colorForPerson } from '../../lib/colors';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { Thumb } from '../../components/Thumb';
@@ -8,7 +9,12 @@ import { NumberField } from '../../components/NumberField';
 
 export function WorkoutDetailSheet() {
   const viewingSessionId = useStore((s) => s.viewingSessionId);
-  const session = useStore((s) => [...s.sessions, ...s.friendSessions].find((x) => x.id === viewingSessionId));
+  const ownSessions = useStore((s) => s.sessions);
+  const friendSessions = useStore((s) => s.friendSessions);
+  const session = useMemo(
+    () => [...ownSessions, ...friendSessions].find((x) => x.id === viewingSessionId),
+    [ownSessions, friendSessions, viewingSessionId],
+  );
   const copyWorkoutToRoutines = useStore((s) => s.copyWorkoutToRoutines);
   const repeatWorkout = useStore((s) => s.repeatWorkout);
   const updateHistorySet = useStore((s) => s.updateHistorySet);
@@ -24,6 +30,13 @@ export function WorkoutDetailSheet() {
   // time), which would otherwise silently reset editing to false on remount.
   const editing = useStore((s) => s.historyEditing);
   const setEditing = useStore((s) => s.setHistoryEditing);
+
+  // Which set in each exercise earned a record — same derivation the feed's
+  // 🏆 count uses, so the marked sets always add up to the number shown there.
+  const recordSets = useMemo(
+    () => (session ? recordSetIndexesInWorkout([...ownSessions, ...friendSessions], session) : new Map<string, number>()),
+    [ownSessions, friendSessions, session],
+  );
 
   if (!session) return null;
   const colors = colorForPerson(session.person);
@@ -72,11 +85,30 @@ export function WorkoutDetailSheet() {
         const ex = exerciseById(entry.exerciseId);
         if (!ex) return null;
         const cardio = isCardioExercise(ex);
+        const recordSetIdx = recordSets.get(entry.exerciseId);
         return (
           <div className="s-ex" key={i}>
             <div className="s-top">
               <Thumb className="ph" src={ex.image} alt={ex.name} />
-              <div className="s-name" style={{ fontWeight: 700, flex: 1 }}>{ex.name}</div>
+              <div className="s-name" style={{ fontWeight: 700, flex: 1 }}>
+                {ex.name}
+                {recordSetIdx !== undefined && (
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: 9,
+                      fontWeight: 700,
+                      letterSpacing: '.06em',
+                      color: 'var(--gold)',
+                      marginLeft: 6,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    🏆 New PR
+                  </span>
+                )}
+              </div>
               {editing && (
                 <button
                   className="s-del"
@@ -147,13 +179,31 @@ export function WorkoutDetailSheet() {
               </div>
             ) : (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {entry.sets.map((s, si) => (
-                  <span className="tag" key={si} style={{ color: 'var(--ink)', background: 'var(--surface-2)' }}>
-                    {cardio
-                      ? `${Math.round((s.durationSec ?? 0) / 60)}min · ${(s.distanceKm ?? 0).toFixed(1)}km`
-                      : `${s.weight > 0 ? `${formatWeight(s.weight, units)}${units}` : 'bodyweight'} × ${s.reps}`}
-                  </span>
-                ))}
+                {entry.sets.map((s, si) => {
+                  const isRecordSet = si === recordSetIdx;
+                  return (
+                    <span
+                      className="tag"
+                      key={si}
+                      title={isRecordSet ? 'This set set a new personal record' : undefined}
+                      style={
+                        isRecordSet
+                          ? {
+                              color: 'var(--gold)',
+                              background: 'rgba(242, 201, 76, 0.12)',
+                              border: '1px solid var(--gold)',
+                              fontWeight: 700,
+                            }
+                          : { color: 'var(--ink)', background: 'var(--surface-2)' }
+                      }
+                    >
+                      {isRecordSet && '🏆 '}
+                      {cardio
+                        ? `${Math.round((s.durationSec ?? 0) / 60)}min · ${(s.distanceKm ?? 0).toFixed(1)}km`
+                        : `${s.weight > 0 ? `${formatWeight(s.weight, units)}${units}` : 'bodyweight'} × ${s.reps}`}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>

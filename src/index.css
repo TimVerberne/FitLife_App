@@ -214,7 +214,7 @@
 }
 
 .feed-stat .v.gold {
-  color: #f2c94c;
+  color: var(--gold);
 }
 
 .feed-ex-row {
