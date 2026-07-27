@@ -40,8 +40,7 @@ function LadderRow({
 }) {
   const [open, setOpen] = useState(false);
   const tiers = useMemo(() => BADGE_DEFS.filter((d) => d.ladderId === ladderId), [ladderId]);
-  const prog = ladderProgress(ladderId, earned, { workouts: 0, volume: 0, prs: 0, streakWeeks: 0, consistency: 0, variety: 0, sessionMin: 0, routinesCreated: 0 });
-  // ladderProgress only needs `value` from metrics, which we already have.
+  const prog = ladderProgress(ladderId, earned, value);
   const current = prog.current;
   const next = prog.next;
   const display = current ?? tiers[0];

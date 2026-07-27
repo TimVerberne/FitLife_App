@@ -1,6 +1,6 @@
 import type { Routine, WorkoutSession, Person } from './types';
 import type { WeekStart } from './settings';
-import { epley, isLoggedSet, isWorkingSet, volumeOf } from './records';
+import { epley, isLoggedSet, isWorkingSet, volumeOf, weeklyStreak } from './records';
 
 // Achievements are derived entirely from things the user already does — no
 // new logging. Every badge here is computed from workout history (plus, for a
@@ -350,12 +350,16 @@ export function computeEarnedBadges(ctx: BadgeContext): Map<string, number> {
   }
 
   // Consistency — a rolling 30-day trailing window first reaching each count.
+  // `mine` is sorted ascending, so the window is a sliding pair of indices
+  // rather than a re-filter per session (which made this quadratic).
   {
     const tiers = tiersFor('consistency');
-    for (const h of mine) {
-      const windowStart = h.startedAt - 30 * DAY;
-      const count = mine.filter((x) => x.startedAt > windowStart && x.startedAt <= h.startedAt).length;
-      for (const tier of tiers) if (count >= tier.threshold) mark(tier.id, h.startedAt);
+    let left = 0;
+    for (let i = 0; i < mine.length; i++) {
+      const windowStart = mine[i].startedAt - 30 * DAY;
+      while (mine[left].startedAt <= windowStart) left++;
+      const count = i - left + 1;
+      for (const tier of tiers) if (count >= tier.threshold) mark(tier.id, mine[i].startedAt);
     }
   }
 
@@ -498,9 +502,20 @@ export interface BadgeMetrics {
   routinesCreated: number;
 }
 
-// Current best-ever standing per metric — drives the "83 of 100" progress
-// readouts. Best-ever (not "right now") so it never disagrees with an already
-// earned higher tier.
+// Drives the "83 of 100" progress readouts.
+//
+// Most tracks are cumulative or personal-best by nature (workouts, volume,
+// PRs, variety, longest session, routines), so best-ever is both correct and
+// what the rest of the app shows. Streak and Consistency are not: they're
+// explicitly about how you're training *now*, and the Home screen shows the
+// *current* weekly streak. Reporting a best-ever streak here would have the
+// badge sheet claim 10 weeks while Home says 2 — so those two report their
+// live value and agree with Home by construction (streak reuses the very
+// same weeklyStreak used there).
+//
+// Note this only affects the progress readout. Which badges are *earned* is
+// decided by computeEarnedBadges replaying history, so a streak you once hit
+// stays earned even after it lapses.
 export function computeBadgeMetrics(ctx: BadgeContext): BadgeMetrics {
   const mine = ctx.sessions.filter((h) => h.person === ctx.person).sort((a, b) => a.startedAt - b.startedAt);
 
@@ -511,7 +526,6 @@ export function computeBadgeMetrics(ctx: BadgeContext): BadgeMetrics {
   let prs = 0;
   const varietySeen = new Set<string>();
   let sessionMin = 0;
-  let consistency = 0;
   for (const h of mine) {
     h.entries.forEach((entry) => {
       const bestInSession = entry.sets
@@ -527,22 +541,15 @@ export function computeBadgeMetrics(ctx: BadgeContext): BadgeMetrics {
       if (entry.sets.some(isLoggedSet)) varietySeen.add(entry.exerciseId);
     });
     if (h.durationMin > sessionMin) sessionMin = h.durationMin;
-    const windowStart = h.startedAt - 30 * DAY;
-    const c = mine.filter((x) => x.startedAt > windowStart && x.startedAt <= h.startedAt).length;
-    if (c > consistency) consistency = c;
   }
 
-  // Best-ever consecutive trained weeks.
-  const weekSet = new Set<number>(mine.map((h) => startOfWeek(h.startedAt, ctx.weekStart)));
-  const weeks = [...weekSet].sort((a, b) => a - b);
-  let streakWeeks = 0;
-  let run = 0;
-  let prev: number | null = null;
-  for (const w of weeks) {
-    run = prev !== null && Math.round((w - prev) / DAY) === 7 ? run + 1 : 1;
-    if (run > streakWeeks) streakWeeks = run;
-    prev = w;
-  }
+  // How many workouts in the last 30 days — "lately", as the track is
+  // described, not the best 30-day stretch you ever had.
+  const consistency = mine.filter((h) => h.startedAt > ctx.now - 30 * DAY).length;
+
+  // The *current* weekly streak, straight from the same helper the Home
+  // screen uses, so the two can't drift apart.
+  const streakWeeks = weeklyStreak(ctx.sessions, ctx.person, ctx.now, ctx.weekStart);
 
   const routinesCreated = ctx.routines
     ? ctx.routines.length
@@ -583,8 +590,11 @@ export interface LadderProgress {
   total: number;
 }
 
-// For a ladder, the highest earned tier and the next one, given the earned map.
-export function ladderProgress(ladderId: string, earned: Map<string, number>, metrics: BadgeMetrics): LadderProgress {
+// For a ladder, the highest earned tier and the next one, given the earned
+// map. `value` is that ladder's current metric (see metricForLadder) — passed
+// in rather than derived from a whole BadgeMetrics, so a caller can't hand
+// over a placeholder object and silently get a zero back.
+export function ladderProgress(ladderId: string, earned: Map<string, number>, value: number): LadderProgress {
   const tiers = BADGE_DEFS.filter((d) => d.ladderId === ladderId);
   let current: BadgeDef | null = null;
   let next: BadgeDef | null = null;
@@ -597,7 +607,7 @@ export function ladderProgress(ladderId: string, earned: Map<string, number>, me
       next = tier;
     }
   }
-  return { ladderId, current, next, value: metricForLadder(ladderId, metrics), earnedCount, total: tiers.length };
+  return { ladderId, current, next, value, earnedCount, total: tiers.length };
 }
 
 // The <=3 badge ids shown next to a name. The user's explicit picks win (kept

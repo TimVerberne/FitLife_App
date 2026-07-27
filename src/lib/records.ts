@@ -203,11 +203,24 @@ export function exercisePR(history: ExercisePoint[]): ExercisePR {
 // workout": newRecordExerciseIdsInWorkout (and so the Finish screen's names
 // and the feed's 🏆 count) is derived from it, so a set marked as the record
 // in the workout detail can never disagree with the count shown next to it.
-export function recordSetIndexesInWorkout(sessions: WorkoutSession[], target: WorkoutSession): Map<string, number> {
+// Keyed by *entry index*, not exerciseId: an exercise can legitimately appear
+// in two entries of one session, and an exerciseId key would both collide
+// (silently dropping one) and make the caller mark the same set row in both
+// entries. The index is unambiguous. A record is still counted once per
+// exercise — if a duplicated exercise beats its prior best in two entries,
+// the better entry wins, matching recordsPerSession.
+export function recordSetIndexesInWorkout(sessions: WorkoutSession[], target: WorkoutSession): Map<number, number> {
   const priorSessions = sessions.filter((h) => h.person === target.person && h.startedAt < target.startedAt);
   const priorBest = new Map(personalRecords(priorSessions, target.person).map((r) => [r.exerciseId, r.estOneRepMax]));
-  const result = new Map<string, number>();
-  target.entries.forEach((entry) => {
+
+  interface Candidate {
+    entryIdx: number;
+    exerciseId: string;
+    setIdx: number;
+    oneRm: number;
+  }
+  const candidates: Candidate[] = [];
+  target.entries.forEach((entry, entryIdx) => {
     let best = 0;
     let bestIdx = -1;
     entry.sets.forEach((s, si) => {
@@ -218,13 +231,25 @@ export function recordSetIndexesInWorkout(sessions: WorkoutSession[], target: Wo
         bestIdx = si;
       }
     });
-    if (best > 0 && bestIdx >= 0 && best > (priorBest.get(entry.exerciseId) ?? 0)) result.set(entry.exerciseId, bestIdx);
+    if (best > 0 && bestIdx >= 0) candidates.push({ entryIdx, exerciseId: entry.exerciseId, setIdx: bestIdx, oneRm: best });
+  });
+
+  // One candidate per exercise — the strongest entry represents it.
+  const bestPerExercise = new Map<string, Candidate>();
+  for (const c of candidates) {
+    const held = bestPerExercise.get(c.exerciseId);
+    if (!held || c.oneRm > held.oneRm) bestPerExercise.set(c.exerciseId, c);
+  }
+
+  const result = new Map<number, number>();
+  bestPerExercise.forEach((c) => {
+    if (c.oneRm > (priorBest.get(c.exerciseId) ?? 0)) result.set(c.entryIdx, c.setIdx);
   });
   return result;
 }
 
 export function newRecordExerciseIdsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): string[] {
-  return [...recordSetIndexesInWorkout(sessions, target).keys()];
+  return [...recordSetIndexesInWorkout(sessions, target).keys()].map((entryIdx) => target.entries[entryIdx].exerciseId);
 }
 
 export function newRecordsInWorkout(sessions: WorkoutSession[], target: WorkoutSession): number {
@@ -328,16 +353,24 @@ export function recordsPerSession(sessions: WorkoutSession[]): Map<string, numbe
     [...theirs]
       .sort((a, b) => a.startedAt - b.startedAt)
       .forEach((h) => {
-        let count = 0;
+        // Collapsed per exercise before comparing: the same exercise can
+        // appear in two entries of one session, and counting each entry
+        // separately would report two records for what is one exercise —
+        // disagreeing with the per-set marks in the workout detail.
+        const bestByExercise = new Map<string, number>();
         h.entries.forEach((entry) => {
           const bestInSession = entry.sets
             .filter((s) => isWorkingSet(s) && s.weight > 0)
             .reduce((max, s) => Math.max(max, epley(s.weight, s.reps)), 0);
           if (bestInSession === 0) return;
-          const prior = best.get(entry.exerciseId) ?? 0;
+          if (bestInSession > (bestByExercise.get(entry.exerciseId) ?? 0)) bestByExercise.set(entry.exerciseId, bestInSession);
+        });
+        let count = 0;
+        bestByExercise.forEach((bestInSession, exerciseId) => {
+          const prior = best.get(exerciseId) ?? 0;
           if (bestInSession > prior) {
             count++;
-            best.set(entry.exerciseId, bestInSession);
+            best.set(exerciseId, bestInSession);
           }
         });
         result.set(h.id, count);

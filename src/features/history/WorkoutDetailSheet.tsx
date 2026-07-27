@@ -34,7 +34,7 @@ export function WorkoutDetailSheet() {
   // Which set in each exercise earned a record — same derivation the feed's
   // 🏆 count uses, so the marked sets always add up to the number shown there.
   const recordSets = useMemo(
-    () => (session ? recordSetIndexesInWorkout([...ownSessions, ...friendSessions], session) : new Map<string, number>()),
+    () => (session ? recordSetIndexesInWorkout([...ownSessions, ...friendSessions], session) : new Map<number, number>()),
     [ownSessions, friendSessions, session],
   );
 
@@ -85,7 +85,7 @@ export function WorkoutDetailSheet() {
         const ex = exerciseById(entry.exerciseId);
         if (!ex) return null;
         const cardio = isCardioExercise(ex);
-        const recordSetIdx = recordSets.get(entry.exerciseId);
+        const recordSetIdx = recordSets.get(i);
         return (
           <div className="s-ex" key={i}>
             <div className="s-top">

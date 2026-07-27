@@ -102,6 +102,35 @@ this is done.
 
 ## Update notes
 
+**Version 1.19.0**
+- Fixes from a full review of everything added since 1.12.0 (~3,150 lines).
+- **Badge progress now agrees with the Home screen.** Streak and Consistency
+  reported their *best-ever* value, so the collection could claim a 10-week
+  streak while Home showed 2, and a Consistency of 5 when you'd trained twice
+  in the last 30 days. Both now report the live value — the streak reuses the
+  very same `weeklyStreak` helper Home uses, so they can't drift. The other
+  tracks (workouts, volume, PRs, variety, longest session, routines) are
+  cumulative or personal-best by nature and are unchanged. This affects only
+  the progress readout: which badges are *earned* still comes from replaying
+  history, so a streak you once hit stays earned after it lapses.
+- **The feed's trophy count can no longer disagree with the marked PR sets.**
+  If one session ever contained the same exercise in two entries,
+  `recordsPerSession` counted it twice while the workout detail marked it
+  once. Records are now collapsed per exercise before counting, and
+  `recordSetIndexesInWorkout` is keyed by entry index instead of exerciseId —
+  the old key both collided and would have marked the same row in both
+  entries. No current path produces duplicate entries (both add-exercise paths
+  dedupe, and the Hevy importer groups sets by exercise), so this was latent
+  rather than something you'd have seen. Verified across 1,823 randomised
+  histories: previously 5 mismatches, now 0.
+- **Badge computation is no longer quadratic.** The Consistency track
+  re-filtered the whole history per session; it now slides a window. This runs
+  on every set toggle (for mid-session celebrations), so it's on a hot path:
+  at 1,000 sessions it went from 12.3ms to 4.4ms, and the metrics pass from
+  10.6ms to 2.3ms.
+- `ladderProgress` now takes the ladder's value directly rather than a whole
+  metrics object, so a caller can't pass a placeholder and silently read zero.
+
 **Version 1.18.1**
 - **Tapping into a weight/reps field now puts the caret at the end.** Tapping
   the middle of "10" left it between the digits, so backspace deleted the 1
