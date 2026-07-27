@@ -85,6 +85,29 @@ function defaultRestTimersFor(exerciseIds: string[], defaultRestSeconds: number 
   return map;
 }
 
+// What a freshly-added set should be pre-filled with.
+//
+// The most recently *completed* set, not simply the last row. When an
+// exercise you've done before pre-fills several rows from last time, editing
+// row 1 to what you actually lifted and then hitting "+ Add set" should carry
+// that forward — copying the trailing row instead would hand back a stale
+// value from the previous session and read as "it didn't remember".
+//
+// With no completed set yet, the last row is the best guess. With no rows at
+// all (an exercise never logged before, which startingSetsFor deliberately
+// leaves empty) it stays blank rather than inventing a weight — there's
+// nothing to base a guess on, and a wrong pre-fill is worse than none.
+function setToCopyForNewSet(sets: SetEntry[]): {
+  reps: number;
+  weight: number;
+  durationSec: number | undefined;
+  distanceKm: number | undefined;
+} {
+  const source = [...sets].reverse().find((s) => s.done) ?? sets[sets.length - 1];
+  if (!source) return { reps: 0, weight: 0, durationSec: undefined, distanceKm: undefined };
+  return { reps: source.reps, weight: source.weight, durationSec: source.durationSec, distanceKm: source.distanceKm };
+}
+
 function startingSetsFor(sessions: WorkoutSession[], exerciseId: string) {
   const prior = sessions
     .filter((h) => h.person === 'You' && h.entries.some((e) => e.exerciseId === exerciseId))
@@ -789,16 +812,7 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!active) return;
     const entries = active.entries.map((e, ei) => {
       if (ei !== entryIdx) return e;
-      const ex = exerciseById(e.exerciseId);
-      // A brand-new strength set with no prior row falls back to a
-      // reasonable non-zero starting weight/reps — but that same fallback
-      // must never apply to a cardio exercise's first set, or the leftover
-      // reps/weight (never touched by the Min/Km inputs) would silently
-      // count toward kg-lifted volume despite the UI showing neither field.
-      const fallback = ex && isCardioExercise(ex)
-        ? { reps: 0, weight: 0, durationSec: undefined, distanceKm: undefined }
-        : { reps: 10, weight: 20, durationSec: undefined, distanceKm: undefined };
-      const last = e.sets[e.sets.length - 1] ?? fallback;
+      const last = setToCopyForNewSet(e.sets);
       return {
         ...e,
         sets: [
@@ -1299,11 +1313,7 @@ export const useStore = create<StoreState>((set, get) => ({
       if (sess.id !== sessionId) return sess;
       const entries = sess.entries.map((e, ei) => {
         if (ei !== entryIdx) return e;
-        const ex = exerciseById(e.exerciseId);
-        const fallback = ex && isCardioExercise(ex)
-          ? { reps: 0, weight: 0, durationSec: 0, distanceKm: 0 }
-          : { reps: 10, weight: 20, durationSec: undefined, distanceKm: undefined };
-        const last = e.sets[e.sets.length - 1] ?? fallback;
+        const last = setToCopyForNewSet(e.sets);
         return {
           ...e,
           sets: [

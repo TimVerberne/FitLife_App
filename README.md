@@ -102,6 +102,24 @@ this is done.
 
 ## Update notes
 
+**Version 1.18.1**
+- **Tapping into a weight/reps field now puts the caret at the end.** Tapping
+  the middle of "10" left it between the digits, so backspace deleted the 1
+  instead of the 0. The set inputs are now `type="text"` with `inputMode`
+  still driving the numeric keypad — `setSelectionRange` throws on a number
+  input, so the caret genuinely can't be positioned there. Typed input is
+  filtered to digits (plus one decimal point on weight fields), which the
+  number input used to handle. Side benefit: no desktop spinner arrows.
+- **"+ Add set" now copies the set you actually just did**, i.e. the most
+  recently *completed* set rather than the trailing row. For an exercise
+  you've done before, the app pre-fills several rows from last time; editing
+  row 1 to what you really lifted and hitting "+ Add set" used to copy the
+  stale bottom row and read as "it didn't remember".
+- **A brand-new exercise no longer invents a starting weight.** Adding the
+  first set to an exercise with no history left it at 10 reps x 20 kg; it now
+  starts empty, since there's nothing to base a guess on and a wrong pre-fill
+  is worse than none.
+
 **Version 1.18.0**
 - **Transition polish** across the four most-repeated moments in the app.
   Every one of them collapses to instant under `prefers-reduced-motion` — the

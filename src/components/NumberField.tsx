@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react';
 
+// Keeps only what can form a number: digits, plus a single leading decimal
+// point for decimal fields. Needed because these are type="text" inputs (see
+// below), so the browser no longer rejects stray characters for us.
+function sanitize(raw: string, allowDecimal: boolean): string {
+  const cleaned = raw.replace(allowDecimal ? /[^0-9.]/g : /[^0-9]/g, '');
+  if (!allowDecimal) return cleaned;
+  const firstDot = cleaned.indexOf('.');
+  if (firstDot === -1) return cleaned;
+  // Drop every dot after the first.
+  return cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, '');
+}
+
 export function NumberField({
   value,
   onCommit,
@@ -22,13 +34,34 @@ export function NumberField({
 
   const input = (
     <input
-      type="number"
+      // Deliberately type="text" (with inputMode still driving the numeric
+      // keypad on mobile): setSelectionRange throws on a number input, so
+      // the caret can't be placed at the end there — which is the whole
+      // point of the focus handler below. It also drops the desktop spinners
+      // and the locale-dependent parsing quirks of type="number".
+      type="text"
       inputMode={inputMode}
       aria-label={ariaLabel}
       value={text}
-      onFocus={() => setFocused(true)}
+      onFocus={(e) => {
+        setFocused(true);
+        // Tapping into the middle of "10" used to leave the caret between
+        // the digits, so backspace ate the wrong one. Always land at the
+        // end. Deferred a frame because the browser (and iOS especially)
+        // places the caret from the tap *after* focus fires — doing it
+        // synchronously here would just get overwritten.
+        const el = e.currentTarget;
+        requestAnimationFrame(() => {
+          const end = el.value.length;
+          try {
+            el.setSelectionRange(end, end);
+          } catch {
+            // Some browsers refuse on a detached/!focused input — harmless.
+          }
+        });
+      }}
       onChange={(e) => {
-        const raw = e.target.value;
+        const raw = sanitize(e.target.value, inputMode === 'decimal');
         setText(raw);
         const n = parseFloat(raw);
         if (!Number.isNaN(n)) onCommit(Math.max(0, n));
