@@ -28,15 +28,21 @@ export function bodyParts(): string[] {
 // (not the exercise's own name) ranks last — those exist so "shoulder"
 // finds every shoulder-target exercise even when the word isn't in the
 // name, without letting a metadata-only match outrank a real name match.
-function nameMatchRank(name: string, q: string): number {
+// Rank 3 (every word of the query somewhere in the name, any order) is
+// what lets "fly dumbbell" find "Dumbbell Fly" — people rarely type
+// exercise names in their exact word order — while still sorting behind
+// an actual substring match like "dumbbell fly".
+function nameMatchRank(name: string, q: string, tokens: string[]): number {
   if (name === q) return 0;
   if (name.startsWith(q)) return 1;
   if (name.includes(q)) return 2;
-  return 3;
+  if (tokens.length > 1 && tokens.every((t) => name.includes(t))) return 3;
+  return 4;
 }
 
 export function searchExercises(query: string, bodyPart: string): Exercise[] {
   const q = query.trim().toLowerCase();
+  const tokens = q.split(/\s+/).filter(Boolean);
   const filtered = EXERCISES.filter((e) => {
     const matchesBp =
       bodyPart === 'all'
@@ -46,17 +52,17 @@ export function searchExercises(query: string, bodyPart: string): Exercise[] {
           : e.body_part === bodyPart;
     if (!matchesBp) return false;
     if (!q) return true;
-    const name = e.name.toLowerCase();
-    return (
-      name.includes(q) ||
-      e.target.toLowerCase().includes(q) ||
-      e.equipment.toLowerCase().includes(q) ||
-      e.body_part.toLowerCase().includes(q)
-    );
+    // Every word of the query has to appear *somewhere* across the
+    // exercise's searchable text, but words don't each need to land in
+    // the same field or in the query's own order — "fly dumbbell",
+    // "dumbbell fly" and "chest dumbbell" (word in name, word in target)
+    // all resolve to the same set of exercises.
+    const haystack = `${e.name} ${e.target} ${e.equipment} ${e.body_part}`.toLowerCase();
+    return tokens.every((t) => haystack.includes(t));
   });
   if (!q) return filtered;
   return [...filtered].sort((a, b) => {
-    const r = nameMatchRank(a.name.toLowerCase(), q) - nameMatchRank(b.name.toLowerCase(), q);
+    const r = nameMatchRank(a.name.toLowerCase(), q, tokens) - nameMatchRank(b.name.toLowerCase(), q, tokens);
     return r !== 0 ? r : a.name.localeCompare(b.name);
   });
 }
