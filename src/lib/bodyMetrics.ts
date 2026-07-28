@@ -89,6 +89,51 @@ export function trendDelta(series: DatedValue[], daysAgo = 7): number | null {
   return prior ? now.value - prior.value : null;
 }
 
+export interface PeriodStats {
+  first: DatedValue;
+  last: DatedValue;
+  change: number; // last - first, in the series' own unit
+  perWeek: number | null; // average change per week; null if the span is < a day
+  min: DatedValue;
+  max: DatedValue;
+  count: number;
+}
+
+// Summarises a series over whatever window the caller already filtered to.
+// This is what turns "here's a line" into "you're down 2.4 kg since 3 Jun,
+// about 0.4 kg a week" — the line alone doesn't say that.
+export function periodStats(series: DatedValue[]): PeriodStats | null {
+  if (series.length === 0) return null;
+  const first = series[0];
+  const last = series[series.length - 1];
+  let min = first;
+  let max = first;
+  for (const p of series) {
+    if (p.value < min.value) min = p;
+    if (p.value > max.value) max = p;
+  }
+  const spanDays = (last.ts - first.ts) / DAY;
+  const change = last.value - first.value;
+  // A single day (or a single entry) can't imply a weekly rate — extrapolating
+  // one weigh-in to "5 kg/week" would be nonsense, so say nothing instead.
+  const perWeek = spanDays >= 1 ? (change / spanDays) * 7 : null;
+  return { first, last, change, perWeek, min, max, count: series.length };
+}
+
+// Each entry paired with its change from the previous one, newest first —
+// the "how much was I on this date" list.
+export interface DatedChange {
+  ts: number;
+  value: number;
+  delta: number | null; // vs the previous (older) entry; null for the oldest
+}
+
+export function withDeltas(series: DatedValue[]): DatedChange[] {
+  return series
+    .map((p, i) => ({ ts: p.ts, value: p.value, delta: i === 0 ? null : p.value - series[i - 1].value }))
+    .reverse();
+}
+
 // Total minutes of your own logged sessions today — feeds the hydration
 // training bonus (see hydration.ts's hydrationTarget()).
 export function todaysTrainingMinutes(sessions: WorkoutSession[]): number {

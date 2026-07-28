@@ -32,6 +32,7 @@ export function ProgressChart({
   formatValue,
   formatDate,
   avgPoints,
+  fitToData = false,
 }: {
   points: ChartPoint[];
   formatValue: (v: number) => string;
@@ -40,6 +41,12 @@ export function ProgressChart({
   // lower-contrast overlay using the same coordinate mapping as the primary
   // line — not a second independent chart, so it never desyncs in scale.
   avgPoints?: ChartPoint[];
+  // Fit the y-axis to the data's own range instead of anchoring it at zero.
+  // Off by default (a zero baseline is the honest default for volume, 1RM and
+  // anything else where "how big" is the question). Body weight is the
+  // opposite case: it never goes near zero, so a 0-based axis squashes months
+  // of real change into a flat line at the top of the plot.
+  fitToData?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
@@ -54,13 +61,26 @@ export function ProgressChart({
   const maxTs = points[points.length - 1].ts;
   const tsSpan = Math.max(1, maxTs - minTs);
   const allValues = avgPoints ? [...points, ...avgPoints].map((p) => p.value) : points.map((p) => p.value);
-  const maxVal = niceCeiling(Math.max(...allValues));
+  const dataMin = Math.min(...allValues);
+  const dataMax = Math.max(...allValues);
+  // Domain low/high. Zero-based by default; fitted (with a margin so the line
+  // never rides the very edge) when the caller asks for it. A dead-flat
+  // series would give a zero-height domain, so it gets a nominal band.
+  let loVal = 0;
+  let hiVal = niceCeiling(dataMax);
+  if (fitToData) {
+    const span = dataMax - dataMin;
+    const margin = span > 0 ? span * 0.15 : Math.max(Math.abs(dataMax) * 0.02, 0.5);
+    loVal = dataMin - margin;
+    hiVal = dataMax + margin;
+  }
+  const valSpan = Math.max(1e-6, hiVal - loVal);
 
   const plotW = WIDTH - PAD_LEFT - PAD_RIGHT;
   const plotH = HEIGHT - PAD_TOP - PAD_BOTTOM;
 
   const xFor = (ts: number) => PAD_LEFT + ((ts - minTs) / tsSpan) * plotW;
-  const yFor = (v: number) => PAD_TOP + plotH - (v / maxVal) * plotH;
+  const yFor = (v: number) => PAD_TOP + plotH - ((v - loVal) / valSpan) * plotH;
 
   const coords = points.map((p) => ({ x: xFor(p.ts), y: yFor(p.value), p }));
   const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
@@ -120,7 +140,7 @@ export function ProgressChart({
             <g key={f}>
               <line x1={PAD_LEFT} x2={WIDTH - PAD_RIGHT} y1={y} y2={y} className="chart-grid" />
               <text x={0} y={y - 4} className="chart-axis-label">
-                {formatValue(maxVal * f)}
+                {formatValue(loVal + valSpan * f)}
               </text>
             </g>
           );

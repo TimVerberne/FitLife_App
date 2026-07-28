@@ -102,6 +102,27 @@ this is done.
 
 ## Update notes
 
+**Version 1.21.0**
+- **Rebuilt the weight detail sheet around progress rather than a bare line.**
+  - The chart's y-axis was anchored at zero, so an 82 kg reading sat at the
+    top of a 0–100 axis and two months of real change rendered as a flat
+    line. `ProgressChart` gained an opt-in `fitToData` axis that spans the
+    data's own range (with margin); weight uses it. The other charts
+    (1RM, volume, measurements, wellness) keep the zero baseline, which is
+    the honest default when "how big" is the question.
+  - New headline: total change over the selected period with the dates it
+    spans, plus Start / Now / Per-week tiles and a low/high line with the
+    dates each occurred and the number of entries.
+  - New **Entries** list — every logged date with its weight and the change
+    from the previous entry, newest first, collapsed behind a show-more.
+    This is the "what was I on the 12th" view the chart couldn't give.
+  - The two plotted series (logged points and the 7-day trend) are now named
+    in a legend instead of being told apart by dash pattern alone.
+  - Change colours follow your **goal**: on a cut, downward change reads as
+    progress; on a bulk, upward does; on maintain, neither is singled out.
+    Previously "down" was always coloured as good, which is wrong for anyone
+    gaining.
+
 **Version 1.20.0**
 - **Chime volume slider** for the rest-timer alert, in Settings just under the
   sound toggle (and only shown while that's on). Releasing the slider — or

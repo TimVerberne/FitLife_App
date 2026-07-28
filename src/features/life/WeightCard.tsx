@@ -1,13 +1,25 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { latestValue, loggingStreakDays, rollingAverage, seriesFor, todayIso, trendDelta } from '../../lib/bodyMetrics';
-import { periodCutoff, type StatPeriod } from '../../lib/records';
+import {
+  latestValue,
+  loggingStreakDays,
+  periodStats,
+  rollingAverage,
+  seriesFor,
+  todayIso,
+  trendDelta,
+  withDeltas,
+} from '../../lib/bodyMetrics';
+import { periodCutoff, STAT_PERIOD_LABEL, type StatPeriod } from '../../lib/records';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
+import { useCollapsedList } from '../../lib/useCollapsedList';
 import { PeriodPicker } from '../../components/PeriodPicker';
+import { ShowMoreButton } from '../../components/ShowMoreButton';
 import { ProgressChart, type ChartPoint } from '../../components/ProgressChart';
 
 export function WeightCard() {
   const bodyLog = useStore((s) => s.bodyLog);
+  const bodyProfile = useStore((s) => s.bodyProfile);
   const units = useStore((s) => s.settings.units);
   const logBodyMetrics = useStore((s) => s.logBodyMetrics);
   const [period, setPeriod] = useState<StatPeriod>('month');
@@ -34,6 +46,26 @@ export function WeightCard() {
     () => rollingAverage(inRange).map((p) => ({ ts: p.ts, value: toDisplayWeight(p.value, units) })),
     [inRange, units],
   );
+
+  // Everything the headline numbers and the dated list below are built from,
+  // all scoped to the selected period so they agree with the chart above them.
+  const stats = useMemo(() => periodStats(inRange), [inRange]);
+  const history = useMemo(() => withDeltas(inRange), [inRange]);
+  const historyList = useCollapsedList(history);
+  const fmt = (kg: number) => `${formatWeight(kg, units)} ${units}`;
+  // Which direction counts as progress depends on the goal — losing 2 kg is
+  // good on a cut and bad on a bulk, so the accent can't just mean "down".
+  // On 'maintain' neither direction is praised; movement is movement.
+  const goal = bodyProfile.goal;
+  function changeColor(kg: number): string {
+    if (Math.abs(kg) < 0.05 || goal === 'maintain') return 'var(--ink)';
+    const towardGoal = goal === 'lose' ? kg < 0 : kg > 0;
+    return towardGoal ? 'var(--accent)' : 'var(--muted)';
+  }
+  // Signed, in display units — "+1.2 kg" / "−0.4 kg". Uses a real minus sign
+  // so it lines up with the figures rather than reading as a hyphen.
+  const fmtDelta = (kg: number) => `${kg >= 0 ? '+' : '−'}${formatWeight(Math.abs(kg), units)} ${units}`;
+  const dateLabel = (ts: number) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 
   function save() {
     const parsed = Number(inputValue);
@@ -117,12 +149,124 @@ export function WeightCard() {
           <div style={{ marginTop: 14 }}>
             <PeriodPicker value={period} onChange={setPeriod} />
           </div>
+
+          {stats && stats.count >= 2 ? (
+            <>
+              {/* The headline the chart alone can't give you: how much, over
+                  what span, and how fast. */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  marginTop: 12,
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 900,
+                    fontSize: 26,
+                    color: changeColor(stats.change),
+                  }}
+                >
+                  {stats.change === 0 ? 'No change' : fmtDelta(stats.change)}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--faint)' }}>
+                  {STAT_PERIOD_LABEL[period].toLowerCase()} · {dateLabel(stats.first.ts)} → {dateLabel(stats.last.ts)}
+                </span>
+              </div>
+
+              <div className="stat-grid" style={{ marginTop: 10 }}>
+                <div className="stat-tile">
+                  <div className="n" style={{ fontSize: 18 }}>{fmt(stats.first.value)}</div>
+                  <div className="l">Start</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="n" style={{ fontSize: 18 }}>{fmt(stats.last.value)}</div>
+                  <div className="l">Now</div>
+                </div>
+                <div className="stat-tile">
+                  <div className="n" style={{ fontSize: 18 }}>
+                    {stats.perWeek === null ? '—' : fmtDelta(stats.perWeek)}
+                  </div>
+                  <div className="l">Per week</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 8 }}>
+                Low {fmt(stats.min.value)} ({dateLabel(stats.min.ts)}) · High {fmt(stats.max.value)} ({dateLabel(stats.max.ts)}) ·{' '}
+                {stats.count} {stats.count === 1 ? 'entry' : 'entries'}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--faint)', marginTop: 10 }}>
+              Only one entry in this range — pick a longer period to see a trend.
+            </div>
+          )}
+
           <ProgressChart
             points={points}
             avgPoints={avgPoints}
+            // Body weight never approaches zero, so a 0-based axis flattens
+            // months of real change into a straight line.
+            fitToData
             formatValue={(v) => `${v.toLocaleString('en-US', { maximumFractionDigits: 1 })} ${units}`}
-            formatDate={(ts) => new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+            formatDate={dateLabel}
           />
+
+          {/* Two series are plotted, so they're named rather than left to be
+              told apart by dash pattern alone. */}
+          <div style={{ display: 'flex', gap: 14, justifyContent: 'center', fontSize: 11, color: 'var(--faint)', marginTop: -4 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 14, height: 2, background: 'var(--accent)', borderRadius: 1 }} /> Logged
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 14, height: 2, background: 'var(--faint)', borderRadius: 1, opacity: 0.8 }} /> 7-day trend
+            </span>
+          </div>
+
+          {history.length > 0 && (
+            <>
+              <div className="section-h" style={{ marginTop: 18 }}>Entries</div>
+              {historyList.visible.map((h) => (
+                <div
+                  key={h.ts}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    padding: '8px 2px',
+                    borderBottom: '1px solid var(--line-soft)',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: 'var(--muted)' }}>
+                    {new Date(h.ts).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })}
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
+                      {fmt(h.value)}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 11,
+                        fontVariantNumeric: 'tabular-nums',
+                        minWidth: 62,
+                        textAlign: 'right',
+                        color: h.delta == null || Math.abs(h.delta) < 0.05 ? 'var(--faint-2)' : changeColor(h.delta),
+                      }}
+                    >
+                      {h.delta == null ? '—' : Math.abs(h.delta) < 0.05 ? '±0' : fmtDelta(h.delta)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+              <ShowMoreButton hiddenCount={historyList.hiddenCount} expanded={historyList.expanded} onToggle={historyList.toggle} />
+            </>
+          )}
         </>
       )}
     </div>
