@@ -102,6 +102,29 @@ this is done.
 
 ## Update notes
 
+**Version 1.23.0**
+- **Exercise search is far harder to miss with.** It used to match the query
+  only as one contiguous, correctly-spelled string, so anything but the exact
+  wording came back empty.
+  - **Word order no longer matters.** Every word of the query just has to turn
+    up somewhere in the exercise (name, target, equipment or body part), in any
+    order and across any of those fields — "fly dumbbell" now finds *Dumbbell
+    Fly*, and "chest dumbbell" works even though neither word pairs up in the
+    name alone.
+  - **Typos are forgiven.** "dumbell", "kettelbell swing", "shouldr press" and
+    "lateral rase" all land on the right exercise. Words get a budget of one or
+    two wrong characters depending on length; words of three letters or fewer
+    are left alone, since one edit there turns "hip" into "dip". The comparison
+    is anchored to the start of a word and allows a partial one, so a name
+    that's still being typed keeps scoring well.
+  - Spelling correction only runs when searching the text as typed finds
+    nothing — or almost nothing, which is what rescues a typo that
+    *accidentally* matches ("squatt" is really inside "squatting", and used to
+    return three rowing variations instead of the ~80 squats). Literal matches
+    always keep the top of the list; suggestions are appended below.
+  - A line above the results says when you're looking at corrected spellings
+    rather than exact hits, so the list never silently shows something else.
+
 **Version 1.22.1**
 - **Removed the Strava integration.** Strava's API requires the developer
   account to be a paid subscriber to register an app, which isn't the case

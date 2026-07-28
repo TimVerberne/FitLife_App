@@ -16,7 +16,17 @@ const RECENT_COUNT = 8;
 const ROW_HEIGHT = 67;
 const OVERSCAN = 6;
 
-function useVirtualRange(count: number, listRef: React.RefObject<HTMLDivElement | null>) {
+// `layoutKey` is any value that changes when something *above* the list
+// grows or shrinks (the Recent strip, the fuzzy-search note). The measured
+// offset below is cached rather than re-read per scroll frame, so it has to
+// be invalidated explicitly when the header height changes — a result count
+// that happens to stay the same across such a change wouldn't otherwise
+// re-trigger this effect.
+function useVirtualRange(
+  count: number,
+  listRef: React.RefObject<HTMLDivElement | null>,
+  layoutKey: string,
+) {
   const [range, setRange] = useState({ start: 0, end: Math.min(count, 24) });
 
   useEffect(() => {
@@ -59,7 +69,7 @@ function useVirtualRange(count: number, listRef: React.RefObject<HTMLDivElement 
       window.removeEventListener('resize', onScroll);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [count, listRef]);
+  }, [count, listRef, layoutKey]);
 
   return range;
 }
@@ -87,7 +97,13 @@ export function PickerSheet() {
   const selected = useStore((s) => s.pickSelected);
   const togglePickSelected = useStore((s) => s.togglePickSelected);
 
-  const list = useMemo(() => searchExercises(pickQuery, pickBodyPart), [pickQuery, pickBodyPart]);
+  const { list, exactCount } = useMemo(
+    () => searchExercises(pickQuery, pickBodyPart),
+    [pickQuery, pickBodyPart],
+  );
+  // Anything past exactCount is a spelling suggestion rather than a literal
+  // match, so say so instead of silently mixing them in.
+  const suggestedCount = list.length - exactCount;
   const bps = useMemo(() => ['all', ...bodyParts()], []);
 
   // Shown only while browsing (no query, no filter narrowed yet) — once
@@ -113,7 +129,11 @@ export function PickerSheet() {
   }, [showRecent, sessions]);
 
   const listRef = useRef<HTMLDivElement>(null);
-  const range = useVirtualRange(list.length, listRef);
+  const range = useVirtualRange(
+    list.length,
+    listRef,
+    `${suggestedCount > 0}:${recentExercises.length > 0}`,
+  );
 
   // A filtered-down list makes the previous scroll offset meaningless (it
   // could now point past the end, or mid-way through unrelated rows) — jump
@@ -235,6 +255,17 @@ export function PickerSheet() {
             })}
           </div>
         </div>
+      )}
+
+      {suggestedCount > 0 && (
+        <p
+          style={{ color: 'var(--muted)', fontSize: 12, margin: '0 2px 8px' }}
+          role="status"
+        >
+          {exactCount === 0
+            ? `No exact match for “${pickQuery.trim()}” — showing closest spellings.`
+            : `Few matches for “${pickQuery.trim()}” — close spellings added below.`}
+        </p>
       )}
 
       <div ref={listRef}>
