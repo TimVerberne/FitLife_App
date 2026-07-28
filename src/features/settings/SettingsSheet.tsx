@@ -7,7 +7,6 @@ import { enableNudges, disableNudges, isPushCapable } from '../../lib/pushNudges
 import { fetchOwnProfile, updateOwnDisplayName } from '../../lib/friends';
 import { playBeep, unlockAudio } from '../../lib/beep';
 import { canVibrate, vibrate, REST_END_PATTERN } from '../../lib/haptics';
-import { beginLink, isStravaConfigured, stravaStatus, unlinkStrava, type StravaStatus } from '../../lib/strava';
 
 const TAB_OPTIONS: { id: Tab; label: string }[] = [
   { id: 'home', label: 'Home' },
@@ -28,14 +27,9 @@ export function SettingsSheet() {
   const clearAllData = useStore((s) => s.clearAllData);
   const deleteAccount = useStore((s) => s.deleteAccount);
   const showToast = useStore((s) => s.showToast);
-  // The app's own dialog, not window.confirm — every other destructive action
-  // in the app goes through it, and the native one is blocked in a PWA.
-  const confirm = useStore((s) => s.confirm);
   const fileRef = useRef<HTMLInputElement>(null);
   const { email } = useAuthState();
   const [pushError, setPushError] = useState(false);
-  const [strava, setStrava] = useState<StravaStatus | null>(null);
-  const [stravaBusy, setStravaBusy] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [savedDisplayName, setSavedDisplayName] = useState<string | null>(null);
   const [savingName, setSavingName] = useState(false);
@@ -65,36 +59,6 @@ export function SettingsSheet() {
     } finally {
       setSavingName(false);
     }
-  }
-
-  // Fetched when the sheet opens rather than held in the store: it's a
-  // server round-trip nobody needs until they're actually looking at it, and
-  // it can change out from under the app (a link completed on another device,
-  // or revoked from Strava's own site).
-  useEffect(() => {
-    if (!isStravaConfigured()) return;
-    let cancelled = false;
-    setStravaBusy(true);
-    stravaStatus()
-      .then((s) => !cancelled && setStrava(s))
-      .catch(() => !cancelled && setStrava({ linked: false, athleteName: null }))
-      .finally(() => !cancelled && setStravaBusy(false));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  function unlink() {
-    confirm('Unlink Strava? Workouts you already imported stay in your history.', 'Yes, unlink', () => {
-      setStravaBusy(true);
-      unlinkStrava()
-        .then((s) => {
-          setStrava(s);
-          showToast('Strava unlinked');
-        })
-        .catch(() => showToast("Couldn't unlink — try again"))
-        .finally(() => setStravaBusy(false));
-    });
   }
 
   const pushCapable = isPushCapable();
@@ -343,42 +307,6 @@ export function SettingsSheet() {
       >
         Test rest timer alert
       </button>
-
-      <div className="section-h">Connections</div>
-      {!isStravaConfigured() ? (
-        <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>
-          Strava isn't set up for this build — see supabase/functions/strava-sync/README.md.
-        </div>
-      ) : (
-        <>
-          <div className="settings-row">
-            <div>
-              <div className="settings-row-label">Strava</div>
-              <div className="settings-row-desc">
-                {stravaBusy
-                  ? 'Checking…'
-                  : strava?.linked
-                    ? `Linked${strava.athleteName ? ` as ${strava.athleteName}` : ''}`
-                    : 'Bring your runs into FitFlow and finish them here'}
-              </div>
-            </div>
-            <button
-              className={strava?.linked ? 'btn sec' : 'btn'}
-              style={{ width: 'auto', padding: '8px 14px', fontSize: 13, flex: 'none' }}
-              disabled={stravaBusy}
-              onClick={strava?.linked ? unlink : beginLink}
-            >
-              {strava?.linked ? 'Unlink' : 'Link account'}
-            </button>
-          </div>
-          {/* Required by Strava's API terms when displaying their data. */}
-          {strava?.linked && (
-            <div className="settings-row-desc" style={{ padding: '0 2px 8px' }}>
-              Powered by Strava
-            </div>
-          )}
-        </>
-      )}
 
       <div className="section-h">Notifications</div>
       {!pushCapable ? (
