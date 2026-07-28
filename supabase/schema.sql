@@ -339,3 +339,44 @@ alter table public.body_profile add column manual_kcal_target int;
 -- gracefully (falls back to badges derived from a friend's visible history)
 -- until this is run, so there's no hard ordering requirement.
 alter table public.profiles add column showcase_badges text[] not null default '{}';
+
+-- Phase 12: Strava import. You run with Strava (it owns the GPS), then
+-- "complete" the run in FitFlow, which opens it as a normal active session
+-- you can edit and add exercises to. Once finished it's an ordinary workout —
+-- same history, same badges, no special-casing anywhere.
+--
+-- Tokens live here rather than in the client because Strava's OAuth exchange
+-- needs the app's client_secret, which must never ship to the browser. Only
+-- the strava-sync Edge Function (service role) ever reads this table; the
+-- RLS policy below exists so a stray client query can at most see its own
+-- row, never anyone else's.
+create table public.strava_tokens (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  athlete_id    bigint not null,
+  athlete_name  text,
+  access_token  text not null,
+  refresh_token text not null,
+  -- Strava access tokens are short-lived (~6h); the function refreshes on
+  -- demand using expires_at rather than waiting for a 401.
+  expires_at    timestamptz not null,
+  scope         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+alter table public.strava_tokens enable row level security;
+create policy "own strava tokens" on public.strava_tokens for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Links a finished session back to the Strava activity it came from, so the
+-- same run can't be imported twice, and carries the route so the workout can
+-- draw its own map. Both nullable — every existing session predates this, and
+-- a normal gym workout never has either.
+alter table public.sessions add column strava_activity_id bigint;
+alter table public.sessions add column route_polyline text;
+
+-- Partial unique index, not a plain one: many sessions legitimately have a
+-- null strava_activity_id, and those must not collide with each other.
+create unique index sessions_strava_activity_idx
+  on public.sessions (user_id, strava_activity_id)
+  where strava_activity_id is not null;

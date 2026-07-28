@@ -102,6 +102,31 @@ this is done.
 
 ## Update notes
 
+**Version 1.22.0**
+- **Strava, step 1 of 3: the account link.** Settings → Connections now has a
+  **Link account** button. Nothing imports yet — this is the plumbing the
+  import flow needs.
+  - New `strava-sync` Edge Function is the only thing that ever talks to
+    Strava. It holds the client secret and the access/refresh tokens; the
+    browser never sees either. It exposes `exchange` / `status` /
+    `disconnect` / `activities`, identifies the caller from the forwarded
+    Supabase JWT (never from the request body), and refreshes expired tokens
+    on demand — persisting the rotated refresh token, since Strava issues a
+    new one on every refresh.
+  - Schema Phase 12: a `strava_tokens` table, plus two nullable columns on
+    `sessions` (`strava_activity_id`, `route_polyline`) with a *partial*
+    unique index so the many sessions with no Strava id don't collide.
+    Additive — safe on a live database.
+  - The OAuth return is handled at app level, since the redirect lands on a
+    cold load with no sheet open. The single-use code is latched against
+    StrictMode's double-invoked effects and stripped from the URL immediately
+    so a refresh can't replay a spent code.
+  - Until the function is configured the row reads "not set up for this
+    build" instead of offering a dead button, matching how the push section
+    already handles an unconfigured device.
+  - "Powered by Strava" is shown once linked, as their API terms require.
+  - Setup is documented in `supabase/functions/strava-sync/README.md`.
+
 **Version 1.21.0**
 - **Rebuilt the weight detail sheet around progress rather than a bare line.**
   - The chart's y-axis was anchored at zero, so an 82 kg reading sat at the

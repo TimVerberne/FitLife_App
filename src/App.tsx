@@ -20,6 +20,12 @@ import { useAuthState } from './lib/auth';
 import { throttleOnFocus } from './lib/focusThrottle';
 import { armNudge, disarmNudge } from './lib/pushNudges';
 import { setsCountOf } from './lib/records';
+import { completeLink, consumeOAuthRedirect } from './lib/strava';
+
+// A Strava authorization code is single-use, and StrictMode invokes effects
+// twice in development — without a module-level latch the second run would
+// exchange an already-spent code and report a spurious failure.
+let stravaExchangeStarted = false;
 
 function ScreenForMode(mode: string, tab: string) {
   if (mode === 'session') return <ActiveSessionScreen />;
@@ -151,6 +157,24 @@ function AuthedApp() {
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [loaded, userId]);
+
+  // Strava sends the browser back here with ?code=... after the user approves
+  // the link. Handled at app level rather than in the Settings sheet, because
+  // the redirect lands on a cold app load with no sheet open. Gated on being
+  // signed in, since the exchange is attributed to the Supabase user.
+  useEffect(() => {
+    if (!loaded || !userId || stravaExchangeStarted) return;
+    const { code, denied } = consumeOAuthRedirect();
+    if (denied) {
+      useStore.getState().showToast('Strava link cancelled');
+      return;
+    }
+    if (!code) return;
+    stravaExchangeStarted = true;
+    completeLink(code)
+      .then((s) => useStore.getState().showToast(s.athleteName ? `Strava linked — ${s.athleteName}` : 'Strava linked'))
+      .catch(() => useStore.getState().showToast("Couldn't finish linking Strava — try again"));
   }, [loaded, userId]);
 
   useEffect(() => {
