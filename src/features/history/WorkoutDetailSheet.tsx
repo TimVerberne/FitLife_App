@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { exerciseById, isCardioExercise } from '../../lib/exercises';
-import { recordSetIndexesInWorkout, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
+import { formatDuration, recordSetIndexesInWorkout, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
 import { colorForPerson } from '../../lib/colors';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { Thumb } from '../../components/Thumb';
 import { NumberField } from '../../components/NumberField';
+import { DurationStat } from '../../components/DurationStat';
 
 export function WorkoutDetailSheet() {
   const viewingSessionId = useStore((s) => s.viewingSessionId);
@@ -21,6 +22,7 @@ export function WorkoutDetailSheet() {
   const addHistorySet = useStore((s) => s.addHistorySet);
   const removeHistorySet = useStore((s) => s.removeHistorySet);
   const removeHistoryExercise = useStore((s) => s.removeHistoryExercise);
+  const updateSessionDuration = useStore((s) => s.updateSessionDuration);
   const openPickerForHistory = useStore((s) => s.openPickerForHistory);
   const deleteSession = useStore((s) => s.deleteSession);
   const confirm = useStore((s) => s.confirm);
@@ -76,11 +78,17 @@ export function WorkoutDetailSheet() {
           <div className="n">{setsCountOf(session.entries)}</div>
           <div className="l">sets</div>
         </div>
-        <div className="stat-tile">
-          <div className="n">{session.durationMin}</div>
-          <div className="l">minutes</div>
-        </div>
+        <DurationStat
+          minutes={session.durationMin}
+          editable={editing}
+          onCommit={(n) => updateSessionDuration(session.id, n)}
+        />
       </div>
+      {editing && (
+        <p className="stat-hint" style={{ marginBottom: 4 }}>
+          Duration is editable{session.durationMin >= 60 ? ` — currently ${formatDuration(session.durationMin)}` : ''}.
+        </p>
+      )}
       {session.entries.map((entry, i) => {
         const ex = exerciseById(entry.exerciseId);
         if (!ex) return null;

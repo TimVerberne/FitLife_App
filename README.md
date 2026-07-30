@@ -102,6 +102,27 @@ this is done.
 
 ## Update notes
 
+**Version 1.24.0**
+- **Workout duration is editable after the fact.** Forgetting to hit "finish"
+  until hours later used to leave a workout permanently claiming ten hours of
+  training, which then skewed weekly-minutes totals, the "vs last time"
+  comparison and the session-length badges. The recorded length is the one
+  number the app infers rather than being told, so it's the one that most
+  needs correcting.
+  - On the **Finish screen** — the same screen that asks whether to save the
+    routine changes — the minutes tile is now a field you can type into, with
+    a line underneath spelling out the current value in hours ("that's 10
+    hours") so an implausible one is obvious.
+  - In **history** (You → a past workout), the minutes tile becomes editable
+    under the same ✎ button that already edits sets, and the change is saved
+    and synced like any other edit.
+  - Corrections are clamped to between 1 minute and 24 hours — the field
+    exists to undo an implausible number, not to enter another one.
+  - Session-length badges are re-derived from the new value, so a correction
+    can take a badge away as well as grant one. That re-derivation is silent:
+    the field commits on every keystroke, so celebrating here would re-fire
+    the same badge while you were still typing.
+
 **Version 1.23.0**
 - **Exercise search is far harder to miss with.** It used to match the query
   only as one contiguous, correctly-spelled string, so anything but the exact

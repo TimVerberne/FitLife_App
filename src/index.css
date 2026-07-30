@@ -149,6 +149,35 @@
   margin-top: 5px;
 }
 
+/* A stat tile whose number is an input. The accent border is the only cue
+   that it can be typed into — without it the field is indistinguishable from
+   the read-only tiles either side. */
+.stat-tile.editable {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.stat-tile.editable .n input {
+  background: none;
+  border: none;
+  outline: none;
+  width: 100%;
+  padding: 0;
+  text-align: center;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+}
+
+/* Sits under a stat grid to explain an editable tile. */
+.stat-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 2px 0;
+}
+
 /* -------- feed / crew rows -------- */
 /* -------- feed card (crew workouts) -------- */
 .feed-card {

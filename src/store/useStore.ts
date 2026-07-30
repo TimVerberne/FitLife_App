@@ -57,6 +57,13 @@ export interface ImportPreview {
 // Apply the persisted theme immediately on load, before the first paint.
 applyTheme(loadSettings());
 
+// Bounds for a hand-corrected workout length. The floor matches what
+// finishSession() rounds up to, and the ceiling exists because this field is
+// edited precisely to undo an implausible number — there's no point letting
+// a typo replace one with another.
+export const MIN_DURATION_MIN = 1;
+export const MAX_DURATION_MIN = 24 * 60;
+
 export interface FinishResult {
   sessionId: string;
   entries: SessionEntry[];
@@ -259,6 +266,7 @@ export interface StoreState {
   copyWorkoutToRoutines(sessionId: string): void;
   repeatWorkout(sessionId: string): void;
   setHistoryEditing(v: boolean): void;
+  updateSessionDuration(sessionId: string, minutes: number): void;
   updateHistorySet(sessionId: string, entryIdx: number, setIdx: number, field: 'reps' | 'weight' | 'durationSec' | 'distanceKm', value: number): void;
   addHistorySet(sessionId: string, entryIdx: number): void;
   removeHistorySet(sessionId: string, entryIdx: number, setIdx: number): void;
@@ -1284,6 +1292,35 @@ export const useStore = create<StoreState>((set, get) => ({
 
   setHistoryEditing(v) {
     set({ historyEditing: v });
+  },
+
+  // Forgetting to hit "finish" until hours later leaves a workout claiming a
+  // duration nobody actually trained, which then skews weekly-minutes totals,
+  // the "vs last time" comparison and the session-length badges. The recorded
+  // length is the one number the app infers rather than being told, so it's
+  // the one that most needs correcting afterwards.
+  updateSessionDuration(sessionId, minutes) {
+    const durationMin = Math.min(MAX_DURATION_MIN, Math.max(MIN_DURATION_MIN, Math.round(minutes)));
+    const sessions = get().sessions.map((sess) => (sess.id === sessionId ? { ...sess, durationMin } : sess));
+    const updated = sessions.find((s) => s.id === sessionId);
+    if (!updated) return;
+    const finishResult = get().finishResult;
+    set({
+      sessions,
+      // The Finish screen reads its own snapshot rather than `sessions`, so
+      // it has to be corrected alongside or the edit appears not to take.
+      ...(finishResult?.sessionId === sessionId ? { finishResult: { ...finishResult, durationMin } } : {}),
+    });
+    void db.sessions.put(updated);
+    void cloudSync.pushSession(updated);
+    // Session-length badges are derived from this number, so a correction can
+    // both earn one and take one away. Sync the "already celebrated" set in
+    // both directions, but silently: NumberField commits on every keystroke,
+    // so typing 600 back over a shortened value would otherwise re-fire a
+    // celebration for a badge the workout already had. (Both calls only touch
+    // settings when the earned set genuinely changed.)
+    reconcileOwnBadges(get, set, false);
+    pruneBadgesKnownToEarned(get);
   },
 
   updateHistorySet(sessionId, entryIdx, setIdx, field, value) {

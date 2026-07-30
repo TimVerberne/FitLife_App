@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { newRecordExerciseIdsInWorkout, previousComparableSession, setsCountOf, volumeOf } from '../lib/records';
+import { formatDuration, newRecordExerciseIdsInWorkout, previousComparableSession, setsCountOf, volumeOf } from '../lib/records';
 import { toDisplayWeight } from '../lib/units';
 import { exerciseById } from '../lib/exercises';
+import { DurationStat } from '../components/DurationStat';
 
 export function FinishScreen() {
   const result = useStore((s) => s.finishResult);
@@ -12,6 +13,7 @@ export function FinishScreen() {
   const routineName = useStore((s) => s.routines.find((r) => r.id === result?.routineId)?.name);
   const go = useStore((s) => s.go);
   const units = useStore((s) => s.settings.units);
+  const updateSessionDuration = useStore((s) => s.updateSessionDuration);
   const [routineChoiceMade, setRoutineChoiceMade] = useState(false);
 
   // finishSession() already pushed the finished session into `sessions`
@@ -75,15 +77,20 @@ export function FinishScreen() {
           <div className="n">{sets}</div>
           <div className="l">Sets</div>
         </div>
-        <div className="stat-tile">
-          <div className="n">{result.durationMin}</div>
-          <div className="l">Minutes</div>
-        </div>
+        <DurationStat
+          minutes={result.durationMin}
+          editable
+          onCommit={(n) => updateSessionDuration(result.sessionId, n)}
+        />
         <div className="stat-tile">
           <div className="n">{result.entries.length}</div>
           <div className="l">Exercises</div>
         </div>
       </div>
+      <p className="stat-hint">
+        Forgot to stop the timer? Tap the minutes to correct them
+        {result.durationMin >= 60 ? ` — that's ${formatDuration(result.durationMin)}` : ''}.
+      </p>
       {result.newRoutine && (
         <button className="btn" style={{ marginTop: 16 }} onClick={() => saveRoutineFromFinish(result.name, result.exerciseIds)}>
           Save as routine
