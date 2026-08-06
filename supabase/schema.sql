@@ -406,3 +406,106 @@ create policy "authors update own custom exercises"
 
 -- Deliberately no DELETE policy: archiving is the only removal path, so a row
 -- referenced by someone else's workout history can never disappear.
+
+-- Phase 13: hardening for the shared library. Run after Phase 12.
+
+-- Length caps. Every client downloads this table in full on load, so an
+-- unbounded name or instruction blob is both an abuse vector and a cost
+-- everyone else pays on every launch. array_to_string is immutable, so it's
+-- usable in a CHECK (a subquery over unnest() would not be).
+alter table public.custom_exercises
+  add constraint custom_exercises_name_len check (length(name) between 1 and 80),
+  add constraint custom_exercises_steps_len
+    check (length(array_to_string(instruction_steps, ' ')) <= 2000),
+  add constraint custom_exercises_steps_count
+    check (coalesce(array_length(instruction_steps, 1), 0) <= 20);
+
+-- The UPDATE policy above checks WHO may write the row, but a policy can't
+-- compare old and new values, so nothing stopped an author from rewriting
+-- their own row's `id` — orphaning that exercise in every workout, of every
+-- user, that already referenced it. Same shape as the requester_id hole
+-- fixed by lock_friendship_requester earlier in this file, and the same fix.
+-- created_by is pinned too so authorship can't be handed off or spoofed.
+create or replace function public.lock_custom_exercise_identity()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.id <> old.id then
+    raise exception 'custom exercise id cannot be changed';
+  end if;
+  if new.created_by is distinct from old.created_by then
+    raise exception 'custom exercise created_by cannot be changed';
+  end if;
+  new.updated_at := now();
+  return new;
+end;
+$$;
+
+create trigger custom_exercises_lock_identity
+  before update on public.custom_exercises
+  for each row execute procedure public.lock_custom_exercise_identity();
+
+-- Moderation. The library is global and anyone signed in can add to it, but
+-- until now nothing could be removed by anyone except its author — so a junk
+-- or abusive entry was unremovable from inside the app, leaving the SQL
+-- editor as the only recourse. Membership of this table is granted by hand
+-- (there's no policy that lets a client insert into it), and it buys exactly
+-- one power: archiving somebody else's exercise.
+--
+-- Editing stays author-only on purpose. Renaming another person's exercise
+-- silently rewrites what everyone's logged history says they did; hiding it
+-- doesn't.
+create table public.app_admins (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table public.app_admins enable row level security;
+
+-- Readable so the client can tell whether to offer the moderation action.
+-- No insert/update/delete policy: this table is managed from the SQL editor.
+create policy "app_admins readable by authenticated users" on public.app_admins
+  for select to authenticated using (true);
+
+create policy "admins archive any custom exercise" on public.custom_exercises
+  for update to authenticated
+  using (exists (select 1 from public.app_admins a where a.user_id = auth.uid()))
+  with check (exists (select 1 from public.app_admins a where a.user_id = auth.uid()));
+
+-- Add yourself as the first admin (replace with your own auth.users id):
+-- insert into public.app_admins (user_id) values ('<your-user-uuid>');
+
+-- Phase 14: stop email enumeration on `profiles`.
+--
+-- The "profiles readable by authenticated users" policy above is row-level,
+-- and it was doing double duty: it made exact-email lookup work (which needs
+-- it), but it also let any signed-in client select every row's `email`
+-- column and walk off with every user's address. The in-app "Show all
+-- accounts" browser made that a one-tap operation, but the hole was the
+-- grant, not the screen — anyone could query it directly.
+--
+-- RLS can't hide a single column, so this uses column-level privileges,
+-- which can. Row access is unchanged; `email` simply stops being selectable.
+revoke select on public.profiles from authenticated;
+grant select (id, display_name, showcase_badges) on public.profiles to authenticated;
+
+-- Lookup by an email you already know still has to work — that's how you add
+-- a friend. security definer runs as the owner, so it can read the column
+-- clients no longer can, and it only ever returns the single exact match.
+-- Enumeration isn't possible through it: no wildcards, no listing, and you
+-- have to know the whole address to get anything back.
+create or replace function public.find_profile_by_email(lookup_email text)
+returns table (id uuid, display_name text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select p.id, p.display_name
+  from public.profiles p
+  where lower(p.email) = lower(trim(lookup_email))
+  limit 1;
+$$;
+
+grant execute on function public.find_profile_by_email(text) to authenticated;

@@ -36,3 +36,31 @@ supabase.auth.onAuthStateChange((event, session) => {
 export function getCurrentUserId(): string | null {
   return currentSession?.user.id ?? null;
 }
+
+// PostgREST caps every response at the project's `max-rows` setting (1000 by
+// default). A plain .select() past that limit doesn't error — it silently
+// returns a truncated page, which for an ascending-ordered log means the
+// NEWEST rows are the ones missing. Every full-table read in this app goes
+// through here instead, walking .range() pages until a short page proves
+// the end was reached.
+const PAGE_SIZE = 1000;
+// Purely a runaway guard: if a server ever kept returning full pages (a
+// misconfigured range, an unstable sort) this stops at 200k rows rather than
+// looping forever on a phone.
+const MAX_PAGES = 200;
+
+export async function fetchAllPages<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let i = 0; i < MAX_PAGES; i++) {
+    const from = i * PAGE_SIZE;
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    const batch = data ?? [];
+    rows.push(...batch);
+    if (batch.length < PAGE_SIZE) return rows;
+  }
+  console.error(`fetchAllPages hit the ${MAX_PAGES}-page ceiling — results may be incomplete`);
+  return rows;
+}

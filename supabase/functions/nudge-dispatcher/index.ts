@@ -23,6 +23,28 @@ webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 // (max_nudges, set by the client from the "remind again" setting).
 const RENUDGE_DELAY_MS = 5 * 60 * 1000;
 
+// Supabase's own `verify_jwt` gate only proves the caller holds SOME valid
+// JWT — and every signed-in user of the app holds one. Without the check
+// below, any of them could POST this endpoint on demand: firing everyone's
+// due nudges early, and burning through each user's max_nudges so the real
+// reminder never arrives. The pg_cron job already sends the service-role key
+// as its bearer (see the cron.schedule block in schema.sql), so this asks for
+// exactly that and needs no change to the schedule.
+function isAuthorizedCaller(req: Request): boolean {
+  const header = req.headers.get('Authorization') ?? '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  return timingSafeEqual(token, serviceRoleKey);
+}
+
+// Compares in time independent of where the first difference falls, so the
+// endpoint can't be used to recover the key one character at a time.
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 interface ActiveNudgeRow {
   user_id: string;
   session_name: string;
@@ -39,7 +61,14 @@ interface PushSubscriptionRow {
   auth: string;
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
+  if (!isAuthorizedCaller(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
   // A row only ever exists here while it's still owed at least one more

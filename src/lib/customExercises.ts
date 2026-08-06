@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, fetchAllPages } from './supabase';
 import type { CustomExercise } from './types';
 
 // The shared, global exercise library. Unlike every other synced table in
@@ -65,14 +65,35 @@ export async function fetchCustomExercises(): Promise<CustomExercise[]> {
   // Archived rows are fetched too, not filtered out server-side: they still
   // have to resolve by id so an old workout that used one keeps showing its
   // name. The picker filters them out instead (see setCustomExercises).
-  const { data, error } = await supabase.from('custom_exercises').select('*');
-  if (error) throw error;
-  return (data ?? []).map((row) => fromRow(row as CustomExerciseRow));
+  //
+  // Paged, because this is the one table that grows with every user rather
+  // than just this one — and a truncated read means exercises that silently
+  // stop resolving in other people's feed cards and history.
+  const rows = await fetchAllPages<CustomExerciseRow>((from, to) =>
+    supabase.from('custom_exercises').select('*').order('id').range(from, to),
+  );
+  return rows.map(fromRow);
 }
 
 // Upsert, so this doubles as both "publish a new exercise" and "save an edit
-// / archive". The server's RLS only lets the author update an existing row.
+// / archive". The server's RLS lets the author update their own row, and an
+// app_admins member archive anyone's.
 export async function pushCustomExerciseRemote(ex: CustomExercise): Promise<void> {
   const { error } = await supabase.from('custom_exercises').upsert(toRow(ex));
   if (error) throw error;
+}
+
+// Whether the signed-in user can archive exercises they didn't write. Reads
+// the admin allowlist rather than trusting anything client-side; the server
+// enforces it regardless, so this only decides whether to offer the action.
+// Any failure (table missing because Phase 13 hasn't been run, offline) is
+// treated as "not an admin" — the safe direction.
+export async function fetchIsAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.from('app_admins').select('user_id').eq('user_id', userId).maybeSingle();
+    if (error) throw error;
+    return !!data;
+  } catch {
+    return false;
+  }
 }

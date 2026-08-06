@@ -1,9 +1,13 @@
-import { supabase, getCurrentUserId } from './supabase';
+import { supabase, getCurrentUserId, fetchAllPages } from './supabase';
 import type { WorkoutSession } from './types';
 
+// Deliberately carries no email. `profiles.email` is no longer selectable by
+// clients at all (see the Phase 14 column grants in schema.sql) — it was
+// letting any signed-in user enumerate every account's address. Everything
+// user-facing keys off displayName, which the signup trigger always
+// populates from the email's local part, so nothing lost a label.
 export interface FriendProfile {
   id: string;
-  email: string;
   displayName: string | null;
 }
 
@@ -24,51 +28,49 @@ function requireUserId(): string {
   return userId;
 }
 
-function toProfile(row: { id: string; email: string; display_name: string | null }): FriendProfile {
-  return { id: row.id, email: row.email, displayName: row.display_name };
+function toProfile(row: { id: string; display_name: string | null }): FriendProfile {
+  return { id: row.id, displayName: row.display_name };
 }
 
+// Goes through the find_profile_by_email security-definer function rather
+// than a direct select: clients can't read the email column any more, and
+// the function only ever returns a single exact match, so knowing an address
+// still adds a friend but no query can walk the table.
+//
+// Deliberately doesn't exclude your own row — sendFriendRequest()'s
+// self-check downstream is what turns this into the correct "That's your own
+// email" message; filtering it out here would surface the misleading "No
+// FitFlow account with that email" when you search yourself.
 export async function searchProfileByEmail(email: string): Promise<FriendProfile | null> {
   const trimmed = email.trim();
   if (!trimmed) return null;
-  // Escape LIKE wildcards so an email containing '_' or '%' (both legal in
-  // the local part) is matched literally instead of as a single-char / any
-  // wildcard — otherwise "tim_v@x.com" could match a different account, or
-  // match several and make .maybeSingle() throw.
-  const escaped = trimmed.replace(/[\\%_]/g, (c) => `\\${c}`);
-  const { data, error } = await supabase.from('profiles').select('id, email, display_name').ilike('email', escaped).maybeSingle();
+  const { data, error } = await supabase.rpc('find_profile_by_email', { lookup_email: trimmed });
   if (error) throw error;
-  if (!data) return null;
-  // Deliberately not excluding your own row here (unlike fetchAllProfiles) —
-  // sendFriendRequest()'s self-check downstream is what turns this into the
-  // correct "That's your own email" message; filtering it out here instead
-  // would surface the wrong, misleading "No FitFlow account with that
-  // email" message when you search yourself.
-  return toProfile(data);
+  const row = (data as { id: string; display_name: string | null }[] | null)?.[0];
+  return row ? toProfile(row) : null;
 }
 
-// Every other account on the app — the "profiles readable by authenticated
-// users" policy already permits this, no schema change needed. Used for the
-// "browse all accounts" list so you can send a request with one tap instead
-// of typing an exact email.
+// Every other account on the app, for the "browse all accounts" list — so
+// you can send a request with one tap instead of typing an exact email.
+// Names only: this list used to carry every user's email address, which made
+// enumerating them a single tap.
 export async function fetchAllProfiles(): Promise<FriendProfile[]> {
   const userId = requireUserId();
-  const { data, error } = await supabase.from('profiles').select('id, email, display_name').neq('id', userId).order('email');
+  const { data, error } = await supabase.from('profiles').select('id, display_name').neq('id', userId).order('display_name');
   if (error) throw error;
   return (data ?? []).map(toProfile);
 }
 
 export async function fetchOwnProfile(): Promise<FriendProfile | null> {
   const userId = requireUserId();
-  const { data, error } = await supabase.from('profiles').select('id, email, display_name').eq('id', userId).maybeSingle();
+  const { data, error } = await supabase.from('profiles').select('id, display_name').eq('id', userId).maybeSingle();
   if (error) throw error;
   return data ? toProfile(data) : null;
 }
 
-// Every friend-facing read path (labelFor, FriendsSheet) already handles a
-// display_name and falls back to the email username — this is what lets a
-// user actually set it, instead of every friend seeing that email-username
-// fallback forever.
+// Every friend-facing read path (labelFor, FriendsSheet) shows display_name,
+// which the signup trigger seeds from the email's local part — this is what
+// lets a user replace that default with a real name.
 export async function updateOwnDisplayName(name: string): Promise<void> {
   const userId = requireUserId();
   const trimmed = name.trim();
@@ -109,15 +111,15 @@ interface FriendshipProfileRow {
   created_at: string;
   requester_id?: string;
   addressee_id?: string;
-  requester?: { id: string; email: string; display_name: string | null };
-  addressee?: { id: string; email: string; display_name: string | null };
+  requester?: { id: string; display_name: string | null };
+  addressee?: { id: string; display_name: string | null };
 }
 
 export async function fetchIncomingRequests(): Promise<FriendRequest[]> {
   const userId = requireUserId();
   const { data, error } = await supabase
     .from('friendships')
-    .select('id, created_at, requester:profiles!friendships_requester_id_fkey(id,email,display_name)')
+    .select('id, created_at, requester:profiles!friendships_requester_id_fkey(id,display_name)')
     .eq('addressee_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -130,7 +132,7 @@ export async function fetchOutgoingRequests(): Promise<FriendRequest[]> {
   const userId = requireUserId();
   const { data, error } = await supabase
     .from('friendships')
-    .select('id, created_at, addressee:profiles!friendships_addressee_id_fkey(id,email,display_name)')
+    .select('id, created_at, addressee:profiles!friendships_addressee_id_fkey(id,display_name)')
     .eq('requester_id', userId)
     .eq('status', 'pending');
   if (error) throw error;
@@ -144,7 +146,7 @@ export async function fetchFriends(): Promise<Friend[]> {
   const { data, error } = await supabase
     .from('friendships')
     .select(
-      'id, requester_id, addressee_id, requester:profiles!friendships_requester_id_fkey(id,email,display_name), addressee:profiles!friendships_addressee_id_fkey(id,email,display_name)',
+      'id, requester_id, addressee_id, requester:profiles!friendships_requester_id_fkey(id,display_name), addressee:profiles!friendships_addressee_id_fkey(id,display_name)',
     )
     .eq('status', 'accepted')
     .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
@@ -172,8 +174,11 @@ export async function removeFriend(friendshipId: string): Promise<void> {
   if (error) throw error;
 }
 
+// The signup trigger seeds display_name from the email's local part, and the
+// Phase 5 backfill did the same for older accounts, so this is populated for
+// everyone; the fallback only covers a row that somehow has it cleared.
 function labelFor(profile: FriendProfile): string {
-  return profile.displayName?.trim() || profile.email.split('@')[0];
+  return profile.displayName?.trim() || 'FitFlow user';
 }
 
 // Disambiguated display labels for every accepted friend, independent of
@@ -234,10 +239,36 @@ export async function pushOwnShowcase(badgeIds: string[]): Promise<void> {
   }
 }
 
+interface FriendSessionRow {
+  id: string;
+  name: string;
+  routine_id: string | null;
+  started_at: number;
+  duration_min: number;
+  entries: WorkoutSession['entries'];
+}
+
+// How far back a friend's visible history reaches. This used to be
+// unbounded, which meant re-downloading every friend's entire training
+// history on every 45-second poll — megabytes a minute on cellular for a
+// handful of friends. Nothing in the crew feed or the Stats head-to-head
+// looks further back than "all time" over a rolling window this comfortably
+// covers, and their own full history is still their own to see.
+const FRIEND_HISTORY_DAYS = 365;
+
 async function fetchFriendSessions(friend: Friend, label: string): Promise<WorkoutSession[]> {
-  const { data, error } = await supabase.from('sessions').select('*').eq('user_id', friend.profile.id);
-  if (error) throw error;
-  return (data ?? []).map((s) => ({
+  const since = Date.now() - FRIEND_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+  const data = await fetchAllPages<FriendSessionRow>((from, to) =>
+    supabase
+      .from('sessions')
+      .select('*')
+      .eq('user_id', friend.profile.id)
+      .gte('started_at', since)
+      .order('started_at', { ascending: false })
+      .order('id')
+      .range(from, to),
+  );
+  return data.map((s) => ({
     id: s.id,
     person: label,
     name: s.name,

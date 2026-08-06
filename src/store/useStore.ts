@@ -270,6 +270,10 @@ export interface StoreState {
 
   // Shared global exercise library (see lib/customExercises.ts).
   customExercises: CustomExercise[];
+  // True when the signed-in user is in the app_admins allowlist, which lets
+  // them archive exercises they didn't author. Server-enforced regardless;
+  // this only drives whether the UI offers the action.
+  isLibraryAdmin: boolean;
   refreshCustomExercises(): Promise<void>;
   openCustomExerciseForm(editId?: string, prefillName?: string): void;
   saveCustomExercise(draft: CustomExerciseDraft): Promise<void>;
@@ -320,7 +324,9 @@ export interface StoreState {
   setShowcaseBadges(ids: string[]): void;
   toggleShowcaseBadge(id: string): 'added' | 'removed' | 'full';
   markFirstComparison(): void;
-  sendFriendRequest(email: string): Promise<friendsApi.SendFriendRequestResult | { ok: false; reason: 'not-found' }>;
+  sendFriendRequest(
+    email: string,
+  ): Promise<(friendsApi.SendFriendRequestResult & { profileId?: string }) | { ok: false; reason: 'not-found'; profileId?: undefined }>;
   sendFriendRequestToProfile(profileId: string): Promise<friendsApi.SendFriendRequestResult>;
   acceptFriendRequest(friendshipId: string): Promise<void>;
   declineFriendRequest(friendshipId: string): Promise<void>;
@@ -654,6 +660,7 @@ export const useStore = create<StoreState>((set, get) => ({
   importPreview: null,
   importing: false,
   customExercises: [],
+  isLibraryAdmin: false,
 
   dialog: null,
   toastMsg: '',
@@ -1259,7 +1266,13 @@ export const useStore = create<StoreState>((set, get) => ({
   // --- Shared custom exercise library ---------------------------------
 
   async refreshCustomExercises() {
-    if (!getCurrentUserId()) return;
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    // Fetched alongside the library rather than on its own schedule — it's a
+    // single indexed row and it's only ever needed together with the list.
+    void customExercisesApi.fetchIsAdmin(userId).then((isLibraryAdmin) => {
+      if (getCurrentUserId() === userId) set({ isLibraryAdmin });
+    });
     try {
       const remote = await customExercisesApi.fetchCustomExercises();
       // Anything created on this device that hasn't reached the server yet
@@ -1762,22 +1775,68 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ importPreview: null, sheet: 'settings' });
   },
 
+  // "Clear all data" means all of it. This used to wipe only routines and
+  // sessions, silently leaving every Life-tab record — weight, body fat,
+  // measurements, sleep, resting HR, nutrition, hydration, the body profile
+  // — plus any workout still in progress. That's the most sensitive data in
+  // the app, and someone clearing a phone before handing it on would
+  // reasonably have believed it was gone.
+  //
+  // The shared custom-exercise library is deliberately NOT touched: those
+  // rows aren't this account's data, they belong to everyone, and other
+  // people's history points at them.
   clearAllData() {
-    get().confirm('Delete all routines and workout history? This can\'t be undone.', 'Yes, delete everything', () => {
-      const prevRoutines = get().routines;
-      const prevSessions = get().sessions;
-      void db.routines.clear();
-      void db.sessions.clear();
-      // Per-row deletes so a failed one gets queued in pendingSync and
-      // retried, instead of silently leaving that row on the server to be
-      // resurrected by the next sync (see confirmImport for the same fix).
-      void Promise.all([
-        ...prevRoutines.map((r) => cloudSync.deleteRoutineRemote(r.id)),
-        ...prevSessions.filter((s) => s.person === 'You').map((s) => cloudSync.deleteSessionRemote(s.id)),
-      ]);
-      set({ routines: [], sessions: [], sheet: null });
-      get().showToast('All data cleared');
-    }, true);
+    get().confirm(
+      'Delete everything on this account — routines, workout history, weight and measurements, nutrition and hydration, and any workout in progress? This can\'t be undone.',
+      'Yes, delete everything',
+      () => {
+        const prevRoutines = get().routines;
+        const prevSessions = get().sessions;
+        void db.routines.clear();
+        void db.sessions.clear();
+        void db.activeSession.clear();
+        void db.bodyProfile.clear();
+        void db.bodyLog.clear();
+        void db.waterLog.clear();
+        void db.calorieLog.clear();
+        // Per-row deletes for routines/sessions so a failed one gets queued in
+        // pendingSync and retried, instead of silently leaving that row on the
+        // server to be resurrected by the next sync (see confirmImport for the
+        // same fix). The body tables go in one bulk delete per table instead —
+        // there's no per-row id to queue for bodyProfile, and a queued mass
+        // delete that fires later could destroy data logged in the meantime.
+        void Promise.all([
+          ...prevRoutines.map((r) => cloudSync.deleteRoutineRemote(r.id)),
+          ...prevSessions.filter((s) => s.person === 'You').map((s) => cloudSync.deleteSessionRemote(s.id)),
+        ]);
+        void bodySync.deleteAllBodyDataRemote().catch((err) => {
+          console.error('Failed to clear body data from the cloud', err);
+          get().showToast('Body data cleared here, but not in the cloud — try again when online');
+        });
+        // Any in-progress workout is part of "everything" too; leaving it
+        // would also let finishSession() write a new session moments later.
+        set({
+          routines: [],
+          sessions: [],
+          active: null,
+          mode: 'tabs',
+          restTimer: null,
+          finishResult: null,
+          bodyProfile: DEFAULT_BODY_PROFILE,
+          bodyLog: [],
+          waterLog: [],
+          calorieLog: [],
+          sheet: null,
+        });
+        void disarmNudge();
+        // Badges were credited against history that no longer exists — drop
+        // the ones that are no longer actually earned so they can celebrate
+        // again for real rather than staying silently "known".
+        pruneBadgesKnownToEarned(get);
+        get().showToast('All data cleared');
+      },
+      true,
+    );
   },
 
   deleteAccount() {
@@ -1995,10 +2054,15 @@ export const useStore = create<StoreState>((set, get) => ({
     reconcileOwnBadges(get, set, true);
   },
 
+  // Returns the resolved profileId alongside the result. FriendsSheet needs
+  // it to tell "a request is pending" apart from "they already sent you one"
+  // — it used to compare the typed email against the pending requests', but
+  // clients can't read anyone's email any more (see the Phase 14 grants).
   async sendFriendRequest(email) {
     const profile = await friendsApi.searchProfileByEmail(email);
     if (!profile) return { ok: false, reason: 'not-found' };
-    return get().sendFriendRequestToProfile(profile.id);
+    const result = await get().sendFriendRequestToProfile(profile.id);
+    return { ...result, profileId: profile.id };
   },
 
   async sendFriendRequestToProfile(profileId) {

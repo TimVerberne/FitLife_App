@@ -1,6 +1,6 @@
-import { supabase, getCurrentUserId, onSignedOut } from './supabase';
+import { supabase, getCurrentUserId, onSignedOut, fetchAllPages } from './supabase';
 import { db, wipeLocalData, type PendingSyncEntry } from './db';
-import type { CustomExercise, Routine, WorkoutSession } from './types';
+import type { CustomExercise, Routine, SessionEntry, WorkoutSession } from './types';
 import { loadSettings, type Settings } from './settings';
 import { flushBodyPendingSync } from './bodySync';
 import { pushCustomExerciseRemote } from './customExercises';
@@ -9,6 +9,23 @@ function requireUserId(): string {
   const userId = getCurrentUserId();
   if (!userId) throw new Error('Not signed in');
   return userId;
+}
+
+interface RoutineRow {
+  id: string;
+  name: string;
+  exercise_ids: string[];
+  created_at: number;
+  sort_order: number | null;
+}
+
+interface SessionRow {
+  id: string;
+  name: string;
+  routine_id: string | null;
+  started_at: number;
+  duration_min: number;
+  entries: SessionEntry[];
 }
 
 function routineRow(routine: Routine, userId: string) {
@@ -162,20 +179,25 @@ export async function fetchSettings(): Promise<Settings | null> {
 
 export async function fetchAllRemote(): Promise<{ routines: Routine[]; sessions: WorkoutSession[] }> {
   const userId = requireUserId();
-  const [routinesRes, sessionsRes] = await Promise.all([
-    supabase.from('routines').select('*').eq('user_id', userId),
-    supabase.from('sessions').select('*').eq('user_id', userId),
+  // Paged: a truncated read here is worse than a truncated display, because
+  // reconcileNewFromCloud treats "not present remotely" as "deleted on
+  // another device" and would delete the missing rows locally.
+  const [routineRows, sessionRows] = await Promise.all([
+    fetchAllPages<RoutineRow>((from, to) =>
+      supabase.from('routines').select('*').eq('user_id', userId).order('id').range(from, to),
+    ),
+    fetchAllPages<SessionRow>((from, to) =>
+      supabase.from('sessions').select('*').eq('user_id', userId).order('id').range(from, to),
+    ),
   ]);
-  if (routinesRes.error) throw routinesRes.error;
-  if (sessionsRes.error) throw sessionsRes.error;
-  const routines: Routine[] = (routinesRes.data ?? []).map((r) => ({
+  const routines: Routine[] = routineRows.map((r) => ({
     id: r.id,
     name: r.name,
     exerciseIds: r.exercise_ids,
     createdAt: r.created_at,
     sortOrder: r.sort_order ?? undefined,
   }));
-  const sessions: WorkoutSession[] = (sessionsRes.data ?? []).map((s) => ({
+  const sessions: WorkoutSession[] = sessionRows.map((s) => ({
     id: s.id,
     person: 'You',
     name: s.name,

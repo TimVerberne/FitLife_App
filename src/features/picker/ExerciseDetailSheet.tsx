@@ -29,6 +29,8 @@ export function ExerciseDetailSheet() {
   // Subscribed to (rather than read once) so an edit made in the form is
   // reflected here the moment the form closes back onto this sheet.
   const customExercises = useStore((s) => s.customExercises);
+  const isLibraryAdmin = useStore((s) => s.isLibraryAdmin);
+  const archiveCustomExercise = useStore((s) => s.archiveCustomExercise);
 
   const [metric, setMetric] = useState<Metric>('weight');
   const [period, setPeriod] = useState<StatPeriod>('3months');
@@ -43,6 +45,10 @@ export function ExerciseDetailSheet() {
   // (see the RLS update policy), so hiding the button just avoids offering
   // an action that would fail.
   const canEdit = !!custom && custom.createdBy !== null && custom.createdBy === getCurrentUserId();
+  // Archiving is wider than editing: an admin can hide anyone's exercise
+  // (that's the moderation path for a global library), but still can't
+  // rename one, since that would rewrite what everyone's history says.
+  const canArchive = !!custom && (canEdit || isLibraryAdmin);
 
   const pr = exercisePR(history);
   const cutoff = periodCutoff(period);
@@ -166,6 +172,13 @@ export function ExerciseDetailSheet() {
       {canEdit && custom && (
         <button className="btn sec" style={{ marginTop: 8 }} onClick={() => openCustomExerciseForm(custom.id)}>
           Edit exercise
+        </button>
+      )}
+      {/* Author removal already lives inside the edit form; this is the
+          moderation route for an exercise somebody else wrote. */}
+      {canArchive && !canEdit && custom && (
+        <button className="btn danger" style={{ marginTop: 8 }} onClick={() => archiveCustomExercise(custom.id)}>
+          Remove from library
         </button>
       )}
     </div>

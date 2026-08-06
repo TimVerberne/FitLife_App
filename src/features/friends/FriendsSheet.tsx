@@ -15,6 +15,13 @@ const STATUS_MESSAGE: Record<Exclude<SendStatus, 'idle' | 'sending'>, string> = 
   error: 'Something went wrong — try again.',
 };
 
+// display_name is seeded from the email local part at signup, so this is
+// populated for every real account; the fallback only covers a row that
+// somehow has it cleared. Emails aren't readable by clients any more.
+function nameOf(profile: { displayName: string | null }): string {
+  return profile.displayName?.trim() || 'FitFlow user';
+}
+
 export function FriendsSheet() {
   const friends = useStore((s) => s.friends);
   const incomingRequests = useStore((s) => s.incomingRequests);
@@ -47,7 +54,7 @@ export function FriendsSheet() {
       } else if (result.reason === 'already-pending') {
         // "Pending" is misleading when the pending request is theirs to you —
         // point them at the incoming request they can actually act on.
-        const incoming = incomingRequests.some((r) => r.profile.email.toLowerCase() === email.trim().toLowerCase());
+        const incoming = !!result.profileId && incomingRequests.some((r) => r.profile.id === result.profileId);
         setStatus(incoming ? 'incoming-pending' : 'already-pending');
       } else {
         setStatus(result.reason === 'unknown' ? 'error' : result.reason);
@@ -105,7 +112,7 @@ export function FriendsSheet() {
   const filteredProfiles = useMemo(() => {
     const q = browseFilter.trim().toLowerCase();
     if (!q) return allProfiles;
-    return allProfiles.filter((p) => (p.displayName ?? '').toLowerCase().includes(q) || p.email.toLowerCase().includes(q));
+    return allProfiles.filter((p) => nameOf(p).toLowerCase().includes(q));
   }, [allProfiles, browseFilter]);
 
   return (
@@ -147,7 +154,7 @@ export function FriendsSheet() {
               <input
                 value={browseFilter}
                 onChange={(e) => setBrowseFilter(e.target.value)}
-                placeholder="Filter by name or email"
+                placeholder="Filter by name"
               />
             </div>
           )}
@@ -167,13 +174,13 @@ export function FriendsSheet() {
                   : 'Pending';
               return (
                 <div className="settings-row" key={p.id}>
-                  <FriendRow name={p.displayName ?? p.email} />
+                  <FriendRow name={nameOf(p)} />
                   {already ? (
                     <span style={{ fontSize: 12, color: 'var(--faint)' }}>{label}</span>
                   ) : (
                     <button
                       className="btn sec"
-                      aria-label={`Add ${p.displayName ?? p.email}`}
+                      aria-label={`Add ${nameOf(p)}`}
                       style={{ width: 34, height: 34, padding: 0, fontSize: 18, fontWeight: 900 }}
                       onClick={() => void sendTo(p)}
                     >
@@ -192,7 +199,7 @@ export function FriendsSheet() {
           <div className="section-h">Requests</div>
           {incomingRequests.map((req) => (
             <div className="settings-row" key={req.friendshipId}>
-              <FriendRow name={req.profile.displayName ?? req.profile.email} />
+              <FriendRow name={nameOf(req.profile)} />
               <div style={{ display: 'flex', gap: 6 }}>
                 <button className="btn sec" style={{ width: 'auto', padding: '8px 12px' }} onClick={() => void acceptFriendRequest(req.friendshipId)}>
                   Accept
@@ -206,7 +213,7 @@ export function FriendsSheet() {
           {outgoingRequests.map((req) => (
             <div className="settings-row" key={req.friendshipId}>
               <div>
-                <div className="settings-row-label">{req.profile.displayName ?? req.profile.email}</div>
+                <div className="settings-row-label">{nameOf(req.profile)}</div>
                 <div className="settings-row-desc">Request sent — waiting for them</div>
               </div>
               <button className="btn sec" style={{ width: 'auto', padding: '8px 12px' }} onClick={() => removeFriend(req.friendshipId, true)}>
@@ -223,7 +230,7 @@ export function FriendsSheet() {
       ) : (
         friends.map((f) => (
           <div className="settings-row" key={f.friendshipId}>
-            <FriendRow name={f.profile.displayName ?? f.profile.email} />
+            <FriendRow name={nameOf(f.profile)} />
             <button className="btn danger" style={{ width: 'auto', padding: '8px 12px' }} onClick={() => removeFriend(f.friendshipId)}>
               Remove
             </button>

@@ -92,10 +92,26 @@ browser at mobile width. `npm run build` produces a production build;
 ### Shared custom exercises (one-time backend setup)
 
 Custom exercises live in a `custom_exercises` table that has to be created
-before the feature works — run the **Phase 12** section of
+before the feature works — run the **Phase 12** and **Phase 13** sections of
 `supabase/schema.sql` in the Supabase SQL editor. Until then the picker's
 "+ New" flow still saves locally, but nothing publishes (the queued upload
 just keeps failing), so nobody else sees what you add.
+
+Phase 13 also creates the `app_admins` allowlist, which is what lets someone
+archive an exercise they didn't write — the moderation path for a library
+anyone can add to. It's deliberately empty and has no insert policy, so add
+yourself from the SQL editor:
+
+```sql
+insert into public.app_admins (user_id) values ('<your-auth-users-uuid>');
+```
+
+### Locking down profile emails (one-time backend setup)
+
+Run the **Phase 14** section of `supabase/schema.sql`. It revokes client
+access to `profiles.email` and adds the `find_profile_by_email` function that
+add-a-friend now uses. The app expects both: without it, adding a friend by
+email stops working.
 
 ### Workout-nudge push notifications (one-time backend setup)
 
@@ -109,6 +125,65 @@ schedule the dispatcher via `pg_cron`). The setting stays hidden/inert until
 this is done.
 
 ## Update notes
+
+**Version 1.26.0** — findings from a full-codebase review, not just the
+feature built in 1.25.0. Needs the **Phase 13 and Phase 14** sections of
+`supabase/schema.sql` run, and the nudge dispatcher redeployed.
+- **Fixed: the newest weight, hydration and calorie entries could silently
+  vanish.** Every remote read was unbounded, and PostgREST caps responses at
+  the project's `max-rows` (1000 by default) *without erroring* — it just
+  returns a short page. Because those logs were ordered oldest-first, the
+  rows dropped were the most recent ones, so today's entries would quietly
+  stop appearing after roughly eight months of use. All full-table reads now
+  page through `.range()` until a short page proves the end (`fetchAllPages`
+  in `supabase.ts`), with a stable sort so nothing is skipped or repeated
+  across a page boundary. This mattered most for `fetchAllRemote`, where a
+  truncated read doesn't just mis-display: `reconcileNewFromCloud` reads
+  "absent remotely" as "deleted on another device" and would have deleted the
+  missing rows locally.
+- **Fixed: a failed water/calorie write could jam the sync queue forever.**
+  Both used `insert` but queued their retry as an upsert, so a write that
+  committed server-side but lost its response — an ordinary flaky connection
+  — retried into a primary-key conflict on the id it had already written.
+  That failure is permanent, so it re-queued on every subsequent flush and
+  the pending queue could never drain again. Both now upsert, making the
+  retry idempotent.
+- **Fixed: "Clear all data" didn't clear all data.** It wiped routines and
+  workout history, silently leaving every Life-tab record — weight, body fat,
+  measurements, sleep, resting HR, nutrition, hydration, the body profile —
+  plus any workout still in progress. That's the most sensitive data in the
+  app, and someone clearing a phone before passing it on would reasonably
+  have believed it was gone. It now clears all of it, locally and in the
+  cloud, and says so plainly before you confirm. The shared exercise library
+  is deliberately left alone — those rows aren't yours to delete.
+- **Fixed: any signed-in user could enumerate every account's email address.**
+  The `profiles` read policy is row-level and was doing double duty: it made
+  add-a-friend-by-email work, but it also let any client select every row's
+  `email`. The in-app "Show all accounts" list made that a single tap, but the
+  hole was the grant, not the screen. Email is now removed from client
+  privileges entirely via column-level grants, and exact-address lookup goes
+  through a `security definer` function that returns one match and can't be
+  used to walk the table.
+- **Fixed: the push-nudge dispatcher accepted any caller.** Supabase's
+  `verify_jwt` gate only proves the caller holds *some* valid JWT — and every
+  signed-in user holds one — so anyone could invoke it to fire everyone's
+  nudges early, or burn through their `max_nudges` so the real reminder never
+  arrived. It now requires the service-role key specifically, compared in
+  constant time.
+- **Custom exercise library hardening.** Length caps on names and
+  instructions (every client downloads this table in full, so an unbounded
+  blob is a cost everyone pays on launch); a trigger pinning `id` and
+  `created_by` on update, since a policy can't compare old and new values and
+  an author could otherwise rewrite their row's id and orphan it in
+  everyone's logged history; and a real **moderation path** — an `app_admins`
+  allowlist whose members can archive anyone's exercise. Previously nothing
+  could be removed by anyone but its author, so a junk entry was unremovable
+  from inside the app. Editing stays author-only: hiding an exercise is not
+  the same as renaming what everyone's history says they did.
+- **Friends' workouts no longer re-download in full every 45 seconds.** The
+  poll fetched each friend's entire training history every time, unbounded —
+  megabytes a minute on cellular for a handful of friends. Now windowed to
+  the last year and paged.
 
 **Version 1.25.0**
 - **Custom exercises, as one shared library.** Anything the built-in dataset

@@ -1,4 +1,4 @@
-import { supabase, getCurrentUserId } from './supabase';
+import { supabase, getCurrentUserId, fetchAllPages } from './supabase';
 import { db, DEFAULT_BODY_PROFILE, type BodyProfileRecord } from './db';
 import type { BodyProfile, BodyLogEntry, CalorieLogEntry, WaterLogEntry } from './types';
 
@@ -117,11 +117,16 @@ export async function pushBodyLogEntry(entry: BodyLogEntry): Promise<void> {
   }
 }
 
+// Paged, because a plain select silently truncates at the server's max-rows
+// and — ordered ascending — would drop the most recent entries first, i.e.
+// exactly the ones the Life tab shows. `logged_on` is unique per user
+// (see the table's unique constraint), so it's a stable sort for paging.
 export async function fetchBodyLog(): Promise<BodyLogEntry[]> {
   const userId = requireUserId();
-  const { data, error } = await supabase.from('body_log').select('*').eq('user_id', userId).order('logged_on');
-  if (error) throw error;
-  return (data ?? []).map(rowToBodyLogEntry);
+  const rows = await fetchAllPages<Record<string, unknown>>((from, to) =>
+    supabase.from('body_log').select('*').eq('user_id', userId).order('logged_on').range(from, to),
+  );
+  return rows.map(rowToBodyLogEntry);
 }
 
 function waterLogRow(entry: WaterLogEntry, userId: string) {
@@ -134,12 +139,20 @@ function waterLogRow(entry: WaterLogEntry, userId: string) {
   };
 }
 
-// Append-only (multiple entries/day) — insert, not upsert, same id strategy
-// as routines/sessions (client-generated uuid before the row ever leaves the device).
+// Append-only (multiple entries/day), with a client-generated uuid assigned
+// before the row ever leaves the device — same id strategy as
+// routines/sessions.
+//
+// Upsert, not insert, and that distinction matters: a write that commits
+// server-side but loses its response on the way back (an ordinary flaky
+// connection) gets queued for retry, and an insert retry would hit a primary
+// key conflict on the id it already wrote. That failure is permanent, so it
+// re-queued on every subsequent flush — the pending queue could never drain
+// again. Upserting makes the retry idempotent instead.
 export async function pushWaterLogEntry(entry: WaterLogEntry): Promise<void> {
   try {
     const userId = requireUserId();
-    const { error } = await supabase.from('water_log').insert(waterLogRow(entry, userId));
+    const { error } = await supabase.from('water_log').upsert(waterLogRow(entry, userId));
     if (error) throw error;
   } catch {
     await enqueuePendingSync('waterLog', entry.id, 'upsert');
@@ -156,11 +169,16 @@ export async function deleteWaterLogEntryRemote(id: string): Promise<void> {
   }
 }
 
+// Paged for the same reason as fetchBodyLog. `logged_at` alone isn't a
+// unique sort — two quick taps can share a millisecond — so `id` breaks the
+// tie and keeps row order stable across page boundaries; without that, a
+// row can be skipped or repeated between pages.
 export async function fetchWaterLog(): Promise<WaterLogEntry[]> {
   const userId = requireUserId();
-  const { data, error } = await supabase.from('water_log').select('*').eq('user_id', userId).order('logged_at');
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
+  const data = await fetchAllPages<Record<string, unknown>>((from, to) =>
+    supabase.from('water_log').select('*').eq('user_id', userId).order('logged_at').order('id').range(from, to),
+  );
+  return data.map((r) => ({
     id: r.id as string,
     loggedOn: r.logged_on as string,
     amountMl: r.amount_ml as number,
@@ -178,22 +196,25 @@ function calorieLogRow(entry: CalorieLogEntry, userId: string) {
   };
 }
 
-// Append-only, same shape/strategy as pushWaterLogEntry above.
+// Append-only, same shape/strategy as pushWaterLogEntry above — including
+// the upsert, for the same retry-idempotency reason.
 export async function pushCalorieLogEntry(entry: CalorieLogEntry): Promise<void> {
   try {
     const userId = requireUserId();
-    const { error } = await supabase.from('calorie_log').insert(calorieLogRow(entry, userId));
+    const { error } = await supabase.from('calorie_log').upsert(calorieLogRow(entry, userId));
     if (error) throw error;
   } catch {
     await enqueuePendingSync('calorieLog', entry.id, 'upsert');
   }
 }
 
+// Paged, with the same `logged_at, id` stable sort as fetchWaterLog.
 export async function fetchCalorieLog(): Promise<CalorieLogEntry[]> {
   const userId = requireUserId();
-  const { data, error } = await supabase.from('calorie_log').select('*').eq('user_id', userId).order('logged_at');
-  if (error) throw error;
-  return (data ?? []).map((r) => ({
+  const data = await fetchAllPages<Record<string, unknown>>((from, to) =>
+    supabase.from('calorie_log').select('*').eq('user_id', userId).order('logged_at').order('id').range(from, to),
+  );
+  return data.map((r) => ({
     id: r.id as string,
     loggedOn: r.logged_on as string,
     amountKcal: r.amount_kcal as number,
@@ -209,6 +230,24 @@ export async function deleteCalorieLogEntryRemote(id: string): Promise<void> {
   } catch {
     await enqueuePendingSync('calorieLog', id, 'delete');
   }
+}
+
+// Wipes every Life-tab row this account owns, server side. Used by
+// clearAllData() — which, despite its name, used to leave all of this
+// behind. Deliberately NOT queued through pendingSync on failure: a queued
+// "delete everything" that fires later, after the user has started logging
+// again, would destroy data they added in the meantime. Throwing lets the
+// caller tell the user it didn't work so they can retry deliberately.
+export async function deleteAllBodyDataRemote(): Promise<void> {
+  const userId = requireUserId();
+  const results = await Promise.all([
+    supabase.from('body_log').delete().eq('user_id', userId),
+    supabase.from('water_log').delete().eq('user_id', userId),
+    supabase.from('calorie_log').delete().eq('user_id', userId),
+    supabase.from('body_profile').delete().eq('user_id', userId),
+  ]);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) throw failed.error;
 }
 
 export async function flushBodyPendingSync(entry: { table: string; rowId: string; op: 'upsert' | 'delete'; id?: number }): Promise<void> {

@@ -65,7 +65,12 @@ curl -X POST 'https://<project-ref>.supabase.co/functions/v1/nudge-dispatcher' \
 ```
 
 A healthy response looks like `{"processed":0,"sent":0}` when nothing's due
-yet. Check `supabase functions logs nudge-dispatcher` if something looks
+yet. The bearer token must be the **service role key** specifically — the
+function rejects anything else with a 401. Supabase's own `verify_jwt` gate
+only proves the caller holds *some* valid JWT, and every signed-in user of
+the app holds one, so without that check any of them could invoke this and
+fire (or exhaust) everyone's nudges. The `cron.schedule(...)` statement
+already sends the service role key, so no change is needed there. Check `supabase functions logs nudge-dispatcher` if something looks
 wrong — a wrong VAPID key pair (public one saved in the client build not
 matching the private one set as a function secret) is the most common
 failure, and shows up there as a 401/403 from the push service on send.
