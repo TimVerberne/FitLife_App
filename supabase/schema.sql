@@ -490,6 +490,15 @@ create policy "admins archive any custom exercise" on public.custom_exercises
 revoke select on public.profiles from authenticated;
 grant select (id, display_name, showcase_badges) on public.profiles to authenticated;
 
+-- `anon` gets the same treatment. Supabase grants both roles full access to
+-- public tables by default, and while the row policy above is `to
+-- authenticated` — so a signed-out client reads nothing today regardless —
+-- leaving the column privilege in place means the day anyone adds a
+-- permissive anon policy for any reason, email quietly becomes world
+-- readable again. Revoking here makes that impossible rather than unlikely.
+revoke select on public.profiles from anon;
+grant select (id, display_name, showcase_badges) on public.profiles to anon;
+
 -- Lookup by an email you already know still has to work — that's how you add
 -- a friend. security definer runs as the owner, so it can read the column
 -- clients no longer can, and it only ever returns the single exact match.
