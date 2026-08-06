@@ -1,12 +1,94 @@
 import raw from '../data/exercises.json';
-import type { Exercise } from './types';
+import type { CustomExercise, Exercise } from './types';
 
 export const EXERCISES = raw as Exercise[];
 
 const byIdMap = new Map(EXERCISES.map((e) => [e.id, e]));
 
+// --- Custom exercises -------------------------------------------------
+// User-authored exercises live in one shared global table (see
+// customExercises.ts) and arrive from Supabase asynchronously, long after
+// this module is first imported. `exerciseById` is called from ~17 render
+// paths that all expect a synchronous answer, so rather than make every one
+// of them async, the store hands the fetched list to `setCustomExercises`
+// whenever it changes and the lookups below read from it.
+
+export const CUSTOM_ID_PREFIX = 'custom-';
+
+let customList: CustomExercise[] = [];
+let customByIdMap = new Map<string, CustomExercise>();
+// Only the non-archived ones, precomputed — searchExercises runs this on
+// every keystroke and would otherwise re-filter the whole list each time.
+let customSearchable: CustomExercise[] = [];
+
+export function setCustomExercises(list: CustomExercise[]): void {
+  customList = list;
+  customByIdMap = new Map(list.map((e) => [e.id, e]));
+  customSearchable = list.filter((e) => !e.archived);
+}
+
+export function getCustomExercises(): CustomExercise[] {
+  return customList;
+}
+
+export function newCustomExerciseId(): string {
+  return `${CUSTOM_ID_PREFIX}${crypto.randomUUID()}`;
+}
+
+export function isCustomExercise(ex: Exercise): ex is CustomExercise {
+  return ex.id.startsWith(CUSTOM_ID_PREFIX);
+}
+
+// Bundled ids are resolved first. The server enforces the `custom-` prefix
+// on every shared row, so the two id spaces can't actually collide — but
+// checking in this order means even a malformed row can never shadow a real
+// exercise for everyone who syncs it.
 export function exerciseById(id: string): Exercise | undefined {
-  return byIdMap.get(id);
+  return byIdMap.get(id) ?? customByIdMap.get(id);
+}
+
+// Archived customs are deliberately absent: they stay resolvable by id (so
+// history keeps rendering) but must not come back in the picker.
+function searchablePool(): Exercise[] {
+  return customSearchable.length > 0 ? [...EXERCISES, ...customSearchable] : EXERCISES;
+}
+
+export function exerciseCount(): number {
+  return EXERCISES.length + customSearchable.length;
+}
+
+// Case-insensitive, whitespace-collapsed name match across the whole
+// library. Used by the create form to stop the shared library filling up
+// with near-identical entries; the server has a matching unique index as
+// the real guard, since two people can submit at once.
+export function findExerciseByName(name: string): Exercise | undefined {
+  const key = name.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!key) return undefined;
+  const norm = (n: string) => n.trim().toLowerCase().replace(/\s+/g, ' ');
+  return searchablePool().find((e) => norm(e.name) === key);
+}
+
+// --- Form option lists ------------------------------------------------
+// Derived from the bundled dataset only. Constraining new exercises to the
+// vocabulary that already exists is what keeps the body-part filter chips
+// and the target/equipment labels coherent — a free-text body part would
+// create a chip nobody else's exercises can ever match.
+
+export function equipmentOptions(): string[] {
+  return Array.from(new Set(EXERCISES.map((e) => e.equipment))).sort();
+}
+
+// Targets that actually occur for this body part, so the two selects can't
+// be combined into something the dataset never pairs (e.g. chest + calves).
+// Falls back to every known target if the body part is unrecognised.
+export function targetOptions(bodyPart: string): string[] {
+  const matching = EXERCISES.filter((e) =>
+    bodyPart === 'biceps' || bodyPart === 'triceps'
+      ? e.body_part === 'upper arms' && e.target === bodyPart
+      : e.body_part === bodyPart,
+  );
+  const pool = matching.length > 0 ? matching : EXERCISES;
+  return Array.from(new Set(pool.map((e) => e.target))).sort();
 }
 
 export function isCardioExercise(ex: Exercise): boolean {
@@ -16,6 +98,9 @@ export function isCardioExercise(ex: Exercise): boolean {
 // "upper arms" lumps biceps and triceps into one filter chip, which makes
 // them hard to find — split it into its two `target` values instead. Every
 // other body_part stays a single chip.
+// Derived from the bundled dataset alone, deliberately: the create form only
+// offers these same body parts (see targetOptions), so a custom exercise can
+// never need a chip that isn't already here.
 export function bodyParts(): string[] {
   const parts = new Set(EXERCISES.map((e) => e.body_part));
   parts.delete('upper arms');
@@ -190,7 +275,7 @@ export function searchExercises(query: string, bodyPart: string): ExerciseSearch
   const q = query.trim().toLowerCase();
   const tokens = q.split(/\s+/).filter(Boolean);
 
-  const pool = EXERCISES.filter((e) =>
+  const pool = searchablePool().filter((e) =>
     bodyPart === 'all'
       ? true
       : bodyPart === 'biceps' || bodyPart === 'triceps'

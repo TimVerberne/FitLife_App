@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { exerciseById } from '../../lib/exercises';
+import { exerciseById, isCustomExercise } from '../../lib/exercises';
+import { getCurrentUserId } from '../../lib/supabase';
 import { Thumb } from '../../components/Thumb';
 import { ProgressChart } from '../../components/ProgressChart';
 import { exerciseHistory, exercisePR, periodCutoff, STAT_PERIOD_LABEL, type StatPeriod } from '../../lib/records';
@@ -24,6 +25,10 @@ export function ExerciseDetailSheet() {
   const units = useStore((s) => s.settings.units);
   const closeSheet = useStore((s) => s.closeSheet);
   const addExerciseToSession = useStore((s) => s.addExerciseToSession);
+  const openCustomExerciseForm = useStore((s) => s.openCustomExerciseForm);
+  // Subscribed to (rather than read once) so an edit made in the form is
+  // reflected here the moment the form closes back onto this sheet.
+  const customExercises = useStore((s) => s.customExercises);
 
   const [metric, setMetric] = useState<Metric>('weight');
   const [period, setPeriod] = useState<StatPeriod>('3months');
@@ -32,6 +37,12 @@ export function ExerciseDetailSheet() {
   const history = useMemo(() => (ex ? exerciseHistory(sessions, ex.id) : []), [sessions, ex]);
 
   if (!ex) return null;
+
+  const custom = isCustomExercise(ex) ? customExercises.find((c) => c.id === ex.id) : undefined;
+  // Only the author may edit a shared entry — the server enforces this too
+  // (see the RLS update policy), so hiding the button just avoids offering
+  // an action that would fail.
+  const canEdit = !!custom && custom.createdBy !== null && custom.createdBy === getCurrentUserId();
 
   const pr = exercisePR(history);
   const cutoff = periodCutoff(period);
@@ -51,6 +62,14 @@ export function ExerciseDetailSheet() {
         </button>
       </div>
       <div className="d-name">{ex.name}</div>
+      {custom && (
+        <div className="cx-badge-row">
+          <span className="cx-badge">Custom</span>
+          <span style={{ color: 'var(--faint)', fontSize: 12 }}>
+            {canEdit ? 'Added by you — shared with everyone' : 'Added by someone in the community'}
+          </span>
+        </div>
+      )}
       <div className="meta-grid">
         <div>
           <div className="k">Target</div>
@@ -121,21 +140,32 @@ export function ExerciseDetailSheet() {
         </>
       )}
 
-      <div className="section-h" style={{ margin: '18px 2px 4px' }}>
-        Instructions
-      </div>
-      <div className="steps">
-        {ex.instruction_steps.map((step, i) => (
-          <div className="step" key={i}>
-            <div className="step-n">{i + 1}</div>
-            <div className="step-t">{step}</div>
+      {/* Both are optional on a user-authored exercise — an empty heading
+          over nothing reads as a loading failure, so omit the section. */}
+      {ex.instruction_steps.length > 0 && (
+        <>
+          <div className="section-h" style={{ margin: '18px 2px 4px' }}>
+            Instructions
           </div>
-        ))}
-      </div>
-      <div className="attribution">{ex.attribution}</div>
+          <div className="steps">
+            {ex.instruction_steps.map((step, i) => (
+              <div className="step" key={i}>
+                <div className="step-n">{i + 1}</div>
+                <div className="step-t">{step}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {ex.attribution && <div className="attribution">{ex.attribution}</div>}
       {(active || pickerTargetSessionId) && (
         <button className="btn" style={{ marginTop: 16 }} onClick={() => addExerciseToSession(ex.id)}>
           + Add to workout
+        </button>
+      )}
+      {canEdit && custom && (
+        <button className="btn sec" style={{ marginTop: 8 }} onClick={() => openCustomExerciseForm(custom.id)}>
+          Edit exercise
         </button>
       )}
     </div>

@@ -1,8 +1,9 @@
 import { supabase, getCurrentUserId, onSignedOut } from './supabase';
 import { db, wipeLocalData, type PendingSyncEntry } from './db';
-import type { Routine, WorkoutSession } from './types';
+import type { CustomExercise, Routine, WorkoutSession } from './types';
 import { loadSettings, type Settings } from './settings';
 import { flushBodyPendingSync } from './bodySync';
+import { pushCustomExerciseRemote } from './customExercises';
 
 function requireUserId(): string {
   const userId = getCurrentUserId();
@@ -76,6 +77,43 @@ export async function deleteSessionRemote(id: string): Promise<void> {
     if (error) throw error;
   } catch {
     await enqueuePendingSync({ table: 'sessions', rowId: id, op: 'delete' });
+  }
+}
+
+// Publishing to the shared library is rejected permanently, not temporarily,
+// when the name is already taken (someone else added it first) or when RLS
+// refuses the write (trying to edit an exercise you didn't author). Unlike
+// the other tables here — where every realistic failure is "offline, try
+// later" — re-queueing these would retry a doomed row on every single flush,
+// forever.
+const PERMANENT_PUSH_CODES = new Set([
+  '23505', // unique_violation — that exercise name already exists
+  '42501', // insufficient_privilege — RLS rejected the write
+]);
+
+function isPermanentRejection(err: unknown): boolean {
+  const code = (err as { code?: string } | null)?.code;
+  return typeof code === 'string' && PERMANENT_PUSH_CODES.has(code);
+}
+
+// Same offline-tolerant pattern as pushRoutine: the exercise is already
+// written to Dexie by the caller and usable immediately, so a publish that
+// fails offline just queues and retries rather than blocking the user from
+// logging the exercise they just made. Archiving goes through here too — it
+// writes `archived: true` on the same row, never a delete.
+export async function pushCustomExercise(exercise: CustomExercise): Promise<void> {
+  try {
+    requireUserId();
+    await pushCustomExerciseRemote(exercise);
+  } catch (err) {
+    if (isPermanentRejection(err)) {
+      // Give up rather than retry forever. The exercise stays usable on this
+      // device and keeps working in this user's own history — it just never
+      // becomes part of the shared library.
+      console.error(`Could not publish "${exercise.name}" to the shared library`, err);
+      return;
+    }
+    await enqueuePendingSync({ table: 'customExercises', rowId: exercise.id, op: 'upsert' });
   }
 }
 
@@ -231,6 +269,9 @@ export async function flushPendingSync(): Promise<void> {
       } else if (entry.table === 'sessions') {
         const session = await db.sessions.get(entry.rowId);
         if (session) await pushSession(session);
+      } else if (entry.table === 'customExercises') {
+        const exercise = await db.customExercises.get(entry.rowId);
+        if (exercise) await pushCustomExercise(exercise);
       } else if (entry.table === 'settings') {
         await pushSettings(loadSettings());
       } else {

@@ -9,7 +9,8 @@ import * as bodySync from '../lib/bodySync';
 import { onSignedOut, getCurrentUserId } from '../lib/supabase';
 import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
-import { exerciseById, isCardioExercise } from '../lib/exercises';
+import { exerciseById, findExerciseByName, isCardioExercise, newCustomExerciseId, setCustomExercises } from '../lib/exercises';
+import * as customExercisesApi from '../lib/customExercises';
 import { disarmNudge } from '../lib/pushNudges';
 import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
 import { unlockAudio } from '../lib/beep';
@@ -18,7 +19,7 @@ import { prefersReducedMotion } from '../lib/useReducedMotion';
 import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
 import type { Person } from '../lib/types';
-import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, CustomExerciseDraft, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
 export type SheetKind =
@@ -37,6 +38,7 @@ export type SheetKind =
   | 'profileDetail'
   | 'bodyCompositionDetail'
   | 'badges'
+  | 'customExercise'
   | null;
 
 export interface ImportPreview {
@@ -176,6 +178,14 @@ export interface StoreState {
   // (openPickerForHistory) rather than from an in-progress session — tells
   // addExercisesToSession() which one to add the selection to.
   pickerTargetSessionId: string | null;
+  // Non-null when the custom-exercise sheet is editing an existing entry
+  // rather than creating a new one.
+  editingCustomExerciseId: string | null;
+  // Which sheet the custom-exercise form was opened from, so backing out of
+  // it (swipe, scrim, Escape, Cancel) returns there instead of closing
+  // everything — same problem detailReturnToPicker solves for the detail
+  // sheet, but the form is reachable from two places, so it stores which.
+  customExerciseReturnTo: SheetKind;
 
   // dialog + toast
   dialog: DialogState | null;
@@ -257,6 +267,13 @@ export interface StoreState {
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
   togglePickSelected(id: string): void;
+
+  // Shared global exercise library (see lib/customExercises.ts).
+  customExercises: CustomExercise[];
+  refreshCustomExercises(): Promise<void>;
+  openCustomExerciseForm(editId?: string, prefillName?: string): void;
+  saveCustomExercise(draft: CustomExerciseDraft): Promise<void>;
+  archiveCustomExercise(id: string): void;
 
   confirm(message: string, yesLabel: string, onYes: () => void, danger?: boolean, cancelLabel?: string): void;
   resolveDialog(yes: boolean): void;
@@ -632,8 +649,11 @@ export const useStore = create<StoreState>((set, get) => ({
   pickBodyPart: 'all',
   pickSelected: new Set(),
   pickerTargetSessionId: null,
+  editingCustomExerciseId: null,
+  customExerciseReturnTo: null,
   importPreview: null,
   importing: false,
+  customExercises: [],
 
   dialog: null,
   toastMsg: '',
@@ -665,7 +685,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await purgeDemoFriendRows();
-      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog, calorieLog] = await Promise.all([
+      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog, calorieLog, customExercises] = await Promise.all([
         db.routines.toArray(),
         db.sessions.toArray(),
         db.activeSession.get('current'),
@@ -673,7 +693,14 @@ export const useStore = create<StoreState>((set, get) => ({
         db.bodyLog.toArray(),
         db.waterLog.toArray(),
         db.calorieLog.toArray(),
+        db.customExercises.toArray(),
       ]);
+      // Seed the synchronous exerciseById() registry from the local cache
+      // before anything renders, so custom exercises already referenced by
+      // this device's history resolve on the very first paint rather than
+      // popping in once refreshCustomExercises() returns from the network.
+      setCustomExercises(customExercises);
+      set({ customExercises });
       let bodyProfile = DEFAULT_BODY_PROFILE;
       if (bodyProfileRecord) {
         const { id: _bodyProfileId, ...rest } = bodyProfileRecord;
@@ -1181,8 +1208,13 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   closeSheet() {
-    const { sheet, detailReturnToPicker, pickerTargetSessionId } = get();
-    if (sheet === 'detail' && detailReturnToPicker) {
+    const { sheet, detailReturnToPicker, pickerTargetSessionId, customExerciseReturnTo } = get();
+    if (sheet === 'customExercise') {
+      // Reachable from both the picker (create) and the exercise detail
+      // sheet (edit), so back out to whichever opened it rather than
+      // guessing — see customExerciseReturnTo.
+      set({ sheet: customExerciseReturnTo, editingCustomExerciseId: null, customExerciseReturnTo: null });
+    } else if (sheet === 'detail' && detailReturnToPicker) {
       // Only true when detail was reached via the picker's "i" button — an
       // explicit flag rather than inferring it from "a session happens to be
       // active", which used to wrongly send you to the picker when opening
@@ -1222,6 +1254,109 @@ export const useStore = create<StoreState>((set, get) => ({
       else next.add(id);
       return { pickSelected: next };
     });
+  },
+
+  // --- Shared custom exercise library ---------------------------------
+
+  async refreshCustomExercises() {
+    if (!getCurrentUserId()) return;
+    try {
+      const remote = await customExercisesApi.fetchCustomExercises();
+      // Anything created on this device that hasn't reached the server yet
+      // (added offline, still sitting in pendingSync) would otherwise be
+      // wiped by this overwrite and vanish from the picker mid-workout.
+      const remoteIds = new Set(remote.map((e) => e.id));
+      const unsynced = get().customExercises.filter((e) => !remoteIds.has(e.id));
+      const merged = [...remote, ...unsynced];
+      await db.customExercises.bulkPut(remote);
+      setCustomExercises(merged);
+      set({ customExercises: merged });
+    } catch (err) {
+      // Offline or unreachable — the Dexie copy loaded in init() stands in,
+      // so the picker keeps working with whatever this device last saw.
+      console.error('Could not refresh the shared exercise library', err);
+    }
+  },
+
+  openCustomExerciseForm(editId, prefillName) {
+    set((s) => ({
+      sheet: 'customExercise',
+      editingCustomExerciseId: editId ?? null,
+      customExerciseReturnTo: s.sheet,
+      // Reused as the create form's initial name when opened from a search
+      // that found nothing — typing it twice would be silly.
+      pickQuery: editId ? s.pickQuery : (prefillName ?? s.pickQuery),
+    }));
+  },
+
+  async saveCustomExercise(draft) {
+    const name = draft.name.trim().replace(/\s+/g, ' ');
+    if (!name) {
+      get().showToast('Give the exercise a name');
+      return;
+    }
+    const editId = get().editingCustomExerciseId;
+    const clash = findExerciseByName(name);
+    if (clash && clash.id !== editId) {
+      get().showToast(`“${clash.name}” is already in the library`);
+      return;
+    }
+
+    const existing = editId ? get().customExercises.find((e) => e.id === editId) : undefined;
+    if (editId && !existing) return;
+    const exercise: CustomExercise = existing
+      ? { ...existing, ...draft, name }
+      : {
+          ...draft,
+          name,
+          id: newCustomExerciseId(),
+          secondary_muscles: [],
+          image: '',
+          gif_url: '',
+          attribution: '',
+          createdBy: getCurrentUserId(),
+          createdAt: Date.now(),
+          archived: false,
+        };
+
+    // Written locally and made usable first, then published. Adding an
+    // exercise is something people do mid-workout, in a gym, often on bad
+    // signal — blocking on the round-trip would be the wrong trade. The
+    // server's unique index is still the real duplicate guard; if a queued
+    // publish loses that race the exercise simply stays local to this
+    // device, which is a far better failure than refusing to log the set.
+    await db.customExercises.put(exercise);
+    const next = existing
+      ? get().customExercises.map((e) => (e.id === exercise.id ? exercise : e))
+      : [...get().customExercises, exercise];
+    setCustomExercises(next);
+    set({
+      customExercises: next,
+      sheet: get().customExerciseReturnTo,
+      editingCustomExerciseId: null,
+      customExerciseReturnTo: null,
+    });
+    void cloudSync.pushCustomExercise(exercise);
+    get().showToast(existing ? 'Exercise updated' : `“${name}” added for everyone`);
+  },
+
+  archiveCustomExercise(id) {
+    const exercise = get().customExercises.find((e) => e.id === id);
+    if (!exercise) return;
+    get().confirm(
+      `Remove “${exercise.name}” from the shared library? It disappears from search for everyone, but workouts that already used it — yours and anyone else's — keep it.`,
+      'Remove',
+      () => {
+        const archived: CustomExercise = { ...exercise, archived: true };
+        void db.customExercises.put(archived);
+        const next = get().customExercises.map((e) => (e.id === id ? archived : e));
+        setCustomExercises(next);
+        set({ customExercises: next, sheet: null });
+        void cloudSync.pushCustomExercise(archived);
+        get().showToast('Removed from the library');
+      },
+      true,
+    );
   },
 
   confirm(message, yesLabel, onYes, danger = false, cancelLabel = 'Cancel') {
@@ -1472,9 +1607,14 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   exportData() {
-    const { routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog } = get();
+    const { routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog, customExercises } = get();
+    // customExercises rides along so the backup can name every exercise its
+    // sessions reference, but confirmImport deliberately ignores it: the
+    // shared library is server-owned, and re-publishing someone's snapshot
+    // of it on restore would resurrect entries other people have since
+    // archived. Restoring pulls the live library from Supabase instead.
     const blob = new Blob(
-      [JSON.stringify({ routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog }, null, 2)],
+      [JSON.stringify({ routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog, customExercises }, null, 2)],
       { type: 'application/json' },
     );
     const url = URL.createObjectURL(blob);

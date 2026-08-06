@@ -1,9 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, Routine, WaterLogEntry, WorkoutSession } from './types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, Routine, WaterLogEntry, WorkoutSession } from './types';
 
 export interface PendingSyncEntry {
   id?: number;
-  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog';
+  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog' | 'customExercises';
   rowId: string;
   op: 'upsert' | 'delete';
 }
@@ -44,6 +44,7 @@ export const db = new Dexie('fitflow') as Dexie & {
   bodyLog: EntityTable<BodyLogEntry, 'loggedOn'>;
   waterLog: EntityTable<WaterLogEntry, 'id'>;
   calorieLog: EntityTable<CalorieLogEntry, 'id'>;
+  customExercises: EntityTable<CustomExercise, 'id'>;
 };
 
 db.version(1).stores({
@@ -85,6 +86,21 @@ db.version(5).stores({
   calorieLog: 'id, loggedOn',
 });
 
+// `archived` is deliberately not indexed — IndexedDB rejects booleans as key
+// values, and the whole custom list is small enough to filter in memory
+// (it's held in the store in full anyway, see setCustomExercises).
+db.version(6).stores({
+  routines: 'id, createdAt',
+  sessions: 'id, person, startedAt',
+  pendingSync: '++id, table',
+  activeSession: 'id',
+  bodyProfile: 'id',
+  bodyLog: 'loggedOn',
+  waterLog: 'id, loggedOn',
+  calorieLog: 'id, loggedOn',
+  customExercises: 'id, createdAt',
+});
+
 // The Dexie cache is per-browser, not per-account. Without this, signing out
 // of one account and into another would let the first account's local cache
 // get treated as "this device's existing history" and uploaded straight into
@@ -101,6 +117,12 @@ export async function wipeLocalData(): Promise<void> {
     db.waterLog.clear(),
     db.calorieLog.clear(),
   ]);
+  // `customExercises` is intentionally NOT cleared. It isn't account data —
+  // it's one global catalog every signed-in user reads in full, the same way
+  // the bundled exercises.json is, so there's no cross-account leak to
+  // prevent here. Wiping it would only mean that a device signing back in
+  // offline can't resolve the names of custom exercises already referenced
+  // by its own history or a friend's feed card.
 }
 
 // One-time cleanup for installs that predate the real friends system:

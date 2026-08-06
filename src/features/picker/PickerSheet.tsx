@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { EXERCISES, bodyParts, exerciseById, searchExercises } from '../../lib/exercises';
+import { bodyParts, exerciseById, exerciseCount, searchExercises } from '../../lib/exercises';
 import type { Exercise } from '../../lib/types';
 import { Thumb } from '../../components/Thumb';
 
@@ -97,9 +97,18 @@ export function PickerSheet() {
   const selected = useStore((s) => s.pickSelected);
   const togglePickSelected = useStore((s) => s.togglePickSelected);
 
+  const openCustomExerciseForm = useStore((s) => s.openCustomExerciseForm);
+  // searchExercises() reads the shared custom library out of a module-level
+  // registry rather than taking it as an argument (see exercises.ts), so it
+  // isn't visible to this memo as a dependency. Subscribing to the store's
+  // copy is what makes the results re-compute when the library finishes
+  // syncing, or the moment the user adds an exercise of their own.
+  const customExercises = useStore((s) => s.customExercises);
+
   const { list, exactCount } = useMemo(
     () => searchExercises(pickQuery, pickBodyPart),
-    [pickQuery, pickBodyPart],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pickQuery, pickBodyPart, customExercises],
   );
   // Anything past exactCount is a spelling suggestion rather than a literal
   // match, so say so instead of silently mixing them in.
@@ -159,7 +168,12 @@ export function PickerSheet() {
     <div className="sheet-in">
       <div className="sheet-h">
         Add exercise
-        {selected.size > 0 && <span className="sheet-count">{selected.size}</span>}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {selected.size > 0 && <span className="sheet-count">{selected.size}</span>}
+          <button type="button" className="pick-new-btn" onClick={() => openCustomExerciseForm()}>
+            + New
+          </button>
+        </span>
       </div>
       <div className="sheet-search-bar">
         <div className="search">
@@ -168,7 +182,7 @@ export function PickerSheet() {
             <path d="m21 21-4.3-4.3" />
           </svg>
           <input
-            placeholder={`Search ${EXERCISES.length} exercises…`}
+            placeholder={`Search ${exerciseCount()} exercises…`}
             value={pickQuery}
             onChange={(e) => setPickQuery(e.target.value)}
           />
@@ -313,7 +327,21 @@ export function PickerSheet() {
         })}
         <div style={{ height: (list.length - range.end) * ROW_HEIGHT }} />
       </div>
-      {list.length === 0 && <p style={{ color: 'var(--muted)', textAlign: 'center', padding: 24 }}>Nothing found</p>}
+      {/* An empty search is the moment someone most wants to add their own —
+          the query they just typed becomes the new exercise's name. */}
+      {list.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '24px 8px' }}>
+          <p style={{ color: 'var(--muted)', margin: '0 0 14px' }}>
+            {pickQuery.trim() ? `No exercise called “${pickQuery.trim()}”` : 'Nothing found'}
+          </p>
+          <button className="btn sec" onClick={() => openCustomExerciseForm(undefined, pickQuery)}>
+            + Create it
+          </button>
+          <p style={{ color: 'var(--faint)', fontSize: 12, margin: '10px 0 0' }}>
+            Custom exercises are shared with everyone.
+          </p>
+        </div>
+      )}
 
       <div className="sheet-footer">
         <button className="btn" disabled={selected.size === 0} onClick={() => addExercisesToSession(Array.from(selected))}>

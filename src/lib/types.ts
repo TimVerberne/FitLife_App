@@ -11,6 +11,33 @@ export interface Exercise {
   attribution: string;
 }
 
+// A user-authored exercise, added to one shared global library rather than
+// to the author's own account — anyone signed in sees it in the picker and
+// can log it. It deliberately extends `Exercise` (rather than sitting in a
+// parallel type) so nothing downstream has to know the difference: records,
+// PRs, badges, volume, routines and the crew feed all key off `id` and read
+// the same fields. The extra fields below exist only for provenance and for
+// deciding who may edit it.
+export interface CustomExercise extends Exercise {
+  // Supabase user id of whoever added it — or null once that account is
+  // deleted. The exercise outlives its author on purpose: other people's
+  // workout history references it, and a global library that loses entries
+  // when someone leaves would silently break their past workouts.
+  createdBy: string | null;
+  createdAt: number;
+  // Soft delete. Hidden from the picker and from search, but still
+  // resolvable by id, so past workouts and PRs that reference it keep
+  // rendering. Nothing ever hard-deletes a row from the shared library.
+  archived: boolean;
+}
+
+// What the create/edit form collects. Media and secondary muscles aren't
+// authorable — the picker and detail sheet fall back to a placeholder tile
+// and simply omit the sections that have no content.
+export type CustomExerciseDraft = Pick<Exercise, 'name' | 'body_part' | 'equipment' | 'target'> & {
+  instruction_steps: string[];
+};
+
 export type SetKind = 'normal' | 'warmup' | 'failure' | 'dropset' | 'superset';
 
 export interface SetEntry {

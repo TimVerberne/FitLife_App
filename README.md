@@ -89,6 +89,14 @@ Open the printed local URL on your phone (same network) or in a desktop
 browser at mobile width. `npm run build` produces a production build;
 `npm run preview` serves it locally to test the installed-PWA experience.
 
+### Shared custom exercises (one-time backend setup)
+
+Custom exercises live in a `custom_exercises` table that has to be created
+before the feature works — run the **Phase 12** section of
+`supabase/schema.sql` in the Supabase SQL editor. Until then the picker's
+"+ New" flow still saves locally, but nothing publishes (the queued upload
+just keeps failing), so nobody else sees what you add.
+
 ### Workout-nudge push notifications (one-time backend setup)
 
 The "remind me if I leave an active workout" setting needs backend
@@ -101,6 +109,48 @@ schedule the dispatcher via `pg_cron`). The setting stays hidden/inert until
 this is done.
 
 ## Update notes
+
+**Version 1.25.0**
+- **Custom exercises, as one shared library.** Anything the built-in dataset
+  doesn't cover can now be added from the picker ("+ New", or "+ Create it"
+  straight off a search that found nothing) by filling in a name, body part,
+  main muscle, equipment and optional instructions.
+  - **Added exercises are global, not per-account.** One `custom_exercises`
+    table, readable by every signed-in user — this is the only table in the
+    app that isn't partitioned by user. That's deliberate: every downstream
+    feature keys off the exercise id, so a private library would leave a
+    friend's feed card listing exercises it couldn't name while still
+    counting their volume in the totals. Sharing them keeps the crew feed,
+    Stats head-to-head and everything else correct with no special cases.
+  - **They behave exactly like built-in exercises**, because nothing
+    downstream knows the difference: PRs, 🏆 record marks, badges, volume,
+    weekly stats, Relative strength, "Do again" and routines all work
+    unchanged. Search treats them the same too, including word-order
+    independence and typo tolerance. Pick "cardio" as the body part and the
+    exercise logs duration/distance instead of weight/reps, like any other
+    cardio entry.
+  - **No photo needed** — an exercise without media gets an initials tile in
+    the picker, the feed and its detail sheet, rather than a broken image.
+  - **Editing and removal are the author's alone** (enforced by RLS, not just
+    hidden in the UI), and removal is an archive: it disappears from search
+    for everyone, but every workout that already used it — yours and anyone
+    else's — keeps rendering. Nothing is ever hard-deleted out from under
+    someone's history, and an exercise outlives its author's account for the
+    same reason.
+  - **Duplicates are guarded twice**: the form refuses a name already in the
+    library (case- and spacing-insensitive, checked against built-in names
+    too), and a unique index on the server settles the case where two people
+    submit the same name at once.
+  - **Adding one works offline.** The exercise is written locally and usable
+    immediately, then published when there's a connection — adding an
+    exercise is a thing people do mid-workout on bad gym signal. A publish
+    that's permanently rejected (name taken, or not yours to edit) stops
+    retrying instead of re-queueing forever; the exercise stays usable
+    locally, it just doesn't join the shared library.
+  - Backups include the library so an export can name every exercise its
+    workouts reference, but restoring deliberately ignores it — the shared
+    library is server-owned, and re-publishing a stale snapshot would
+    resurrect entries other people had archived.
 
 **Version 1.24.0**
 - **Workout duration is editable after the fact.** Forgetting to hit "finish"

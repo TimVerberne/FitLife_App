@@ -101,6 +101,13 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshBody();
   }, [loaded, userId]);
 
+  // The shared custom-exercise library is global, so it changes when anyone
+  // adds to it, not just this account — hence a plain refresh on load rather
+  // than anything routed through syncWithCloud's linked/unlinked branches.
+  useEffect(() => {
+    if (loaded && userId) void useStore.getState().refreshCustomExercises();
+  }, [loaded, userId]);
+
   // There's no realtime subscription for friends' workouts or for a routine
   // edited on another device, so without this both stay stale while the app
   // just sits open or gets reopened from a suspended background state (a
@@ -123,6 +130,9 @@ function AuthedApp() {
       if (document.visibilityState !== 'visible') return;
       throttleOnFocus('friend-sessions', 30_000, () => void useStore.getState().refreshFriendSessions());
       throttleOnFocus('cloud-sync', 30_000, () => void useStore.getState().syncWithCloud(currentUserId));
+      // Picks up exercises other people added while this app sat backgrounded,
+      // so a friend's feed card can name them instead of dropping the row.
+      throttleOnFocus('custom-exercises', 60_000, () => void useStore.getState().refreshCustomExercises());
     }
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {

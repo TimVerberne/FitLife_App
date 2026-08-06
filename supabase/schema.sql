@@ -339,3 +339,70 @@ alter table public.body_profile add column manual_kcal_target int;
 -- gracefully (falls back to badges derived from a friend's visible history)
 -- until this is run, so there's no hard ordering requirement.
 alter table public.profiles add column showcase_badges text[] not null default '{}';
+
+-- Phase 12: user-authored exercises, as ONE SHARED GLOBAL LIBRARY.
+--
+-- This is the only table in the app that isn't partitioned by user. Adding an
+-- exercise adds it for everybody, which is the point: exercise ids are what
+-- every downstream feature keys off (records, PRs, badges, volume, routines,
+-- the crew feed), so a per-account library would mean a friend's feed card
+-- listed exercises it couldn't name while still counting their volume. Global
+-- rows keep every one of those features working unchanged.
+--
+-- Nothing personal lives here — a name and four classification fields — and
+-- there is no per-row visibility to configure.
+
+create table public.custom_exercises (
+  id                text primary key,
+  -- Nullable, and "set null" rather than "cascade", ON PURPOSE: the shared
+  -- library has to outlive its authors. Cascading would delete exercises out
+  -- from under everyone else's workout history the day someone deletes their
+  -- account (see delete_own_account above, which this row deliberately
+  -- survives).
+  created_by        uuid references auth.users(id) on delete set null,
+  name              text not null,
+  body_part         text not null,
+  equipment         text not null,
+  target            text not null,
+  secondary_muscles text[] not null default '{}',
+  instruction_steps text[] not null default '{}',
+  -- Soft delete only. The client hides archived rows from the picker but
+  -- still resolves them by id so old workouts keep rendering their names,
+  -- which a hard delete would break irreversibly and for everyone.
+  archived          boolean not null default false,
+  created_at        bigint not null,
+  updated_at        timestamptz not null default now(),
+  -- The bundled exercises.json uses bare numeric ids ('0001'). Forcing every
+  -- shared row to carry the 'custom-' prefix keeps the two id spaces disjoint,
+  -- so no row inserted here can ever shadow a real bundled exercise for every
+  -- user who syncs it. exerciseById() resolves bundled ids first as well.
+  constraint custom_exercises_id_prefix check (id like 'custom-%')
+);
+
+-- Keeps the shared library from filling up with a dozen spellings of the same
+-- movement. Scoped to live rows so archiving one frees its name again. The
+-- client checks for duplicates before submitting; this is the real guard,
+-- since two people can submit the same name at once.
+create unique index custom_exercises_name_idx
+  on public.custom_exercises (lower(name)) where not archived;
+
+alter table public.custom_exercises enable row level security;
+
+-- Readable by everyone signed in — that's what makes the library shared.
+create policy "custom exercises readable by authenticated users"
+  on public.custom_exercises for select to authenticated using (true);
+
+create policy "authors insert own custom exercises"
+  on public.custom_exercises for insert to authenticated
+  with check (auth.uid() = created_by);
+
+-- Edits and archiving are limited to the author. Anyone-can-edit on a global
+-- table means one bad actor can rename an exercise out from under everyone
+-- who has it in a routine. Once created_by goes null (deleted account) the
+-- row becomes permanently read-only, which is the safe direction to fail.
+create policy "authors update own custom exercises"
+  on public.custom_exercises for update to authenticated
+  using (auth.uid() = created_by) with check (auth.uid() = created_by);
+
+-- Deliberately no DELETE policy: archiving is the only removal path, so a row
+-- referenced by someone else's workout history can never disappear.

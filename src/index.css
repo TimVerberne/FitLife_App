@@ -452,6 +452,19 @@
   font-size: 8px;
 }
 
+/* Initials stand in for the missing thumbnail on user-authored exercises,
+   so they read as a deliberate tile rather than a failed image. */
+.placeholder.initials {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  background: linear-gradient(135deg, var(--surface-2), #0a0a0a);
+}
+
 .pick-b {
   flex: 1;
   min-width: 0;
@@ -509,6 +522,91 @@
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 13px;
+}
+
+.cx-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 2px 0;
+  flex-wrap: wrap;
+}
+
+.cx-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  padding: 2px 6px;
+}
+
+.pick-new-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 9px;
+  padding: 5px 11px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+/* -------- custom exercise form -------- */
+.cx-field {
+  margin-bottom: 16px;
+}
+
+.cx-label {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 7px;
+}
+
+.cx-input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 11px 12px;
+  color: var(--ink);
+  /* 16px keeps iOS Safari from auto-zooming the whole sheet on focus. */
+  font-size: 16px;
+  font-family: var(--font-body);
+  outline: none;
+}
+
+.cx-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.cx-input::placeholder {
+  color: var(--faint-2);
+}
+
+select.cx-input {
+  appearance: none;
+  text-transform: capitalize;
+}
+
+.cx-textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.cx-hint {
+  color: var(--faint);
+  font-size: 12px;
+  margin: 8px 0 0;
 }
 
 /* -------- search + chips -------- */
@@ -750,6 +848,18 @@
   color: #4c4f4a;
   font-family: var(--font-mono);
   font-size: 10px;
+}
+
+/* Overrides the white-background/10px-mono hero placeholder above, which is
+   tuned for a broken bundled GIF. A user-authored exercise has no media by
+   design, so its hero is a deliberate initials tile instead. */
+.detail-hero .placeholder.initials {
+  background: linear-gradient(160deg, var(--surface-2), #050505);
+  color: var(--faint);
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 64px;
+  letter-spacing: 0.02em;
 }
 
 .icon-btn {
