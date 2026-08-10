@@ -77,14 +77,28 @@ export function ActiveSessionScreen() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [restMenuFor, setRestMenuFor] = useState<string | null>(null);
   const [supersetMenuFor, setSupersetMenuFor] = useState<string | null>(null);
+  const [headerHidden, setHeaderHidden] = useState(false);
+  const lastScrollTop = useRef(0);
+  const screenRef = useRef<HTMLDivElement>(null);
+  const sessBarRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const { drag, settling, startDrag, startKeyboardReorder, moveKeyboardSlot, confirmKeyboardReorder, cancelKeyboardReorder } = useDragReorder(
     active?.entries.length ?? 0,
     COMPACT_ROW_HEIGHT,
     reorderEntries,
+    {
+      // .screen is the real scroll container during a session (see the
+      // .app-shell.is-session rule), so that's what has to auto-scroll when
+      // a card is dragged to either end.
+      container: () => screenRef.current,
+      list: () => listRef.current,
+      // The sticky header sits over the top of that container. Starting the
+      // auto-scroll zone below it means dragging up to the header scrolls
+      // the list, instead of parking the card underneath it where it can't
+      // be aimed. Zero while the header is hidden, since nothing overlaps.
+      insetTop: () => (headerHidden ? 0 : (sessBarRef.current?.offsetHeight ?? 0)),
+    },
   );
-  const [headerHidden, setHeaderHidden] = useState(false);
-  const lastScrollTop = useRef(0);
-  const screenRef = useRef<HTMLDivElement>(null);
 
   // Hides the sticky mint header on any downward scroll and slides it back
   // on any upward scroll, however small — no dead zone, since real
@@ -177,7 +191,7 @@ export function ActiveSessionScreen() {
 
   return (
     <div className="screen" ref={screenRef} style={{ padding: '0 18px 24px' }}>
-      <div className={`sess-bar${headerHidden ? ' hidden' : ''}`}>
+      <div className={`sess-bar${headerHidden ? ' hidden' : ''}`} ref={sessBarRef}>
         <div className="sess-top">
           <span className="sess-live">Recording · live</span>
           <div className="sess-top-actions">
@@ -217,6 +231,7 @@ export function ActiveSessionScreen() {
       </div>
 
       <div
+        ref={listRef}
         className={`s-ex-list${drag ? ' reordering' : ''}`}
         style={drag ? { height: active.entries.length * COMPACT_ROW_HEIGHT } : undefined}
       >
@@ -236,7 +251,11 @@ export function ActiveSessionScreen() {
               // Tracks the finger with no transition while held; eases into
               // its landing slot once released (see .settling).
               transition: isDraggingThis && !settling ? 'none' : 'top 0.18s ease',
-              zIndex: isDraggingThis ? 20 : 1,
+              // Above .sess-bar's z-index of 15 — a card dragged up to the
+              // top edge should ride over the header rather than disappear
+              // behind it, which made it impossible to see what you were
+              // aiming at.
+              zIndex: isDraggingThis ? 30 : 1,
             }
           : undefined;
         return (

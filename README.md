@@ -136,6 +136,31 @@ this is done.
 
 ## Update notes
 
+**Version 1.27.1**
+- **Fixed: an exercise added mid-workout couldn't be dragged to the top.**
+  A newly added exercise lands at the bottom of the list, and moving it to
+  first was impossible — two separate problems stacked on top of each other:
+  - **The list didn't scroll while dragging.** Any slot already scrolled
+    off-screen simply couldn't be reached, because you can't drag past the
+    edge of the display. Holding a card near either end of the list now
+    scrolls it, ramping in across the last ~76px so it creeps rather than
+    lurches. The auto-scroll zone starts *below* the sticky header, so
+    dragging up to the header scrolls instead of tucking the card under it.
+  - **The card sat ~200px below the finger.** Picking one up switches the
+    list into its compact reorder view, which re-lays it out from full cards
+    to 60px rows — so the card teleported into a new coordinate space while
+    the finger stayed put. Since the target slot is derived from the card
+    rather than the pointer, the top slots stayed out of reach however far
+    you dragged. The card is now re-anchored under the pointer once the
+    compact layout has actually rendered (waiting for the list to report its
+    compact height, rather than guessing at a number of frames — the first
+    animation frame still measures the old layout).
+  - The dragged card also now paints *above* the header rather than sliding
+    behind it, so you can see what you're aiming at.
+- Routine reordering on the Train screen has the same limitation and is
+  **not** fixed here: outside an active session the document scrolls rather
+  than the list's own container, so it needs different handling.
+
 **Version 1.27.0** — reactions on workouts. Needs the **Phase 15 and Phase
 16** sections of `supabase/schema.sql` run, and the nudge dispatcher
 redeployed.
