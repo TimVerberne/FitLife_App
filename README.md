@@ -136,6 +136,34 @@ this is done.
 
 ## Update notes
 
+**Version 1.27.2** — follow-up to 1.27.1, which fixed the reordering problem
+but not the way it felt.
+- **Auto-scroll now watches the dragged card, not your finger.** Keying it
+  off the pointer meant shoving a thumb into the very top of the screen to
+  make the list move, while the card — the thing you're actually aiming —
+  sat somewhere else entirely. The list now starts scrolling once the card
+  itself comes within ~64px of either end, wherever your finger happens to
+  be, and speeds up as the card presses further in.
+- **The card can no longer travel under the header.** It's held inside the
+  visible list, so dragging past the top parks it against the header and
+  scrolls the list instead of tucking it out of sight.
+- **The header no longer moves mid-drag.** Auto-scrolling emits scroll
+  events like any other scroll, so the show-on-scroll-up header was sliding
+  in and out underneath the card — and since its height is exactly what
+  keeps the card clear, the boundary moved with it. It's frozen for the
+  duration of a drag.
+- **Entering the scroll zone always does something visible.** A purely
+  proportional ramp starts at zero, so nudging a card just inside the zone
+  crawled at a few percent and read as "it isn't scrolling"; it now starts
+  at a quarter speed and accelerates from there.
+- Internally this replaced the accumulated-offset tracking added in 1.27.1
+  with re-measuring the list every frame. Picking a card up re-lays the list
+  out and makes the browser clamp scrollTop by thousands of pixels, and
+  those shifts land across several frames — so any snapshot taken at the
+  start is stale almost immediately, which is what left the card ~100px away
+  from the finger. Re-measuring absorbs all of it, including our own
+  scrolling, with no bookkeeping to drift.
+
 **Version 1.27.1**
 - **Fixed: an exercise added mid-workout couldn't be dragged to the top.**
   A newly added exercise lands at the bottom of the list, and moving it to

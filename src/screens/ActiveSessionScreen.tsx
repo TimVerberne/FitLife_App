@@ -79,6 +79,9 @@ export function ActiveSessionScreen() {
   const [supersetMenuFor, setSupersetMenuFor] = useState<string | null>(null);
   const [headerHidden, setHeaderHidden] = useState(false);
   const lastScrollTop = useRef(0);
+  // Read by the scroll handler, which is installed once and would otherwise
+  // close over a stale `drag`.
+  const draggingRef = useRef(false);
   const screenRef = useRef<HTMLDivElement>(null);
   const sessBarRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -118,15 +121,26 @@ export function ActiveSessionScreen() {
   // pin correctly: sticky resolves against .screen, so .screen has to be the
   // thing that scrolls, not the document.
   useEffect(() => {
+    draggingRef.current = !!drag;
+  }, [drag]);
+
+  useEffect(() => {
     const el = screenRef.current;
     if (!el) return;
     function onScroll() {
       const top = el!.scrollTop;
       const delta = top - lastScrollTop.current;
+      lastScrollTop.current = top;
+      // Frozen mid-reorder. Auto-scrolling a drag emits scroll events like
+      // any other scroll, so without this the header would slide in and out
+      // underneath the card being dragged — and since the header's height is
+      // exactly what keeps that card from being covered, the boundary it's
+      // resting against would move with it. Visibly jittery, and it made the
+      // top of the list feel like it was fighting back.
+      if (draggingRef.current) return;
       if (top <= 0) setHeaderHidden(false);
       else if (delta > 0) setHeaderHidden(true);
       else if (delta < 0) setHeaderHidden(false);
-      lastScrollTop.current = top;
     }
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => el.removeEventListener('scroll', onScroll);
