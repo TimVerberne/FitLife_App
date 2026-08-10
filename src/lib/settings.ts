@@ -24,6 +24,11 @@ export interface Settings {
   accent: AccentPreset;
   notifyActiveWorkout: boolean;
   notifyActiveWorkoutRepeat: boolean;
+  // Push when someone reacts to one of your workouts. Independent of
+  // notifyActiveWorkout: the browser permission is a single per-origin
+  // grant, so the OS can't tell the two apart — only an app-level setting,
+  // checked server-side before sending, can.
+  notifyReactions: boolean;
   // Achievements — the only new state the badge system remembers. `badgesKnown`
   // is every badge id already credited, so a celebration fires exactly once
   // (and existing history is credited quietly on first run); undefined means
@@ -35,6 +40,11 @@ export interface Settings {
   showcaseBadges?: string[];
   firstComparisonAt?: number | null;
   firstFriendAt?: number | null;
+  // Same one-off-timestamp pattern as the two above: neither "you cheered
+  // someone" nor "someone cheered you" is derivable from stored workout
+  // data, so the moment is recorded when it's first observed.
+  firstReactionGivenAt?: number | null;
+  firstReactionReceivedAt?: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -53,6 +63,9 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: 'mint',
   notifyActiveWorkout: false,
   notifyActiveWorkoutRepeat: true,
+  // On by default, but inert until push is actually enabled — that's a
+  // separate, explicit permission grant, so this can't surprise anyone.
+  notifyReactions: true,
 };
 
 const STORAGE_KEY = 'fitflow-settings';

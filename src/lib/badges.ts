@@ -202,6 +202,8 @@ const ONEOFFS: OneoffSpec[] = [
   { id: 'set-superset', group: 'Set Types', icon: 'lightning', name: 'Doubling Up', desc: 'Logged your first superset.', tierIndex: 3 },
   { id: 'social-friend', group: 'Social', icon: 'people', name: 'Not Training Alone', desc: 'Added your first training friend.', tierIndex: 3 },
   { id: 'social-rivalry', group: 'Social', icon: 'people', name: 'Rivalry', desc: 'Ran your first head-to-head comparison.', tierIndex: 3 },
+  { id: 'social-hype', group: 'Social', icon: 'people', name: 'Hype Man', desc: 'Reacted to a friend\u2019s workout.', tierIndex: 3 },
+  { id: 'social-cheered', group: 'Social', icon: 'people', name: 'Appreciated', desc: 'Someone reacted to one of your workouts.', tierIndex: 3 },
 ];
 
 function buildDefs(): BadgeDef[] {
@@ -284,6 +286,8 @@ export interface BadgeSocialSignals {
   hasFriend: boolean;
   firstFriendAt: number | null;
   firstComparisonAt: number | null;
+  firstReactionGivenAt: number | null;
+  firstReactionReceivedAt: number | null;
 }
 
 export interface BadgeContext {
@@ -486,6 +490,8 @@ export function computeEarnedBadges(ctx: BadgeContext): Map<string, number> {
   if (ctx.social) {
     if (ctx.social.hasFriend) mark('social-friend', ctx.social.firstFriendAt ?? ctx.now);
     if (ctx.social.firstComparisonAt != null) mark('social-rivalry', ctx.social.firstComparisonAt);
+    if (ctx.social.firstReactionGivenAt != null) mark('social-hype', ctx.social.firstReactionGivenAt);
+    if (ctx.social.firstReactionReceivedAt != null) mark('social-cheered', ctx.social.firstReactionReceivedAt);
   }
 
   return earned;

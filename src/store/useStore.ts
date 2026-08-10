@@ -11,6 +11,8 @@ import { signOut } from '../lib/auth';
 import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, findExerciseByName, isCardioExercise, newCustomExerciseId, setCustomExercises } from '../lib/exercises';
 import * as customExercisesApi from '../lib/customExercises';
+import * as reactionsApi from '../lib/reactions';
+import type { Reaction, ReactionCode } from '../lib/reactions';
 import { disarmNudge } from '../lib/pushNudges';
 import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
 import { unlockAudio } from '../lib/beep';
@@ -39,6 +41,7 @@ export type SheetKind =
   | 'bodyCompositionDetail'
   | 'badges'
   | 'customExercise'
+  | 'reactors'
   | null;
 
 export interface ImportPreview {
@@ -63,6 +66,15 @@ applyTheme(loadSettings());
 // finishSession() rounds up to, and the ceiling exists because this field is
 // edited precisely to undo an implausible number — there's no point letting
 // a typo replace one with another.
+// How many recent workouts (own + friends', newest first) reactions are
+// fetched for. Comfortably covers the crew feed's scroll window and any
+// workout reachable from history without pulling the whole table.
+const REACTION_SESSION_WINDOW = 120;
+
+// A short tick on tapping a reaction — the same "something registered"
+// feedback completing a set gives, at a lighter weight.
+const REACTION_TAP_PATTERN = 12;
+
 export const MIN_DURATION_MIN = 1;
 export const MAX_DURATION_MIN = 24 * 60;
 
@@ -267,6 +279,16 @@ export interface StoreState {
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
   togglePickSelected(id: string): void;
+
+  // Reactions on workouts, keyed by session id. In memory only: they hang
+  // off sessions that are often somebody else's, and friend sessions never
+  // reach Dexie either.
+  reactions: Map<string, Reaction[]>;
+  // Which workout the reactor-list sheet is showing.
+  reactorListSessionId: string | null;
+  refreshReactions(): Promise<void>;
+  toggleReaction(sessionId: string, code: ReactionCode): void;
+  openReactorList(sessionId: string): void;
 
   // Shared global exercise library (see lib/customExercises.ts).
   customExercises: CustomExercise[];
@@ -531,6 +553,8 @@ function ownBadgeContext(s: StoreState, firstFriendAt: number | null, now: numbe
       hasFriend: s.friends.length > 0,
       firstFriendAt,
       firstComparisonAt: s.settings.firstComparisonAt ?? null,
+      firstReactionGivenAt: s.settings.firstReactionGivenAt ?? null,
+      firstReactionReceivedAt: s.settings.firstReactionReceivedAt ?? null,
     },
   };
 }
@@ -661,6 +685,8 @@ export const useStore = create<StoreState>((set, get) => ({
   importing: false,
   customExercises: [],
   isLibraryAdmin: false,
+  reactions: new Map(),
+  reactorListSessionId: null,
 
   dialog: null,
   toastMsg: '',
@@ -1261,6 +1287,90 @@ export const useStore = create<StoreState>((set, get) => ({
       else next.add(id);
       return { pickSelected: next };
     });
+  },
+
+  // --- Reactions --------------------------------------------------------
+
+  // Fetches reactions for the workouts that could plausibly be on screen:
+  // the most recent slice across your own history and your friends'. Scoped
+  // rather than fetching everything, because reactions are the highest-row
+  // table in the app and nothing older than the feed window is ever shown.
+  async refreshReactions() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    const ids = [...get().sessions, ...get().friendSessions]
+      .sort((a, b) => b.startedAt - a.startedAt)
+      .slice(0, REACTION_SESSION_WINDOW)
+      .map((s) => s.id);
+    if (ids.length === 0) return;
+    try {
+      const rows = await reactionsApi.fetchReactionsFor(ids);
+      if (getCurrentUserId() !== userId) return;
+      const next = new Map<string, Reaction[]>();
+      for (const r of rows) {
+        const list = next.get(r.sessionId);
+        if (list) list.push(r);
+        else next.set(r.sessionId, [r]);
+      }
+      set({ reactions: next });
+      // Someone applauding your workout is the signal for the "received"
+      // badge, and it isn't derivable from stored data any other way — same
+      // shape as firstFriendAt/firstComparisonAt.
+      const ownIds = new Set(get().sessions.map((s) => s.id));
+      if (get().settings.firstReactionReceivedAt == null && rows.some((r) => ownIds.has(r.sessionId) && r.userId !== userId)) {
+        get().updateSettings({ firstReactionReceivedAt: Date.now() });
+        reconcileOwnBadges(get, set, true);
+      }
+    } catch (err) {
+      console.error('Failed to load reactions', err);
+    }
+  },
+
+  // Applied locally first: a reaction that waited on a round trip would feel
+  // broken, and the poll that brings in everyone else's is up to 45s away.
+  // Reverts on failure rather than leaving the optimistic state lying.
+  toggleReaction(sessionId, code) {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    const before = get().reactions;
+    const current = before.get(sessionId) ?? [];
+    const mine = current.find((r) => r.userId === userId && r.code === code);
+    const nextList = mine
+      ? current.filter((r) => r !== mine)
+      : [...current, { sessionId, userId, code, name: 'You' }];
+
+    const optimistic = new Map(before);
+    if (nextList.length > 0) optimistic.set(sessionId, nextList);
+    else optimistic.delete(sessionId);
+    set({ reactions: optimistic });
+    vibrate(REACTION_TAP_PATTERN);
+
+    const request = mine
+      ? reactionsApi.removeReactionRemote(sessionId, code)
+      : reactionsApi.addReactionRemote(sessionId, code);
+    void request.catch((err) => {
+      console.error('Failed to save reaction', err);
+      // Rebuilt from the CURRENT map rather than restoring the snapshot
+      // wholesale — another session's reactions may have arrived from the
+      // poll while this request was in flight, and those shouldn't be lost
+      // just because this one write failed.
+      const live = new Map(get().reactions);
+      const list = (live.get(sessionId) ?? []).filter((r) => !(r.userId === userId && r.code === code));
+      if (mine) list.push(mine);
+      if (list.length > 0) live.set(sessionId, list);
+      else live.delete(sessionId);
+      set({ reactions: live });
+      get().showToast(navigator.onLine ? 'Could not save that reaction' : 'Reactions need a connection');
+    });
+
+    if (!mine && get().settings.firstReactionGivenAt == null) {
+      get().updateSettings({ firstReactionGivenAt: Date.now() });
+      reconcileOwnBadges(get, set, true);
+    }
+  },
+
+  openReactorList(sessionId) {
+    set({ sheet: 'reactors', reactorListSessionId: sessionId });
   },
 
   // --- Shared custom exercise library ---------------------------------

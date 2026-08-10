@@ -4,6 +4,7 @@ import { prefersReducedMotion } from '../lib/useReducedMotion';
 import { PickerSheet } from '../features/picker/PickerSheet';
 import { ExerciseDetailSheet } from '../features/picker/ExerciseDetailSheet';
 import { CustomExerciseSheet } from '../features/picker/CustomExerciseSheet';
+import { ReactorListSheet } from '../features/social/ReactorListSheet';
 import { WorkoutDetailSheet } from '../features/history/WorkoutDetailSheet';
 import { RoutineActionsSheet } from '../features/routines/RoutineActionsSheet';
 import { SettingsSheet } from '../features/settings/SettingsSheet';
@@ -183,6 +184,7 @@ export function SheetContainer() {
         <div className="sheet-scroll" ref={scrollRef}>
           {sheet === 'picker' && <PickerSheet />}
           {sheet === 'customExercise' && <CustomExerciseSheet />}
+          {sheet === 'reactors' && <ReactorListSheet />}
           {sheet === 'detail' && <ExerciseDetailSheet />}
           {sheet === 'workout' && <WorkoutDetailSheet />}
           {sheet === 'routineActions' && <RoutineActionsSheet />}

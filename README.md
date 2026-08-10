@@ -106,6 +106,16 @@ yourself from the SQL editor:
 insert into public.app_admins (user_id) values ('<your-auth-users-uuid>');
 ```
 
+### Reactions (one-time backend setup)
+
+Run the **Phase 15** and **Phase 16** sections of `supabase/schema.sql`, then
+redeploy the nudge dispatcher (`supabase functions deploy nudge-dispatcher`)
+— the same function now drains the reaction-notification queue on its
+existing per-minute tick, so no new schedule is needed.
+
+Phase 15 alone is enough for reactions themselves; Phase 16 adds the push
+notification for them.
+
 ### Locking down profile emails (one-time backend setup)
 
 Run the **Phase 14** section of `supabase/schema.sql`. It revokes client
@@ -125,6 +135,48 @@ schedule the dispatcher via `pg_cron`). The setting stays hidden/inert until
 this is done.
 
 ## Update notes
+
+**Version 1.27.0** — reactions on workouts. Needs the **Phase 15 and Phase
+16** sections of `supabase/schema.sql` run, and the nudge dispatcher
+redeployed.
+- **React to a friend's workout with one of six emoji** (🔥 💪 👏 😤 🎉 💯),
+  from the crew feed or the workout's own sheet. Slack-style: you can add
+  more than one, each person counts once per emoji, and tapping an existing
+  one toggles yours off. Tap **Who?** to see everyone who reacted, grouped by
+  emoji.
+  - Emoji are stored as short **codes**, not glyphs — the same choice the
+    badge system makes. Swapping 🫡 for 💯 late in the build (the former is a
+    2021 emoji that renders as tofu on older phones) was a one-line change
+    with no migration, which is the whole point.
+  - Everyone who can see a workout sees all of its reactions, and the "Who?"
+    list names them — so it can include people you aren't friends with
+    yourself. That's the deliberate trade for a feed that behaves like a
+    feed.
+  - Reactions apply **optimistically** and revert with a toast if the write
+    fails; everyone else's arrive on the existing 45-second poll. They're
+    **online-only** for now: friend workouts live in memory rather than
+    Dexie, so there's nothing local for an offline reaction to attach to.
+  - RLS leans on a nice property: because `sessions` already has row-level
+    security, the reactions policies only need `exists (select 1 from
+    sessions where id = session_id)`. That subquery runs as the caller, so it
+    already means "a workout I'm allowed to see" — workout visibility stays
+    defined in exactly one place, and reactions follow it automatically.
+- **Push when someone reacts to your workout.** Reactions don't push on
+  insert; each one queues a row that the existing per-minute dispatcher tick
+  drains. That minute is a batching window on purpose — three friends
+  reacting to the same workout arrive as one "Sanne and 2 others reacted",
+  not three separate buzzes. Tapping the notification opens that exact
+  workout, whether the app was already running (a service-worker message) or
+  cold (a `?workout=` param the worker opens).
+- **Fixed: turning off workout nudges silently killed every other push.**
+  One Web Push subscription serves all notification types — the browser
+  permission is a single per-origin grant — but the old "off" path called
+  `unsubscribe()` outright. It now only tears the subscription down once
+  every push type is off, and each type is an independent setting checked
+  server-side at send time (so switching one off also silences anything
+  already queued).
+- **Two new Social badges** — Hype Man (reacted to someone's workout) and
+  Appreciated (someone reacted to yours).
 
 **Version 1.26.0** — findings from a full-codebase review, not just the
 feature built in 1.25.0. Needs the **Phase 13 and Phase 14** sections of

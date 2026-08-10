@@ -32,9 +32,14 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return output;
 }
 
-export type EnableNudgesResult = 'ok' | 'denied' | 'unavailable' | 'error';
+export type EnablePushResult = 'ok' | 'denied' | 'unavailable' | 'error';
 
-export async function enableNudges(): Promise<EnableNudgesResult> {
+// Subscribes this device to Web Push and registers the subscription. ONE
+// subscription serves every notification type — the browser permission is a
+// single per-origin grant, so there is nothing per-type to subscribe to.
+// Which types actually send is decided by the app's own settings, checked
+// server-side by the dispatcher.
+export async function enablePush(): Promise<EnablePushResult> {
   if (!isPushCapable()) return 'unavailable';
   try {
     const permission = await Notification.requestPermission();
@@ -64,12 +69,16 @@ export async function enableNudges(): Promise<EnableNudgesResult> {
     if (error) throw error;
     return 'ok';
   } catch (err) {
-    console.error('Failed to enable workout nudges', err);
+    console.error('Failed to enable push notifications', err);
     return 'error';
   }
 }
 
-export async function disableNudges(): Promise<void> {
+// Tears the subscription down entirely, so it must only be called once
+// EVERY push type is off (see SettingsSheet's togglePushType). Calling it
+// while another type is still enabled would silently kill that one too —
+// which is exactly what turning workout nudges off used to do.
+export async function teardownPush(): Promise<void> {
   try {
     if (!('serviceWorker' in navigator)) return;
     const registration = await navigator.serviceWorker.ready;
@@ -79,7 +88,7 @@ export async function disableNudges(): Promise<void> {
     await subscription.unsubscribe();
     await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
   } catch (err) {
-    console.error('Failed to disable workout nudges', err);
+    console.error('Failed to disable push notifications', err);
   }
 }
 

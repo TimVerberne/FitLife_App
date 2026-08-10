@@ -108,6 +108,45 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshCustomExercises();
   }, [loaded, userId]);
 
+  // Runs after friends load too, since a friend's sessions are most of what
+  // reactions hang off — refreshFriendSessions populating them is what makes
+  // this fetch worth anything.
+  useEffect(() => {
+    if (loaded && userId) void useStore.getState().refreshReactions();
+  }, [loaded, userId, friends]);
+
+  // Opening the workout a reaction notification was about. Two routes in,
+  // because the app may or may not already be running when it's tapped: a
+  // service-worker message when it is, and a ?workout= param on the URL the
+  // worker opened when it isn't. Both wait for `loaded`, since the sheet
+  // needs its session to exist in the store first.
+  useEffect(() => {
+    if (!loaded) return;
+    const openWorkout = (sessionId: string) => {
+      const known = [...useStore.getState().sessions, ...useStore.getState().friendSessions].some((s) => s.id === sessionId);
+      // A friend's brand-new workout may not have been fetched yet — pull
+      // once, then open, rather than silently doing nothing.
+      if (known) useStore.getState().openWorkoutSheet(sessionId);
+      else void useStore.getState().refreshFriendSessions().then(() => useStore.getState().openWorkoutSheet(sessionId));
+    };
+
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = params.get('workout');
+    if (fromUrl) {
+      openWorkout(fromUrl);
+      // Cleared so a refresh doesn't reopen the same sheet indefinitely.
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as { type?: string; sessionId?: string } | undefined;
+      if (data?.type === 'open-workout' && data.sessionId) openWorkout(data.sessionId);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [loaded]);
+
   // There's no realtime subscription for friends' workouts or for a routine
   // edited on another device, so without this both stay stale while the app
   // just sits open or gets reopened from a suspended background state (a
@@ -124,11 +163,14 @@ function AuthedApp() {
     // the focus-regain refresh below, which already catches it up the
     // moment the app comes back to the foreground.
     const id = setInterval(() => {
-      if (document.visibilityState === 'visible') void useStore.getState().refreshFriendSessions();
+      if (document.visibilityState !== 'visible') return;
+      void useStore.getState().refreshFriendSessions();
+      void useStore.getState().refreshReactions();
     }, POLL_MS);
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return;
       throttleOnFocus('friend-sessions', 30_000, () => void useStore.getState().refreshFriendSessions());
+      throttleOnFocus('reactions', 30_000, () => void useStore.getState().refreshReactions());
       throttleOnFocus('cloud-sync', 30_000, () => void useStore.getState().syncWithCloud(currentUserId));
       // Picks up exercises other people added while this app sat backgrounded,
       // so a friend's feed card can name them instead of dropping the row.

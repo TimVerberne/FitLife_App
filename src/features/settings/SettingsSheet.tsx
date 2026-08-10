@@ -3,7 +3,7 @@ import { useStore, type Tab } from '../../store/useStore';
 import { ACCENT_PRESETS, type AccentPreset } from '../../lib/settings';
 import { REST_PRESETS, formatRest } from '../../lib/rest';
 import { useAuthState, signOut } from '../../lib/auth';
-import { enableNudges, disableNudges, isPushCapable } from '../../lib/pushNudges';
+import { enablePush, teardownPush, isPushCapable } from '../../lib/pushNudges';
 import { fetchOwnProfile, updateOwnDisplayName } from '../../lib/friends';
 import { playBeep, unlockAudio } from '../../lib/beep';
 import { canVibrate, vibrate, REST_END_PATTERN } from '../../lib/haptics';
@@ -76,13 +76,16 @@ export function SettingsSheet() {
   // Reconcile once whenever Settings is opened rather than trusting the
   // stored flag forever.
   useEffect(() => {
-    if (!pushCapable || !settings.notifyActiveWorkout || !('serviceWorker' in navigator)) return;
+    if (!pushCapable || !('serviceWorker' in navigator)) return;
+    if (!settings.notifyActiveWorkout && !settings.notifyReactions) return;
     let cancelled = false;
     void (async () => {
       try {
         const registration = await navigator.serviceWorker.ready;
         const subscription = await registration.pushManager.getSubscription();
-        if (!cancelled && !subscription) updateSettings({ notifyActiveWorkout: false });
+        // The browser can drop the subscription on its own; when it has,
+        // every push-backed toggle is lying, not just the nudge one.
+        if (!cancelled && !subscription) updateSettings({ notifyActiveWorkout: false, notifyReactions: false });
       } catch {
         // Best-effort reconciliation only — leave the flag as-is on failure.
       }
@@ -93,15 +96,21 @@ export function SettingsSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function toggleNudges(next: boolean) {
+  // One push subscription serves every notification type, so turning a type
+  // OFF must only tear the subscription down once nothing else needs it —
+  // otherwise switching off workout nudges would silently kill reaction
+  // notifications too, which is exactly what used to happen.
+  async function togglePushType(key: 'notifyActiveWorkout' | 'notifyReactions', next: boolean) {
     if (!next) {
-      updateSettings({ notifyActiveWorkout: false });
-      void disableNudges();
+      updateSettings({ [key]: false });
+      const stillWanted =
+        key === 'notifyActiveWorkout' ? settings.notifyReactions : settings.notifyActiveWorkout;
+      if (!stillWanted) void teardownPush();
       return;
     }
     setPushError(false);
-    const result = await enableNudges();
-    if (result === 'ok') updateSettings({ notifyActiveWorkout: true });
+    const result = await enablePush();
+    if (result === 'ok') updateSettings({ [key]: true });
     else if (result === 'error') setPushError(true);
     // 'denied' and 'unavailable' leave the toggle off — the row below already
     // explains why (blocked permission or not an installed app).
@@ -325,7 +334,7 @@ export function SettingsSheet() {
                   : undefined
             }
             checked={settings.notifyActiveWorkout && !pushBlocked}
-            onChange={(v) => void toggleNudges(v)}
+            onChange={(v) => void togglePushType('notifyActiveWorkout', v)}
           />
           {settings.notifyActiveWorkout && !pushBlocked && (
             <SettingsSwitchRow
@@ -334,6 +343,12 @@ export function SettingsSheet() {
               onChange={(v) => updateSettings({ notifyActiveWorkoutRepeat: v })}
             />
           )}
+          <SettingsSwitchRow
+            label="When someone reacts to my workout"
+            desc={pushBlocked ? 'Notifications blocked — enable in system settings' : undefined}
+            checked={settings.notifyReactions && !pushBlocked}
+            onChange={(v) => void togglePushType('notifyReactions', v)}
+          />
         </>
       )}
 

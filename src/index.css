@@ -556,6 +556,118 @@
   cursor: pointer;
 }
 
+/* -------- reactions -------- */
+.rx-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.rx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.rx-pill.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.rx-glyph {
+  font-size: 14px;
+}
+
+.rx-bar.large .rx-glyph {
+  font-size: 17px;
+}
+
+.rx-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.rx-pill.on .rx-count {
+  color: var(--accent);
+}
+
+.rx-add {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rx-who {
+  border: none;
+  background: none;
+  color: var(--faint);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+/* Floats above the card rather than expanding it — a picker that pushed the
+   feed down would shift every card below it on open. */
+.rx-picker {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+}
+
+.rx-picker-btn {
+  border: none;
+  background: none;
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.rx-picker-btn:active {
+  background: var(--accent-soft);
+}
+
+/* Visually hidden but announced — the emoji groups in the reactor list are
+   labelled for screen readers without duplicating text on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* -------- custom exercise form -------- */
 .cx-field {
   margin-bottom: 16px;

@@ -7,6 +7,7 @@ import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/unit
 import { Thumb } from '../../components/Thumb';
 import { NumberField } from '../../components/NumberField';
 import { DurationStat } from '../../components/DurationStat';
+import { ReactionBar } from '../../components/ReactionBar';
 
 export function WorkoutDetailSheet() {
   const viewingSessionId = useStore((s) => s.viewingSessionId);
@@ -89,6 +90,8 @@ export function WorkoutDetailSheet() {
           Duration is editable{session.durationMin >= 60 ? ` — currently ${formatDuration(session.durationMin)}` : ''}.
         </p>
       )}
+      <ReactionBar sessionId={session.id} size="large" />
+
       {session.entries.map((entry, i) => {
         const ex = exerciseById(entry.exerciseId);
         if (!ex) return null;

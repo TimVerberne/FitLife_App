@@ -153,11 +153,13 @@ export function BadgeCollectionSheet() {
             hasFriend: friends.length > 0,
             firstFriendAt: settings.firstFriendAt ?? null,
             firstComparisonAt: settings.firstComparisonAt ?? null,
+            firstReactionGivenAt: settings.firstReactionGivenAt ?? null,
+            firstReactionReceivedAt: settings.firstReactionReceivedAt ?? null,
           },
         }
       : { sessions: friendSessions, person, routines: null, weekStart: settings.weekStart, now: Date.now() };
     return { earned: computeEarnedBadges(ctx), metricsForLadder: computeBadgeMetrics(ctx) };
-  }, [own, person, ownSessions, friendSessions, routines, friends.length, settings.weekStart, settings.firstFriendAt, settings.firstComparisonAt]);
+  }, [own, person, ownSessions, friendSessions, routines, friends.length, settings.weekStart, settings.firstFriendAt, settings.firstComparisonAt, settings.firstReactionGivenAt, settings.firstReactionReceivedAt]);
 
   function handlePin(id: string) {
     const result = toggleShowcaseBadge(id);

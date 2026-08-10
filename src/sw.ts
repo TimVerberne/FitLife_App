@@ -46,6 +46,8 @@ registerRoute(/^https:\/\/[a-z0-9-]+\.supabase\.co\/.*/, new NetworkOnly());
 interface NudgePayload {
   title?: string;
   body?: string;
+  /** Set on reaction notifications — the workout to open when tapped. */
+  sessionId?: string;
 }
 
 // lib.webworker.d.ts's NotificationOptions is missing `renotify` even though
@@ -69,7 +71,11 @@ self.addEventListener('push', (event) => {
     body: payload.body ?? '',
     icon: iconUrl,
     badge: iconUrl,
-    tag: 'workout-nudge',
+    // Reaction notifications carry the workout id through to the click
+    // handler, and tag per-workout so two different workouts don't collapse
+    // into one notification the way repeat nudges deliberately do.
+    data: payload.sessionId ? { sessionId: payload.sessionId } : undefined,
+    tag: payload.sessionId ? `reactions-${payload.sessionId}` : 'workout-nudge',
     // Without this, the 5-minute follow-up nudge silently replaces the
     // first one in-place (same tag) instead of actually re-alerting — it'd
     // sit there updated but the phone would never buzz or wake the lock
@@ -84,6 +90,7 @@ self.addEventListener('push', (event) => {
 // of always opening a fresh tab on top of an existing one.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const sessionId = (event.notification.data as { sessionId?: string } | undefined)?.sessionId;
   event.waitUntil(
     (async () => {
       const scope = self.registration.scope;
@@ -91,8 +98,16 @@ self.addEventListener('notificationclick', (event) => {
       const existing = allClients.find((c) => c.url.startsWith(scope));
       if (existing) {
         await existing.focus();
+        // The app is already running, so routing to the workout is a message
+        // rather than a navigation — reloading would throw away an active
+        // session in progress.
+        if (sessionId) existing.postMessage({ type: 'open-workout', sessionId });
       } else {
-        await self.clients.openWindow(scope);
+        // Cold start: the page doesn't exist yet to receive a message, so the
+        // target rides in on the URL and main.tsx picks it up once the store
+        // has loaded. The app has no router, hence a query param rather than
+        // a path.
+        await self.clients.openWindow(sessionId ? `${scope}?workout=${encodeURIComponent(sessionId)}` : scope);
       }
     })(),
   );

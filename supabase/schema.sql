@@ -518,3 +518,102 @@ as $$
 $$;
 
 grant execute on function public.find_profile_by_email(text) to authenticated;
+
+-- Phase 15: reactions on workouts.
+--
+-- A reaction is (workout, person, emoji). The unique constraint IS the
+-- semantics: one of each emoji per person per workout, so toggling is an
+-- insert or a delete and there's no "change my reaction" state to reconcile.
+-- Emoji are stored as short codes rather than the glyph itself — the same
+-- choice the badge system makes — so the set can be restyled, renamed or
+-- swapped later without rewriting anybody's rows.
+create table public.reactions (
+  id         uuid primary key default gen_random_uuid(),
+  session_id uuid not null references public.sessions(id) on delete cascade,
+  -- References profiles, not auth.users, so PostgREST can embed the
+  -- reactor's display_name in the same query that fetches the reactions
+  -- (see fetchReactionsFor). friendships references profiles for the same
+  -- reason.
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  code       text not null check (code in ('fire', 'flex', 'clap', 'grit', 'party', 'respect')),
+  created_at timestamptz not null default now(),
+  unique (session_id, user_id, code)
+);
+create index reactions_session_idx on public.reactions (session_id);
+
+alter table public.reactions enable row level security;
+
+-- "You can see reactions on workouts you can see" — and that's the whole
+-- rule, because `sessions` has its own RLS. This subquery runs with the
+-- caller's privileges, so it already resolves to "a session I'm allowed to
+-- read" without repeating the friendship join from "friends can read your
+-- sessions". Workout visibility stays defined in exactly one place, and if
+-- it ever changes, reactions follow automatically.
+create policy "read reactions on visible sessions" on public.reactions for select to authenticated
+  using (exists (select 1 from public.sessions s where s.id = reactions.session_id));
+
+-- Same visibility rule for writing, plus: you can only react as yourself.
+-- Reacting to your own workout is permitted — it's harmless, and excluding
+-- it would only complicate the predicate.
+create policy "react to visible sessions" on public.reactions for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.sessions s where s.id = reactions.session_id)
+  );
+
+create policy "remove own reactions" on public.reactions for delete to authenticated
+  using (auth.uid() = user_id);
+
+-- No UPDATE policy: a reaction is added or removed, never edited.
+
+-- Phase 16: push notifications for reactions.
+--
+-- Reactions don't push directly. Each one queues a row here, and the
+-- existing per-minute nudge-dispatcher tick drains the queue. That minute
+-- is the point: it's a batching window, so three friends reacting to the
+-- same workout become one "Sanne and 2 others reacted" instead of three
+-- separate buzzes on the phone.
+create table public.pending_reaction_notifications (
+  id           uuid primary key default gen_random_uuid(),
+  recipient_id uuid not null references auth.users(id) on delete cascade,
+  session_id   uuid not null references public.sessions(id) on delete cascade,
+  reactor_id   uuid not null references public.profiles(id) on delete cascade,
+  code         text not null,
+  created_at   timestamptz not null default now()
+);
+create index pending_reaction_notifications_group_idx
+  on public.pending_reaction_notifications (recipient_id, session_id);
+
+-- RLS on with no policies at all: nothing client-side ever touches this
+-- table. The dispatcher runs with the service-role key, which bypasses RLS,
+-- and is its only reader.
+alter table public.pending_reaction_notifications enable row level security;
+
+-- security definer so it can both read the session's owner and insert into
+-- a table the reacting user has no policy for.
+--
+-- Deliberately does NOT check the recipient's notification setting — the
+-- dispatcher checks that at send time instead, so switching notifications
+-- off silences everything already queued rather than only what comes after.
+create or replace function public.queue_reaction_notification()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  owner_id uuid;
+begin
+  select s.user_id into owner_id from public.sessions s where s.id = new.session_id;
+  -- Nobody needs telling about their own applause.
+  if owner_id is null or owner_id = new.user_id then
+    return new;
+  end if;
+  insert into public.pending_reaction_notifications (recipient_id, session_id, reactor_id, code)
+  values (owner_id, new.session_id, new.user_id, new.code);
+  return new;
+end;
+$$;
+
+create trigger reactions_queue_notification
+  after insert on public.reactions
+  for each row execute procedure public.queue_reaction_notification();

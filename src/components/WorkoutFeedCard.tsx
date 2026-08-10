@@ -9,6 +9,7 @@ import { useStore } from '../store/useStore';
 import { Thumb } from './Thumb';
 import { BadgeStrip } from './BadgeIcon';
 import { BADGE_BY_ID } from '../lib/badges';
+import { ReactionBar } from './ReactionBar';
 
 const COLLAPSED_COUNT = 3;
 
@@ -93,6 +94,8 @@ export function WorkoutFeedCard({
           </div>
         );
       })}
+
+      <ReactionBar sessionId={session.id} />
 
       {remaining > 0 && (
         <button

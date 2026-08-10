@@ -32,6 +32,8 @@ export function useShowcaseByPerson(): Map<string, string[]> {
         hasFriend: friends.length > 0,
         firstFriendAt: settings.firstFriendAt ?? null,
         firstComparisonAt: settings.firstComparisonAt ?? null,
+        firstReactionGivenAt: settings.firstReactionGivenAt ?? null,
+        firstReactionReceivedAt: settings.firstReactionReceivedAt ?? null,
       },
     });
     map.set('You', resolveShowcaseIds(ownEarned, settings.showcaseBadges));
@@ -51,5 +53,5 @@ export function useShowcaseByPerson(): Map<string, string[]> {
     });
 
     return map;
-  }, [ownSessions, friendSessions, routines, friends, friendShowcase, settings.weekStart, settings.showcaseBadges, settings.firstFriendAt, settings.firstComparisonAt]);
+  }, [ownSessions, friendSessions, routines, friends, friendShowcase, settings.weekStart, settings.showcaseBadges, settings.firstFriendAt, settings.firstComparisonAt, settings.firstReactionGivenAt, settings.firstReactionReceivedAt]);
 }
