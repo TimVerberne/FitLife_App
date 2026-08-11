@@ -136,6 +136,28 @@ this is done.
 
 ## Update notes
 
+**Version 1.27.3**
+- **Fixed: reactions on other people's workouts disappeared on reload.** A
+  reaction you left on a friend's workout was gone after a refresh, and
+  someone reacting to yours could never see their own reaction — even though
+  you could see it perfectly well. Three symptoms, one cause.
+  - The reaction fetch takes a list of workout ids, built from your own
+    sessions plus your friends'. Your own come out of Dexie instantly;
+    friends' arrive over the network and live only in memory. The fetch was
+    triggered by an effect keyed on the *friend list*, which resolves before
+    the friend *sessions* it kicks off — so by the time reactions were
+    requested, the only ids available were your own. Reactions on anyone
+    else's workout were simply never asked for.
+  - That also explains the asymmetry: a reaction on your own workout stuck
+    around, because your own ids were always in the query.
+  - Nothing was wrong with the data or its permissions — the rows were in
+    the database and readable the whole time. Which incidentally confirms
+    the RLS design flagged as unverified in 1.27.0: reading reactions across
+    the friend boundary does work.
+  - Fetching reactions is now chained to the friend-session load in the
+    store, rather than depending on a component's dependency array noticing
+    that async data arrived.
+
 **Version 1.27.2** — follow-up to 1.27.1, which fixed the reordering problem
 but not the way it felt.
 - **Auto-scroll now watches the dragged card, not your finger.** Keying it

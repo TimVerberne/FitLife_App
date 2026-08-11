@@ -2115,6 +2115,19 @@ export const useStore = create<StoreState>((set, get) => ({
       const friendSessions = await friendsApi.fetchAllFriendSessions(get().friends);
       if (getCurrentUserId() !== userId) return;
       set({ friendSessions });
+      // Reactions are fetched for a list of session ids, and a friend's
+      // sessions only exist here — they never touch Dexie. Chaining the two
+      // is what guarantees the ids are actually present when the reaction
+      // query is built.
+      //
+      // This used to be a separate effect keyed on `friends`, which fired
+      // while this request was still in flight and so only ever asked about
+      // the user's OWN workouts. The rows were in the database and readable
+      // the whole time; nothing was requesting them. The visible result was
+      // that a reaction you left on someone else's workout vanished on
+      // reload, and someone reacting to yours could never see their own
+      // reaction — while you could see it perfectly well.
+      void get().refreshReactions();
     } catch (err) {
       console.error('Failed to refresh friend sessions', err);
     }

@@ -108,12 +108,13 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshCustomExercises();
   }, [loaded, userId]);
 
-  // Runs after friends load too, since a friend's sessions are most of what
-  // reactions hang off — refreshFriendSessions populating them is what makes
-  // this fetch worth anything.
+  // Covers reactions on the user's OWN workouts, which are available from
+  // Dexie immediately. Reactions on friends' workouts are fetched by
+  // refreshFriendSessions itself once those sessions exist — a dependency
+  // array here can't see that they've arrived.
   useEffect(() => {
     if (loaded && userId) void useStore.getState().refreshReactions();
-  }, [loaded, userId, friends]);
+  }, [loaded, userId]);
 
   // Opening the workout a reaction notification was about. Two routes in,
   // because the app may or may not already be running when it's tapped: a
@@ -165,12 +166,10 @@ function AuthedApp() {
     const id = setInterval(() => {
       if (document.visibilityState !== 'visible') return;
       void useStore.getState().refreshFriendSessions();
-      void useStore.getState().refreshReactions();
     }, POLL_MS);
     function onVisibilityChange() {
       if (document.visibilityState !== 'visible') return;
       throttleOnFocus('friend-sessions', 30_000, () => void useStore.getState().refreshFriendSessions());
-      throttleOnFocus('reactions', 30_000, () => void useStore.getState().refreshReactions());
       throttleOnFocus('cloud-sync', 30_000, () => void useStore.getState().syncWithCloud(currentUserId));
       // Picks up exercises other people added while this app sat backgrounded,
       // so a friend's feed card can name them instead of dropping the row.
