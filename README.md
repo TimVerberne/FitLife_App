@@ -136,6 +136,22 @@ this is done.
 
 ## Update notes
 
+**Version 1.28.0**
+- **Reactions on your workouts now announce themselves.** There's no realtime
+  subscription, so a reaction arriving while you had the app open showed up
+  silently and you'd only notice by chance. Landing on **Home** now checks
+  for new ones, and anything that arrived since you were last told raises the
+  same toast the rest of the app uses — `👏 Joost reacted to Push Day` for a
+  single one, `3 new reactions on your workouts` once there are several.
+  - Only reactions from *other people* on *your own* workouts announce. Your
+    own reactions, and reactions on friends' workouts, stay silent.
+  - "Since last told" is one synced timestamp rather than a set of seen ids:
+    it stays a single number however many reactions accumulate, and being
+    notified on your phone means your other devices won't repeat it.
+  - The first run on an account adopts the current state as its baseline
+    instead of announcing a backlog you've almost certainly already seen —
+    the same first-run credit the badge system does.
+
 **Version 1.27.3**
 - **Fixed: reactions on other people's workouts disappeared on reload.** A
   reaction you left on a friend's workout was gone after a refresh, and

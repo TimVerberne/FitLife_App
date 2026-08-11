@@ -41,6 +41,8 @@ export interface Reaction {
   code: ReactionCode;
   /** Reactor's display name, or 'You' for the signed-in user. */
   name: string;
+  /** Server timestamp in ms — what "new since you last looked" is measured against. */
+  createdAt: number;
 }
 
 type EmbeddedProfile = { display_name: string | null };
@@ -49,6 +51,7 @@ interface ReactionRow {
   session_id: string;
   user_id: string;
   code: string;
+  created_at: string;
   // PostgREST types a foreign-key embed as an array even when the relation
   // is to-one, and returns either shape depending on how it resolves the
   // hint — so accept both and normalise in nameOf below.
@@ -81,7 +84,7 @@ export async function fetchReactionsFor(sessionIds: string[]): Promise<Reaction[
       fetchAllPages<ReactionRow>((from, to) =>
         supabase
           .from('reactions')
-          .select('session_id, user_id, code, profiles(display_name)')
+          .select('session_id, user_id, code, created_at, profiles(display_name)')
           .in('session_id', ids)
           .order('created_at')
           .order('id')
@@ -97,6 +100,7 @@ export async function fetchReactionsFor(sessionIds: string[]): Promise<Reaction[
       userId: row.user_id,
       code: row.code as ReactionCode,
       name: row.user_id === me ? 'You' : displayNameOf(row.profiles),
+      createdAt: Date.parse(row.created_at) || 0,
     }));
 }
 

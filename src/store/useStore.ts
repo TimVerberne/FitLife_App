@@ -12,6 +12,7 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, findExerciseByName, isCardioExercise, newCustomExerciseId, setCustomExercises } from '../lib/exercises';
 import * as customExercisesApi from '../lib/customExercises';
 import * as reactionsApi from '../lib/reactions';
+import { REACTION_GLYPH } from '../lib/reactions';
 import type { Reaction, ReactionCode } from '../lib/reactions';
 import { disarmNudge } from '../lib/pushNudges';
 import { liveRecordForSet, sortRoutines, type LiveRecord } from '../lib/records';
@@ -657,6 +658,50 @@ function pruneBadgesKnownToEarned(get: () => StoreState): void {
   if (pruned.length !== known.length) get().updateSettings({ badgesKnown: pruned });
 }
 
+// Tells the user about reactions that landed on their own workouts since
+// they were last told. There's no realtime subscription — reactions arrive
+// on a poll or when you open Home — so without this they appear silently and
+// you only notice by chance.
+//
+// "Since last told" is one synced timestamp rather than a set of seen ids:
+// it stays a single number however many reactions accumulate, and being
+// notified on the phone means the tablet won't repeat it.
+function announceNewReactions(get: () => StoreState, rows: Reaction[]): void {
+  const me = getCurrentUserId();
+  if (!me) return;
+  const ownSessions = new Map(get().sessions.map((s) => [s.id, s]));
+  const fromOthers = rows.filter((r) => r.userId !== me && ownSessions.has(r.sessionId));
+  if (fromOthers.length === 0) return;
+
+  const newest = Math.max(...fromOthers.map((r) => r.createdAt));
+  const seenAt = get().settings.reactionsSeenAt;
+
+  // First run on this account: adopt the current state as the baseline
+  // rather than announcing a backlog of reactions the user has very likely
+  // already seen. Same reasoning as the badge system's first-run credit.
+  if (seenAt == null) {
+    get().updateSettings({ reactionsSeenAt: newest });
+    return;
+  }
+
+  const fresh = fromOthers.filter((r) => r.createdAt > seenAt);
+  if (fresh.length === 0) return;
+
+  // Named and specific when there's exactly one, because that's the version
+  // worth reading; a count once there are several, since a toast can't
+  // usefully list them.
+  let message: string;
+  if (fresh.length === 1) {
+    const [r] = fresh;
+    const name = ownSessions.get(r.sessionId)?.name ?? 'your workout';
+    message = `${REACTION_GLYPH[r.code]} ${r.name} reacted to ${name}`;
+  } else {
+    message = `${fresh.length} new reactions on your workouts`;
+  }
+  get().updateSettings({ reactionsSeenAt: newest });
+  get().showToast(message);
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   loaded: false,
   routines: [],
@@ -762,6 +807,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
   go(tab) {
     set({ tab, mode: 'tabs', finishResult: null });
+    // The crew feed lives here and there's no realtime subscription, so
+    // arriving on Home is the natural moment to go and look. Anything that
+    // landed on your own workouts since you last saw it gets announced by
+    // announceNewReactions.
+    if (tab === 'home') void get().refreshReactions();
   },
 
   startSession(routineId) {
@@ -1313,6 +1363,7 @@ export const useStore = create<StoreState>((set, get) => ({
         else next.set(r.sessionId, [r]);
       }
       set({ reactions: next });
+      announceNewReactions(get, rows);
       // Someone applauding your workout is the signal for the "received"
       // badge, and it isn't derivable from stored data any other way — same
       // shape as firstFriendAt/firstComparisonAt.
@@ -1337,7 +1388,7 @@ export const useStore = create<StoreState>((set, get) => ({
     const mine = current.find((r) => r.userId === userId && r.code === code);
     const nextList = mine
       ? current.filter((r) => r !== mine)
-      : [...current, { sessionId, userId, code, name: 'You' }];
+      : [...current, { sessionId, userId, code, name: 'You', createdAt: Date.now() }];
 
     const optimistic = new Map(before);
     if (nextList.length > 0) optimistic.set(sessionId, nextList);

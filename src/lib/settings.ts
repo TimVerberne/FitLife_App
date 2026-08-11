@@ -45,6 +45,11 @@ export interface Settings {
   // data, so the moment is recorded when it's first observed.
   firstReactionGivenAt?: number | null;
   firstReactionReceivedAt?: number | null;
+  // Newest reaction on your own workouts that you've already been told
+  // about. A single timestamp rather than a set of ids: it stays one number
+  // however many reactions accumulate, and it syncs, so being notified on
+  // one device doesn't re-notify on another.
+  reactionsSeenAt?: number | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
