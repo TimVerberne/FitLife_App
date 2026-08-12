@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { formatDuration, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
+import { formatDuration, setsCountOf, volumeOf, workoutTimestamp } from '../../lib/records';
 import { toDisplayWeight } from '../../lib/units';
 import { useCollapsedList } from '../../lib/useCollapsedList';
 import { ShowMoreButton } from '../../components/ShowMoreButton';
@@ -92,7 +92,7 @@ export function ImportPreviewSheet() {
           <div className="hist-b">
             <div className="hist-name">{s.name}</div>
             <div className="hist-date">
-              {relativeDate(s.startedAt)} · {formatDuration(s.durationMin)} · {setsCountOf(s.entries)} sets
+              {workoutTimestamp(s.startedAt)} · {formatDuration(s.durationMin)} · {setsCountOf(s.entries)} sets
             </div>
           </div>
           <div className="hist-vol">

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SessionEntry, WorkoutSession } from '../lib/types';
 import { exerciseById } from '../lib/exercises';
-import { formatDuration, isWorkingSet, relativeDate, setsCountOf, volumeOf } from '../lib/records';
+import { formatDuration, isWorkingSet, setsCountOf, volumeOf, workoutTimestamp } from '../lib/records';
 import { colorForPerson } from '../lib/colors';
 import { activateOnKey } from '../lib/a11y';
 import { toDisplayWeight } from '../lib/units';
@@ -57,7 +57,7 @@ export function WorkoutFeedCard({
             {session.person}
             {showcaseIds && showcaseIds.length > 0 && <BadgeStrip ids={showcaseIds} byId={BADGE_BY_ID} size={18} />}
           </div>
-          <div className="feed-when">{relativeDate(session.startedAt)}</div>
+          <div className="feed-when">{workoutTimestamp(session.startedAt)}</div>
         </div>
       </div>
 

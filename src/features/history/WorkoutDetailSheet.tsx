@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { exerciseById, isCardioExercise } from '../../lib/exercises';
-import { formatDuration, recordSetIndexesInWorkout, relativeDate, setsCountOf, volumeOf } from '../../lib/records';
+import { formatDuration, recordSetIndexesInWorkout, setsCountOf, volumeOf, workoutTimestamp } from '../../lib/records';
 import { colorForPerson } from '../../lib/colors';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { Thumb } from '../../components/Thumb';
@@ -57,7 +57,7 @@ export function WorkoutDetailSheet() {
             {session.person === 'You' ? 'Your workout' : session.person}
           </div>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-            {session.name} · {relativeDate(session.startedAt)}
+            {session.name} · {workoutTimestamp(session.startedAt)}
           </div>
         </div>
         {canEdit && (

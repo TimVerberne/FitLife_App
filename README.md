@@ -136,6 +136,20 @@ this is done.
 
 ## Update notes
 
+**Version 1.28.1**
+- **Workouts now show when they actually started, not how long ago.** The
+  crew feed, the workout sheet, your history list and the import preview all
+  read `Aug 12, 18:42` instead of `Today` / `Yesterday` / `5 days ago`. The
+  clock time also separates two workouts logged on the same day, which the
+  old label couldn't.
+  - The year appears only when it isn't the current one, so recent workouts
+    stay short and an old one can't be misread as this year's.
+  - 24-hour time: unambiguous, and two characters shorter on a line that
+    sits under a name.
+  - The Train screen's `LAST 3 DAYS AGO` on a routine card deliberately
+    stays relative — that line answers "how long since", which a timestamp
+    doesn't.
+
 **Version 1.28.0**
 - **Reactions on your workouts now announce themselves.** There's no realtime
   subscription, so a reaction arriving while you had the app open showed up

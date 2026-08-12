@@ -9,7 +9,7 @@ import {
   periodCutoff,
   periodTotal,
   personalRecords,
-  relativeDate,
+  workoutTimestamp,
   setsCountOf,
   STAT_PERIOD_LABEL,
   volumeOf,
@@ -268,7 +268,7 @@ export function ProfileScreen() {
           <div className="hist-b">
             <div className="hist-name">{h.name}</div>
             <div className="hist-date">
-              {relativeDate(h.startedAt)} · {formatDuration(h.durationMin)} · {setsCountOf(h.entries)} sets
+              {workoutTimestamp(h.startedAt)} · {formatDuration(h.durationMin)} · {setsCountOf(h.entries)} sets
             </div>
           </div>
           <div className="hist-vol">{Math.round(toDisplayWeight(volumeOf(h.entries), units))} {units}</div>

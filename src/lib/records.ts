@@ -76,6 +76,28 @@ export function relativeDate(ts: number, now = Date.now()): string {
   return new Date(ts).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
 }
 
+// When a specific workout actually started, date and clock time.
+//
+// Used wherever the subject is one particular session — the crew feed, the
+// workout sheet, a history list. `relativeDate` stays for the places asking
+// "how long since", like a routine card's LAST line, where "3 days ago" is
+// the useful answer and a timestamp isn't.
+//
+// The year appears only when it isn't the current one, so ordinary recent
+// workouts stay short while an old one can't be misread as this year's.
+// 24-hour time because it's unambiguous and two characters shorter — this
+// sits in a 12px line under a name.
+export function workoutTimestamp(ts: number, now = Date.now()): string {
+  const d = new Date(ts);
+  const date = d.toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    ...(d.getFullYear() === new Date(now).getFullYear() ? {} : { year: 'numeric' }),
+  });
+  const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `${date}, ${time}`;
+}
+
 // "70 min" reads worse than "1 hour and 10 mins" once a workout (or a
 // summed total) crosses an hour — used anywhere a duration in minutes is
 // shown to the user.
