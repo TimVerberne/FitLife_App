@@ -4,6 +4,7 @@ import { REST_PRESETS, formatRest } from '../../lib/rest';
 import { formatWeight, fromDisplayWeight, toDisplayWeight } from '../../lib/units';
 import { exerciseById } from '../../lib/exercises';
 import { Thumb } from '../../components/Thumb';
+import { ExerciseNoteRow } from '../../components/ExerciseNoteRow';
 import { NumberField } from '../../components/NumberField';
 import type { StoreState } from '../../store/useStore';
 import type { Exercise, SessionEntry, SetEntry, SetKind } from '../../lib/types';
@@ -245,6 +246,7 @@ function ExerciseCardImpl({
       </div>
       {!compact && (
         <>
+          <ExerciseNoteRow exerciseId={entry.exerciseId} />
           <div className="rest-toggle-wrap">
             <button
               className="rest-toggle"

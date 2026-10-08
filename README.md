@@ -136,6 +136,35 @@ this is done.
 
 ## Update notes
 
+**Version 1.29.0** — needs the **Phase 17** section of `supabase/schema.sql`
+run.
+- **Sticky notes on an exercise.** Add a cue while you're training — "keep
+  elbows tucked", "seat height 4" — and it's waiting on that exercise every
+  time it comes round again. One note per exercise, edited in place; it
+  appears on the exercise card during a workout and on the exercise's own
+  detail sheet.
+  - Inline rather than behind a sheet, because it's written and read
+    mid-set, and anything that covers the screen in the middle of a workout
+    is something you stop using. Saves when you tap away, Escape abandons,
+    clearing the text removes the note entirely.
+  - Private. Nothing shows anyone else's notes — they're reminders to
+    yourself.
+  - Stored in their own synced table rather than the settings blob:
+    settings merge field-by-field across devices, so two phones editing
+    notes would clobber each other instead of merging. Capped at 500
+    characters, client and server.
+  - Written locally first and published when there's signal, like every
+    other synced write here. Included in backups and restored on import,
+    cleared by "Clear all data" and on sign-out.
+
+### Already there, in case you missed it
+
+A **custom cardio exercise** doesn't need anything new: pick the `cardio`
+chip in the Body part row when creating one and it logs **minutes × km**
+instead of kg × reps. The chip is easy to miss among the muscle groups
+though — pulling it out into an explicit Strength/Cardio choice is still
+open.
+
 **Version 1.28.1**
 - **Workouts now show when they actually started, not how long ago.** The
   crew feed, the workout sheet, your history list and the import preview all

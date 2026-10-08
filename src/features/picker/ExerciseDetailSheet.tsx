@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { exerciseById, isCustomExercise } from '../../lib/exercises';
 import { getCurrentUserId } from '../../lib/supabase';
 import { Thumb } from '../../components/Thumb';
+import { ExerciseNoteRow } from '../../components/ExerciseNoteRow';
 import { ProgressChart } from '../../components/ProgressChart';
 import { exerciseHistory, exercisePR, periodCutoff, STAT_PERIOD_LABEL, type StatPeriod } from '../../lib/records';
 import { formatWeight, toDisplayWeight } from '../../lib/units';
@@ -76,6 +77,11 @@ export function ExerciseDetailSheet() {
           </span>
         </div>
       )}
+      <div className="section-h" style={{ margin: '14px 2px 4px' }}>
+        Your note
+      </div>
+      <ExerciseNoteRow exerciseId={ex.id} />
+
       <div className="meta-grid">
         <div>
           <div className="k">Target</div>

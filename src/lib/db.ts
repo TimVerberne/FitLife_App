@@ -1,9 +1,9 @@
 import Dexie, { type EntityTable } from 'dexie';
-import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, Routine, WaterLogEntry, WorkoutSession } from './types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, ExerciseNote, Routine, WaterLogEntry, WorkoutSession } from './types';
 
 export interface PendingSyncEntry {
   id?: number;
-  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog' | 'customExercises';
+  table: 'routines' | 'sessions' | 'settings' | 'bodyProfile' | 'bodyLog' | 'waterLog' | 'calorieLog' | 'customExercises' | 'exerciseNotes';
   rowId: string;
   op: 'upsert' | 'delete';
 }
@@ -45,6 +45,7 @@ export const db = new Dexie('fitflow') as Dexie & {
   waterLog: EntityTable<WaterLogEntry, 'id'>;
   calorieLog: EntityTable<CalorieLogEntry, 'id'>;
   customExercises: EntityTable<CustomExercise, 'id'>;
+  exerciseNotes: EntityTable<ExerciseNote, 'exerciseId'>;
 };
 
 db.version(1).stores({
@@ -101,6 +102,19 @@ db.version(6).stores({
   customExercises: 'id, createdAt',
 });
 
+db.version(7).stores({
+  routines: 'id, createdAt',
+  sessions: 'id, person, startedAt',
+  pendingSync: '++id, table',
+  activeSession: 'id',
+  bodyProfile: 'id',
+  bodyLog: 'loggedOn',
+  waterLog: 'id, loggedOn',
+  calorieLog: 'id, loggedOn',
+  customExercises: 'id, createdAt',
+  exerciseNotes: 'exerciseId',
+});
+
 // The Dexie cache is per-browser, not per-account. Without this, signing out
 // of one account and into another would let the first account's local cache
 // get treated as "this device's existing history" and uploaded straight into
@@ -116,6 +130,9 @@ export async function wipeLocalData(): Promise<void> {
     db.bodyLog.clear(),
     db.waterLog.clear(),
     db.calorieLog.clear(),
+    // Unlike customExercises below, these ARE account data — one person's
+    // notes must not greet the next person to sign in on this device.
+    db.exerciseNotes.clear(),
   ]);
   // `customExercises` is intentionally NOT cleared. It isn't account data —
   // it's one global catalog every signed-in user reads in full, the same way

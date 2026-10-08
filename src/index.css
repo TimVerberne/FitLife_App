@@ -556,6 +556,85 @@
   cursor: pointer;
 }
 
+/* -------- sticky exercise notes -------- */
+.ex-note,
+.ex-note-add {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0 0 9px;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.ex-note-add {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.ex-note-mark {
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.45;
+  flex: none;
+}
+
+/* Wraps rather than truncating: a cue you can only half-read is no cue. */
+.ex-note-text {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ex-note.editing {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-bottom: 9px;
+}
+
+.ex-note-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--ink);
+  /* 16px stops iOS Safari zooming the page when the field takes focus. */
+  font-size: 16px;
+  font-family: var(--font-body);
+  line-height: 1.4;
+  resize: none;
+  outline: none;
+}
+
+.ex-note-input:focus-visible {
+  border-color: var(--accent);
+}
+
+.ex-note-input::placeholder {
+  color: var(--faint-2);
+}
+
+.ex-note-done {
+  flex: none;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: 9px;
+  padding: 7px 11px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* -------- reactions -------- */
 .rx-bar {
   position: relative;

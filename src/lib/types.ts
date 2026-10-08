@@ -38,6 +38,16 @@ export type CustomExerciseDraft = Pick<Exercise, 'name' | 'body_part' | 'equipme
   instruction_steps: string[];
 };
 
+// A sticky coaching cue attached to an EXERCISE rather than to any one
+// workout — "keep elbows tucked", "seat height 4". Written once and shown
+// every time that exercise comes up again. One per exercise, edited in
+// place; clearing the text removes it.
+export interface ExerciseNote {
+  exerciseId: string;
+  note: string;
+  updatedAt: number;
+}
+
 export type SetKind = 'normal' | 'warmup' | 'failure' | 'dropset' | 'superset';
 
 export interface SetEntry {

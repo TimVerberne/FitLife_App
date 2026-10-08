@@ -12,6 +12,8 @@ import { looksLikeHevyCsv, convertHevyCsv } from '../lib/hevyImport';
 import { exerciseById, findExerciseByName, isCardioExercise, newCustomExerciseId, setCustomExercises } from '../lib/exercises';
 import * as customExercisesApi from '../lib/customExercises';
 import * as reactionsApi from '../lib/reactions';
+import * as exerciseNotesApi from '../lib/exerciseNotes';
+import { NOTE_MAX_LENGTH } from '../lib/exerciseNotes';
 import { REACTION_GLYPH } from '../lib/reactions';
 import type { Reaction, ReactionCode } from '../lib/reactions';
 import { disarmNudge } from '../lib/pushNudges';
@@ -22,7 +24,7 @@ import { prefersReducedMotion } from '../lib/useReducedMotion';
 import { BADGE_BY_ID, computeEarnedBadges, type BadgeContext, type BadgeDef } from '../lib/badges';
 import { todayIso } from '../lib/bodyMetrics';
 import type { Person } from '../lib/types';
-import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, CustomExerciseDraft, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
+import type { ActiveSession, BodyLogEntry, BodyProfile, CalorieLogEntry, CustomExercise, CustomExerciseDraft, ExerciseNote, RestTimerState, Routine, SessionEntry, SetEntry, SetKind, WaterLogEntry, WorkoutSession } from '../lib/types';
 
 export type Tab = 'home' | 'train' | 'stats' | 'life' | 'you';
 export type SheetKind =
@@ -58,6 +60,7 @@ export interface ImportPreview {
   bodyLog?: BodyLogEntry[];
   waterLog?: WaterLogEntry[];
   calorieLog?: CalorieLogEntry[];
+  exerciseNotes?: ExerciseNote[];
 }
 
 // Apply the persisted theme immediately on load, before the first paint.
@@ -280,6 +283,12 @@ export interface StoreState {
   setPickQuery(q: string): void;
   setPickBodyPart(bp: string): void;
   togglePickSelected(id: string): void;
+
+  // Sticky per-exercise notes, keyed by exercise id. Only exercises that
+  // actually have one appear — an absent key means no note.
+  exerciseNotes: Map<string, string>;
+  refreshExerciseNotes(): Promise<void>;
+  setExerciseNote(exerciseId: string, note: string): void;
 
   // Reactions on workouts, keyed by session id. In memory only: they hang
   // off sessions that are often somebody else's, and friend sessions never
@@ -538,6 +547,36 @@ function persistImportedBodyData(
   return { bodyProfile, bodyLog, waterLog, calorieLog };
 }
 
+// Restores the notes carried by a backup. Merge keeps anything the backup
+// doesn't mention and lets it win where both have a note for the same
+// exercise; replace swaps the lot. Each row is pushed individually so a
+// failure queues and retries, like every other synced write here.
+function persistImportedNotes(
+  mode: 'merge' | 'replace',
+  current: Map<string, string>,
+  imported: ExerciseNote[] | undefined,
+): Map<string, string> | null {
+  if (!imported) return null;
+  const next = mode === 'replace' ? new Map<string, string>() : new Map(current);
+  if (mode === 'replace') {
+    void db.exerciseNotes.clear();
+    // Anything the backup drops has to go from the server too, or the next
+    // refresh pulls it straight back.
+    for (const exerciseId of current.keys()) {
+      if (!imported.some((n) => n.exerciseId === exerciseId)) void cloudSync.deleteExerciseNote(exerciseId);
+    }
+  }
+  for (const row of imported) {
+    const note = row.note.trim().slice(0, NOTE_MAX_LENGTH);
+    if (!note) continue;
+    next.set(row.exerciseId, note);
+    const stored: ExerciseNote = { exerciseId: row.exerciseId, note, updatedAt: row.updatedAt || Date.now() };
+    void db.exerciseNotes.put(stored);
+    void cloudSync.pushExerciseNote(stored);
+  }
+  return next;
+}
+
 // Builds the badge-computation context for the signed-in user from current
 // store state (own routines and the two Social signals are only available for
 // 'You'). `extraSession` lets an in-progress workout be evaluated as if it were
@@ -732,6 +771,7 @@ export const useStore = create<StoreState>((set, get) => ({
   isLibraryAdmin: false,
   reactions: new Map(),
   reactorListSessionId: null,
+  exerciseNotes: new Map(),
 
   dialog: null,
   toastMsg: '',
@@ -763,7 +803,7 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ tab: get().settings.defaultTab, loaded: false, routines: [], sessions: [] });
     try {
       await purgeDemoFriendRows();
-      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog, calorieLog, customExercises] = await Promise.all([
+      const [routines, sessions, activeRecord, bodyProfileRecord, bodyLog, waterLog, calorieLog, customExercises, exerciseNotes] = await Promise.all([
         db.routines.toArray(),
         db.sessions.toArray(),
         db.activeSession.get('current'),
@@ -772,13 +812,14 @@ export const useStore = create<StoreState>((set, get) => ({
         db.waterLog.toArray(),
         db.calorieLog.toArray(),
         db.customExercises.toArray(),
+        db.exerciseNotes.toArray(),
       ]);
       // Seed the synchronous exerciseById() registry from the local cache
       // before anything renders, so custom exercises already referenced by
       // this device's history resolve on the very first paint rather than
       // popping in once refreshCustomExercises() returns from the network.
       setCustomExercises(customExercises);
-      set({ customExercises });
+      set({ customExercises, exerciseNotes: new Map(exerciseNotes.map((n) => [n.exerciseId, n.note])) });
       let bodyProfile = DEFAULT_BODY_PROFILE;
       if (bodyProfileRecord) {
         const { id: _bodyProfileId, ...rest } = bodyProfileRecord;
@@ -1339,6 +1380,47 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
+  // --- Sticky exercise notes ------------------------------------------
+
+  async refreshExerciseNotes() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
+    try {
+      const notes = await exerciseNotesApi.fetchExerciseNotes();
+      if (getCurrentUserId() !== userId) return;
+      // Replaced wholesale rather than merged: the server is authoritative
+      // for notes, and a note cleared on another device has to disappear
+      // here too — a merge would resurrect it.
+      await db.exerciseNotes.clear();
+      await db.exerciseNotes.bulkPut(notes);
+      if (getCurrentUserId() !== userId) return;
+      set({ exerciseNotes: new Map(notes.map((n) => [n.exerciseId, n.note])) });
+    } catch (err) {
+      // Offline — the Dexie copy loaded in init() stands in.
+      console.error('Failed to load exercise notes', err);
+    }
+  },
+
+  // Written locally first so the note is there the instant you stop typing,
+  // mid-workout, signal or no signal. Clearing the text deletes it outright
+  // rather than storing an empty string, so "has a note" stays a simple
+  // presence check everywhere that reads it.
+  setExerciseNote(exerciseId, note) {
+    const trimmed = note.trim().slice(0, NOTE_MAX_LENGTH);
+    const next = new Map(get().exerciseNotes);
+    if (trimmed) {
+      next.set(exerciseId, trimmed);
+      const row: ExerciseNote = { exerciseId, note: trimmed, updatedAt: Date.now() };
+      void db.exerciseNotes.put(row);
+      void cloudSync.pushExerciseNote(row);
+    } else {
+      next.delete(exerciseId);
+      void db.exerciseNotes.delete(exerciseId);
+      void cloudSync.deleteExerciseNote(exerciseId);
+    }
+    set({ exerciseNotes: next });
+  },
+
   // --- Reactions --------------------------------------------------------
 
   // Fetches reactions for the workouts that could plausibly be on screen:
@@ -1782,13 +1864,21 @@ export const useStore = create<StoreState>((set, get) => ({
 
   exportData() {
     const { routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog, customExercises } = get();
+    // Flattened back to rows for the backup. Unlike customExercises below,
+    // these ARE restored on import — they're yours, nobody else's copy can
+    // bring them back, and losing your cues to a restore would be silent.
+    const exerciseNotes: ExerciseNote[] = [...get().exerciseNotes].map(([exerciseId, note]) => ({
+      exerciseId,
+      note,
+      updatedAt: Date.now(),
+    }));
     // customExercises rides along so the backup can name every exercise its
     // sessions reference, but confirmImport deliberately ignores it: the
     // shared library is server-owned, and re-publishing someone's snapshot
     // of it on restore would resurrect entries other people have since
     // archived. Restoring pulls the live library from Supabase instead.
     const blob = new Blob(
-      [JSON.stringify({ routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog, customExercises }, null, 2)],
+      [JSON.stringify({ routines, sessions, settings, bodyProfile, bodyLog, waterLog, calorieLog, customExercises, exerciseNotes }, null, 2)],
       { type: 'application/json' },
     );
     const url = URL.createObjectURL(blob);
@@ -1827,6 +1917,7 @@ export const useStore = create<StoreState>((set, get) => ({
           bodyLog?: unknown;
           waterLog?: unknown;
           calorieLog?: unknown;
+          exerciseNotes?: unknown;
         };
         if (!Array.isArray(data.routines) || !Array.isArray(data.sessions)) {
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
@@ -1842,6 +1933,11 @@ export const useStore = create<StoreState>((set, get) => ({
         const bodyLog = Array.isArray(data.bodyLog) ? (data.bodyLog as BodyLogEntry[]) : undefined;
         const waterLog = Array.isArray(data.waterLog) ? (data.waterLog as WaterLogEntry[]) : undefined;
         const calorieLog = Array.isArray(data.calorieLog) ? (data.calorieLog as CalorieLogEntry[]) : undefined;
+        const exerciseNotes = Array.isArray(data.exerciseNotes)
+          ? (data.exerciseNotes as ExerciseNote[]).filter(
+              (n) => n && typeof n.exerciseId === 'string' && typeof n.note === 'string' && n.note.trim() !== '',
+            )
+          : undefined;
         const hasBody = !!(bodyProfile || bodyLog?.length || waterLog?.length || calorieLog?.length);
         if (validRoutines.length === 0 && validSessions.length === 0 && !hasBody) {
           get().showToast('That file doesn\'t look like a FitFlow backup or a Hevy CSV export');
@@ -1859,6 +1955,7 @@ export const useStore = create<StoreState>((set, get) => ({
             bodyLog,
             waterLog,
             calorieLog,
+            exerciseNotes,
           },
           sheet: 'importPreview',
         });
@@ -1896,6 +1993,8 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       const body = persistImportedBodyData('merge', get(), preview);
       if (body) set(body);
+      const mergedNotes = persistImportedNotes('merge', get().exerciseNotes, preview.exerciseNotes);
+      if (mergedNotes) set({ exerciseNotes: mergedNotes });
       get().showToast(preview.isCsv ? 'Workouts merged in' : 'Backup merged in');
       return;
     }
@@ -1926,6 +2025,8 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     const body = persistImportedBodyData('replace', get(), preview);
     if (body) set(body);
+    const replacedNotes = persistImportedNotes('replace', get().exerciseNotes, preview.exerciseNotes);
+    if (replacedNotes) set({ exerciseNotes: replacedNotes });
     get().showToast(preview.isCsv ? 'Workouts imported' : 'Backup imported');
   },
 
@@ -1948,11 +2049,12 @@ export const useStore = create<StoreState>((set, get) => ({
   // people's history points at them.
   clearAllData() {
     get().confirm(
-      'Delete everything on this account — routines, workout history, weight and measurements, nutrition and hydration, and any workout in progress? This can\'t be undone.',
+      'Delete everything on this account — routines, workout history, exercise notes, weight and measurements, nutrition and hydration, and any workout in progress? This can\'t be undone.',
       'Yes, delete everything',
       () => {
         const prevRoutines = get().routines;
         const prevSessions = get().sessions;
+        const prevNotes = get().exerciseNotes;
         void db.routines.clear();
         void db.sessions.clear();
         void db.activeSession.clear();
@@ -1960,6 +2062,7 @@ export const useStore = create<StoreState>((set, get) => ({
         void db.bodyLog.clear();
         void db.waterLog.clear();
         void db.calorieLog.clear();
+        void db.exerciseNotes.clear();
         // Per-row deletes for routines/sessions so a failed one gets queued in
         // pendingSync and retried, instead of silently leaving that row on the
         // server to be resurrected by the next sync (see confirmImport for the
@@ -1970,6 +2073,8 @@ export const useStore = create<StoreState>((set, get) => ({
           ...prevRoutines.map((r) => cloudSync.deleteRoutineRemote(r.id)),
           ...prevSessions.filter((s) => s.person === 'You').map((s) => cloudSync.deleteSessionRemote(s.id)),
         ]);
+        // Notes are account data too, so "delete everything" includes them.
+        for (const exerciseId of prevNotes.keys()) void cloudSync.deleteExerciseNote(exerciseId);
         void bodySync.deleteAllBodyDataRemote().catch((err) => {
           console.error('Failed to clear body data from the cloud', err);
           get().showToast('Body data cleared here, but not in the cloud — try again when online');
@@ -1987,6 +2092,7 @@ export const useStore = create<StoreState>((set, get) => ({
           bodyLog: [],
           waterLog: [],
           calorieLog: [],
+          exerciseNotes: new Map(),
           sheet: null,
         });
         void disarmNudge();

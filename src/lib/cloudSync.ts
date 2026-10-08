@@ -1,9 +1,10 @@
 import { supabase, getCurrentUserId, onSignedOut, fetchAllPages } from './supabase';
 import { db, wipeLocalData, type PendingSyncEntry } from './db';
-import type { CustomExercise, Routine, SessionEntry, WorkoutSession } from './types';
+import type { CustomExercise, ExerciseNote, Routine, SessionEntry, WorkoutSession } from './types';
 import { loadSettings, type Settings } from './settings';
 import { flushBodyPendingSync } from './bodySync';
 import { pushCustomExerciseRemote } from './customExercises';
+import { deleteExerciseNoteRemote, pushExerciseNoteRemote } from './exerciseNotes';
 
 function requireUserId(): string {
   const userId = getCurrentUserId();
@@ -131,6 +132,26 @@ export async function pushCustomExercise(exercise: CustomExercise): Promise<void
       return;
     }
     await enqueuePendingSync({ table: 'customExercises', rowId: exercise.id, op: 'upsert' });
+  }
+}
+
+// Both halves queue on failure, the same way routines do — a note written
+// in a basement gym is saved locally and published when there's signal.
+export async function pushExerciseNote(note: ExerciseNote): Promise<void> {
+  try {
+    requireUserId();
+    await pushExerciseNoteRemote(note);
+  } catch {
+    await enqueuePendingSync({ table: 'exerciseNotes', rowId: note.exerciseId, op: 'upsert' });
+  }
+}
+
+export async function deleteExerciseNote(exerciseId: string): Promise<void> {
+  try {
+    requireUserId();
+    await deleteExerciseNoteRemote(exerciseId);
+  } catch {
+    await enqueuePendingSync({ table: 'exerciseNotes', rowId: exerciseId, op: 'delete' });
   }
 }
 
@@ -284,6 +305,7 @@ export async function flushPendingSync(): Promise<void> {
       if (entry.op === 'delete') {
         if (entry.table === 'routines') await deleteRoutineRemote(entry.rowId);
         else if (entry.table === 'sessions') await deleteSessionRemote(entry.rowId);
+        else if (entry.table === 'exerciseNotes') await deleteExerciseNote(entry.rowId);
         else await flushBodyPendingSync(entry);
       } else if (entry.table === 'routines') {
         const routine = await db.routines.get(entry.rowId);
@@ -291,6 +313,11 @@ export async function flushPendingSync(): Promise<void> {
       } else if (entry.table === 'sessions') {
         const session = await db.sessions.get(entry.rowId);
         if (session) await pushSession(session);
+      } else if (entry.table === 'exerciseNotes') {
+        const note = await db.exerciseNotes.get(entry.rowId);
+        // Gone locally means it was cleared after the write was queued —
+        // the delete is queued separately, so there's nothing to push.
+        if (note) await pushExerciseNote(note);
       } else if (entry.table === 'customExercises') {
         const exercise = await db.customExercises.get(entry.rowId);
         if (exercise) await pushCustomExercise(exercise);

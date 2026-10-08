@@ -617,3 +617,36 @@ $$;
 create trigger reactions_queue_notification
   after insert on public.reactions
   for each row execute procedure public.queue_reaction_notification();
+
+-- Phase 17: sticky per-exercise notes.
+--
+-- A coaching cue attached to an exercise rather than to any one workout —
+-- "keep elbows tucked", "seat height 4" — shown again every time that
+-- exercise comes up. One row per (user, exercise), edited in place;
+-- clearing the text deletes the row.
+--
+-- Its own table rather than a field in the settings jsonb: settings merge
+-- field-by-field across devices (see mergeCloudSettings), so two phones
+-- editing notes would clobber each other instead of merging. Per-row
+-- upserts converge properly, and notes stay out of a blob that's read on
+-- every app boot.
+create table public.exercise_notes (
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  -- text, not uuid: bundled exercises have ids like '0001', custom ones
+  -- 'custom-<uuid>'. No foreign key for the same reason — the bundled ones
+  -- don't exist as rows anywhere.
+  exercise_id text not null,
+  note        text not null,
+  updated_at  timestamptz not null default now(),
+  primary key (user_id, exercise_id),
+  -- A cue, not an essay. Also keeps the per-user payload small, since the
+  -- whole set is fetched on load.
+  constraint exercise_notes_len check (length(note) between 1 and 500)
+);
+
+alter table public.exercise_notes enable row level security;
+
+-- Private. Nothing reads another user's notes: they're reminders to
+-- yourself, and no screen in the app shows anybody else's.
+create policy "own exercise notes" on public.exercise_notes for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);

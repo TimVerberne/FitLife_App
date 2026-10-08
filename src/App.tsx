@@ -108,6 +108,10 @@ function AuthedApp() {
     if (loaded && userId) void useStore.getState().refreshCustomExercises();
   }, [loaded, userId]);
 
+  useEffect(() => {
+    if (loaded && userId) void useStore.getState().refreshExerciseNotes();
+  }, [loaded, userId]);
+
   // Covers reactions on the user's OWN workouts, which are available from
   // Dexie immediately. Reactions on friends' workouts are fetched by
   // refreshFriendSessions itself once those sessions exist — a dependency
