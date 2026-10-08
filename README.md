@@ -136,6 +136,22 @@ this is done.
 
 ## Update notes
 
+**Version 1.29.1** — no backend change needed.
+- **Use your own bodyweight as a set's weight.** Tap a set's number and pick
+  **BW · Bodyweight**, and the weight fills in from your latest logged
+  weight in the Life tab. Pull-ups, dips and push-ups now count toward
+  volume and can set PRs, instead of sitting at 0 kg and contributing
+  nothing.
+  - It **snapshots** the number rather than linking to it — a set records
+    what you actually lifted that day, and shouldn't change retroactively
+    because your bodyweight did.
+  - The weight stays editable afterwards, so weighted pull-ups are
+    bodyweight then nudge it up by what's on the belt.
+  - With nothing logged in Life yet, the option is still listed but
+    disabled and says where to add one, rather than silently missing.
+  - Only affects sets you apply it to. Existing history is untouched, so no
+    volume totals or badges shift retroactively.
+
 **Version 1.29.0** — needs the **Phase 17** section of `supabase/schema.sql`
 run.
 - **Sticky notes on an exercise.** Add a cue while you're training — "keep

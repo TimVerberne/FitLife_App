@@ -1673,6 +1673,17 @@ select.cx-input {
   color: #f2828a;
 }
 
+/* Shown rather than hidden when there's no bodyweight logged yet: the row
+   explains where to add one, which an absent menu item couldn't. */
+.set-menu-item:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.set-menu-item:disabled:active {
+  background: none;
+}
+
 .set-menu-badge {
   width: 22px;
   height: 22px;

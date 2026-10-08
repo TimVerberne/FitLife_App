@@ -5,6 +5,7 @@ import { personalRecords, plannedSetsCountOf, setsCountOf, volumeOf } from '../l
 import { useElapsedMinutes } from '../lib/useElapsedMinutes';
 import { useDragReorder } from '../lib/useDragReorder';
 import { toDisplayWeight } from '../lib/units';
+import { latestValue, seriesFor } from '../lib/bodyMetrics';
 import { RestTimerBar } from '../components/RestTimerBar';
 import { ExerciseCard, type MenuState } from '../features/session/ExerciseCard';
 import type { SessionEntry } from '../lib/types';
@@ -41,6 +42,10 @@ export function ActiveSessionScreen() {
   const setRestDuration = useStore((s) => s.setRestDuration);
   const reorderEntries = useStore((s) => s.reorderEntries);
   const settings = useStore((s) => s.settings);
+  // Most recent logged bodyweight, for the set menu's bodyweight shortcut.
+  // Null until something is logged in the Life tab, which the menu says.
+  const bodyLog = useStore((s) => s.bodyLog);
+  const bodyweightKg = useMemo(() => latestValue(seriesFor(bodyLog, 'weightKg')), [bodyLog]);
 
   const records = useMemo(() => personalRecords(sessions), [sessions]);
   // Built once per render (not once per set row) — the most recent prior
@@ -283,6 +288,7 @@ export function ActiveSessionScreen() {
             priorEntry={priorEntryByExerciseId.get(en.exerciseId)}
             restSeconds={active.restTimers[en.exerciseId]}
             units={settings.units}
+            bodyweightKg={bodyweightKg}
             confirmRemoveExercise={settings.confirmRemoveExercise}
             compact={!!drag}
             isDraggingThis={isDraggingThis}

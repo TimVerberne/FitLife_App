@@ -63,6 +63,12 @@ export interface ExerciseCardProps {
   priorEntry: SessionEntry | undefined;
   restSeconds: number | null | undefined;
   units: 'kg' | 'lb';
+  /**
+   * Latest logged bodyweight in kg, or null if the Life tab has none yet.
+   * Powers the "use my bodyweight" shortcut in the set menu — without it
+   * a pull-up set sits at 0 kg and contributes nothing to volume or PRs.
+   */
+  bodyweightKg: number | null;
   confirmRemoveExercise: boolean;
   compact: boolean;
   isDraggingThis: boolean;
@@ -104,6 +110,7 @@ function ExerciseCardImpl({
   priorEntry,
   restSeconds,
   units,
+  bodyweightKg,
   confirmRemoveExercise,
   compact,
   isDraggingThis,
@@ -398,6 +405,27 @@ function ExerciseCardImpl({
                               <button className="set-menu-item" onClick={() => pickKind('superset')}>
                                 <span className="set-menu-badge superset">S</span> Superset
                               </button>
+                              {/* A shortcut for typing your own weight in, so
+                                  bodyweight work counts toward volume and PRs
+                                  like anything else. Snapshots the number
+                                  rather than linking to it: a set records
+                                  what you actually lifted that day, and
+                                  shouldn't change later because you did. */}
+                              {!cardio && (
+                                <button
+                                  className="set-menu-item"
+                                  disabled={bodyweightKg == null}
+                                  onClick={() => {
+                                    if (bodyweightKg != null) setVal(ei, si, 'weight', bodyweightKg);
+                                    closeMenu();
+                                  }}
+                                >
+                                  <span className="set-menu-badge">BW</span>
+                                  {bodyweightKg == null
+                                    ? 'Bodyweight — log it in Life first'
+                                    : `Bodyweight · ${formatWeight(bodyweightKg, units)}${units}`}
+                                </button>
+                              )}
                               <button className="set-menu-item danger" onClick={() => { removeSet(ei, si); closeMenu(); }}>
                                 <span className="set-menu-badge">✕</span> Remove set
                               </button>
